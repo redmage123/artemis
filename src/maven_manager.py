@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
 """
-Maven Build System Manager
+Module: Maven Build System Manager
 
-Comprehensive Maven integration for Artemis supporting:
-- Project structure analysis
-- Dependency management
-- Build lifecycle execution
-- Test execution
-- Plugin management
-- Multi-module projects
-- POM parsing and manipulation
+Purpose: Build system integration for Apache Maven projects (Java ecosystem)
+Why: Maven is the industry-standard build tool for Java projects with declarative XML-based
+     configuration (pom.xml). It requires specialized handling for its lifecycle phases,
+     dependency management, and plugin system that differs from other build tools.
+Patterns: Template Method (via BuildManagerBase), Strategy Pattern (different phases/goals)
+Integration: Used by UniversalBuildSystem and JavaEcosystemManager to provide unified
+             interface for Maven projects. Registered with BuildManagerFactory.
+
+Maven Lifecycle Phases (in order):
+- validate: Validate project structure
+- compile: Compile source code
+- test: Run unit tests
+- package: Package compiled code (JAR/WAR)
+- verify: Run integration tests
+- install: Install to local repository (~/.m2)
+- deploy: Deploy to remote repository
+
+Why Maven vs Gradle:
+- Maven: Convention-over-configuration, declarative XML, simpler for standard projects
+- Gradle: Flexible scripting (Groovy/Kotlin), better for complex builds, faster incremental builds
+- This manager supports Maven; see GradleManager for Gradle projects
 
 Usage:
     from maven_manager import MavenManager
@@ -41,7 +54,27 @@ import logging
 
 
 class MavenPhase(Enum):
-    """Maven build lifecycle phases"""
+    """
+    Maven build lifecycle phases.
+
+    What: Enumeration of Maven's standard lifecycle phases
+    Why: Type-safe representation prevents typos and provides IDE autocomplete.
+         Maven phases execute in a specific order - running 'package' automatically
+         runs validate, compile, and test first.
+
+    Phase Execution Order:
+    - VALIDATE: Check project structure is correct
+    - COMPILE: Compile source code to bytecode
+    - TEST: Run unit tests (compiled test code)
+    - PACKAGE: Package into distributable format (JAR/WAR)
+    - VERIFY: Run integration tests and quality checks
+    - INSTALL: Install to local Maven repository (~/.m2/repository)
+    - DEPLOY: Deploy to remote repository for sharing
+
+    Special Phases:
+    - CLEAN: Delete target/ directory (separate lifecycle)
+    - SITE: Generate project documentation website
+    """
     VALIDATE = "validate"
     COMPILE = "compile"
     TEST = "test"

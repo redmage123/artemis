@@ -10,6 +10,7 @@ defaults:
   - output: local
   - sprint: standard
   - debug: default
+  - repository: local_dev  # Target repository configuration
   - _self_
 
 # Card ID (must be provided via CLI: card_id=XXX)

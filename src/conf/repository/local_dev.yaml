@@ -1,0 +1,21 @@
+# Local Development Repository Configuration
+# Use for developing/refactoring projects locally
+
+# Repository configuration
+name: ${oc.env:ARTEMIS_TARGET_REPO_NAME,dev-project}
+local_path: ${oc.env:ARTEMIS_TARGET_REPO_PATH,../../.artemis_data/target_repo}
+remote_url: null  # No remote for local development
+
+# Git workflow configuration
+branch_strategy: github_flow  # github_flow, gitflow, trunk_based
+default_branch: main
+commit_convention: conventional  # conventional, semantic, custom
+
+# Automation settings
+auto_push: false  # Don't auto-push for local development
+auto_pull: false
+create_if_missing: true
+
+# Output settings
+save_artifacts: true
+artifact_path: ${oc.env:ARTEMIS_ARTIFACT_PATH,../.artemis_data/artifacts}

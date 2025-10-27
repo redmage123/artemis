@@ -191,18 +191,68 @@ class BaseFrameworkRunner(ABC):
         """Execute test command"""
         try:
             self.logger.info(f"Executing: {' '.join(cmd)}")
+
+            # Set up environment with PYTHONPATH for developer src directory
+            import os
+            env = os.environ.copy()
+
+            # Determine working directory
+            cwd = str(test_path.parent) if test_path.is_file() else str(test_path)
+
+            # Add developer src directory to PYTHONPATH
+            env = self._setup_pythonpath(test_path, env)
+
             return subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                cwd=str(test_path.parent) if test_path.is_file() else str(test_path)
+                cwd=cwd,
+                env=env
             )
         except FileNotFoundError as e:
             raise TestFrameworkNotFoundError(
                 f"{self.framework_name} not found in PATH",
                 {"framework": self.framework_name, "command": cmd[0]}
             ) from e
+        except Exception as e:
+            raise TestExecutionError(
+                f"Failed to execute test command: {str(e)}",
+                {"framework": self.framework_name, "command": cmd}
+            ) from e
+
+    def _setup_pythonpath(self, test_path: Path, env: dict) -> dict:
+        """
+        Set up PYTHONPATH to include developer's src directory.
+
+        Args:
+            test_path: Path to test directory or file
+            env: Environment dictionary to modify
+
+        Returns:
+            Modified environment dictionary
+        """
+        try:
+            # Look for src directory in parent directory (developer output root)
+            # e.g., if test_path is .../developer-b/tests, look for .../developer-b/src
+            test_dir = test_path.parent if test_path.is_file() else test_path
+            developer_root = test_dir.parent  # Go up from tests/ to developer-b/
+            src_dir = developer_root / "src"
+
+            # Early return if src directory doesn't exist
+            if not (src_dir.exists() and src_dir.is_dir()):
+                return env
+
+            # Add src directory to PYTHONPATH (avoid nested if)
+            existing_path = env.get('PYTHONPATH', '')
+            env['PYTHONPATH'] = f"{src_dir}:{existing_path}" if existing_path else str(src_dir)
+            self.logger.info(f"Added to PYTHONPATH: {src_dir}")
+
+            return env
+        except Exception as e:
+            # Don't fail test execution if PYTHONPATH setup fails
+            self.logger.warning(f"Failed to setup PYTHONPATH: {e}")
+            return env
 
     @abstractmethod
     def _parse_results(

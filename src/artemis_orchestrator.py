@@ -108,7 +108,31 @@ class WorkflowPlanner:
     """
     Dynamic Workflow Planner (Already SOLID-compliant)
 
-    Single Responsibility: Analyze tasks and create workflow plans
+    WHAT:
+    Analyzes task characteristics (complexity, type, priority) and generates optimal
+    workflow execution plans with appropriate resource allocation.
+
+    WHY:
+    Different tasks require different execution strategies. A simple bugfix doesn't need
+    3 parallel developers, while a complex architecture refactor does. This class
+    analyzes task metadata and determines the optimal workflow configuration.
+
+    PATTERNS:
+    - Strategy Pattern: Different complexity levels use different execution strategies
+    - Builder Pattern: Constructs workflow plans incrementally
+    - Configuration Pattern: Maps complexity → execution parameters
+
+    INTEGRATION:
+    - Used by: ArtemisOrchestrator (creates plans before pipeline execution)
+    - Uses: PlatformDetector via ResourceAllocation (respects platform limits)
+    - Output: Dict consumed by pipeline execution strategies
+
+    ATTRIBUTES:
+        card: Kanban card with task details (title, description, priority, points)
+        verbose: Whether to log detailed analysis
+        resource_allocation: Platform resource limits (max developers, tests)
+        complexity: Calculated task complexity (simple/medium/complex)
+        task_type: Inferred task type (feature/bugfix/refactor/documentation)
     """
 
     def __init__(self, card: Dict, verbose: bool = True, resource_allocation: Optional['ResourceAllocation'] = None):
@@ -119,7 +143,27 @@ class WorkflowPlanner:
         self.task_type = self._determine_task_type()
 
     def _analyze_complexity(self) -> str:
-        """Analyze task complexity"""
+        """
+        Analyze task complexity using multi-factor scoring algorithm
+
+        WHAT:
+        Computes complexity score by weighing priority, story points, and keyword presence,
+        then maps score to complexity level (simple/medium/complex).
+
+        WHY:
+        Task complexity determines resource allocation. Complex tasks need more developers,
+        longer timeouts, and parallel execution. This algorithm provides consistent,
+        data-driven complexity assessment.
+
+        ALGORITHM:
+        1. Priority contribution: high=2, medium=1, low=0
+        2. Story points contribution: ≥13 → +3, ≥8 → +2, ≥5 → +1
+        3. Keyword analysis: complex keywords (+1 each, max 3), simple keywords (-1 each, max 2)
+        4. Final mapping: score ≥6 → complex, ≥3 → medium, else simple
+
+        RETURNS:
+            str: Complexity level ('simple', 'medium', or 'complex')
+        """
         # Calculate complexity score using configuration
         priority_scores = {'high': 2, 'medium': 1, 'low': 0}
         points_thresholds = [(13, 3), (8, 2), (5, 1)]
@@ -150,7 +194,28 @@ class WorkflowPlanner:
         return next(level for threshold, level in complexity_thresholds if complexity_score >= threshold)
 
     def _determine_task_type(self) -> str:
-        """Determine task type using keyword matching"""
+        """
+        Determine task type using keyword matching
+
+        WHAT:
+        Scans title and description for type-specific keywords to classify task.
+
+        WHY:
+        Task type affects stage selection. Documentation tasks skip testing,
+        bugfixes need validation, refactors need architecture review. Accurate
+        type detection enables optimal stage filtering.
+
+        ALGORITHM:
+        Priority-ordered keyword matching:
+        1. 'bugfix': bug, fix, error, issue
+        2. 'refactor': refactor, restructure, cleanup
+        3. 'documentation': docs, documentation, readme
+        4. 'feature': feature, implement, add, create
+        5. 'other': default if no matches
+
+        RETURNS:
+            str: Task type ('bugfix', 'refactor', 'documentation', 'feature', or 'other')
+        """
         description = self.card.get('description', '').lower()
         title = self.card.get('title', '').lower()
         combined = f"{title} {description}"
@@ -170,7 +235,38 @@ class WorkflowPlanner:
         )
 
     def create_workflow_plan(self) -> Dict:
-        """Create workflow plan based on complexity"""
+        """
+        Create workflow plan based on complexity
+
+        WHAT:
+        Generates complete workflow execution plan including stage list, resource
+        allocation, execution strategy, and reasoning for decisions.
+
+        WHY:
+        Pipeline orchestrator needs explicit instructions on which stages to run,
+        how many parallel workers to use, and what execution strategy to employ.
+        This method translates task analysis into actionable workflow configuration.
+
+        LOGIC:
+        1. Start with full stage list (requirements → testing)
+        2. Determine parallel developers from complexity (complex=3, medium=2, simple=1)
+        3. Cap parallelization based on platform resources (respects max_parallel_developers)
+        4. Set max_parallel_tests from platform allocation
+        5. Add arbitration stage only if multiple developers
+        6. Skip testing for documentation tasks
+        7. Choose execution strategy (parallel if >1 developer, else sequential)
+
+        RETURNS:
+            Dict: Workflow plan with keys:
+                - complexity: str (simple/medium/complex)
+                - task_type: str (feature/bugfix/etc)
+                - stages: List[str] (ordered stage names)
+                - skip_stages: List[str] (stages to skip)
+                - parallel_developers: int (1-N)
+                - max_parallel_tests: int (platform-dependent)
+                - execution_strategy: str (sequential/parallel)
+                - reasoning: List[str] (human-readable decisions)
+        """
         plan = {
             'complexity': self.complexity,
             'task_type': self.task_type,
@@ -235,12 +331,67 @@ class ArtemisOrchestrator:
     """
     Artemis Orchestrator - SOLID Refactored
 
-    Single Responsibility: Orchestrate pipeline stages
-    - Does NOT implement stage logic (delegates to PipelineStage objects)
-    - Does NOT handle logging (delegates to LoggerInterface)
-    - Does NOT run tests (delegates to TestRunner)
+    WHAT:
+    Central coordinator for the Artemis autonomous development pipeline. Orchestrates
+    execution of 14+ pipeline stages from requirements parsing through final testing,
+    managing resources, monitoring health, and coordinating multi-agent collaboration.
 
-    Dependencies injected via constructor (Dependency Inversion Principle)
+    WHY:
+    The pipeline has complex coordination requirements:
+    - 14+ specialized stages with dependencies
+    - Multi-agent development (up to 3 parallel developers)
+    - Resource management (CPU, memory, LLM budget)
+    - Failure recovery and retry logic
+    - Event broadcasting and observability
+    - Sprint retrospectives and continuous learning
+
+    A dedicated orchestrator separates coordination from execution, enabling:
+    - Clean separation of concerns (orchestration vs stage logic)
+    - Pluggable execution strategies (sequential, parallel, distributed)
+    - Easy testing and monitoring
+    - Graceful failure handling
+
+    PATTERNS:
+    - Dependency Injection: All dependencies injected via constructor
+    - Strategy Pattern: Pluggable execution strategies (StandardPipelineStrategy, etc.)
+    - Observer Pattern: Event broadcasting to multiple observers (metrics, logging, state)
+    - Factory Pattern: Creates default stages if not injected
+    - Template Method: run_full_pipeline defines algorithm, strategy fills in details
+
+    SOLID COMPLIANCE:
+    - Single Responsibility: ONLY orchestrates - delegates work to stages/services
+    - Open/Closed: Can add new stages without modifying orchestrator
+    - Liskov Substitution: All stages implement PipelineStage interface
+    - Interface Segregation: Minimal interfaces (PipelineStage, TestRunner, etc.)
+    - Dependency Inversion: Depends on abstractions (interfaces), not concretions
+
+    INTEGRATION:
+    - Used by: CLI entry points (main_hydra, main_legacy)
+    - Uses: KanbanBoard, MessengerInterface, RAGAgent, SupervisorAgent
+    - Creates: Pipeline stages, observers, execution strategy
+    - Coordinates: Multi-agent development, code review, testing, retrospectives
+
+    KEY FLOWS:
+    1. Initialize: Set up dependencies, platform detection, supervisor, observers
+    2. Plan: Generate orchestration plan (AI or rule-based)
+    3. Execute: Run stages via strategy (sequential/parallel)
+    4. Monitor: Track progress via observers, enforce budgets via supervisor
+    5. Recover: Handle failures via supervisor recovery workflows
+    6. Learn: Conduct retrospective, store learnings in RAG
+
+    ATTRIBUTES:
+        card_id: Kanban card being processed
+        board: Kanban board with task queue
+        messenger: Agent communication bus
+        rag: RAG agent for learning/retrieval
+        logger: Logging service
+        test_runner: Test execution service
+        supervisor: Health monitoring and recovery
+        strategy: Pipeline execution strategy
+        observable: Event broadcaster for observers
+        stages: List of pipeline stage instances
+        platform_info: Detected platform characteristics
+        resource_allocation: Computed resource limits
     """
 
     def __init__(
@@ -258,10 +409,40 @@ class ArtemisOrchestrator:
         enable_supervision: bool = True,
         strategy: Optional[PipelineStrategy] = None,
         enable_observers: bool = True,
-        resume: bool = False
+        resume: bool = False,
+        git_agent: Optional['GitAgent'] = None
     ):
         """
         Initialize orchestrator with dependency injection
+
+        WHAT:
+        Sets up all pipeline dependencies, detects platform capabilities, initializes
+        monitoring and recovery systems, and creates default stages if needed.
+
+        WHY:
+        Dependency injection enables:
+        - Easy testing (mock dependencies)
+        - Flexible configuration (swap implementations)
+        - Clear dependency graph
+        - Independent component evolution
+
+        Platform detection ensures resource allocation respects hardware limits.
+        Supervisor enables autonomous recovery from failures.
+        Observers provide real-time pipeline monitoring.
+
+        INITIALIZATION SEQUENCE:
+        1. Store injected dependencies (card_id, board, messenger, rag)
+        2. Set up observer pattern (create observable, attach default observers)
+        3. Create execution strategy (uses observable for event broadcasting)
+        4. Determine configuration source (Hydra vs legacy ConfigAgent)
+        5. Create supervisor if enabled (with LLM learning capability)
+        6. Initialize LLM client for sprint workflow stages
+        7. Validate configuration (only for legacy ConfigAgent)
+        8. Detect platform and calculate resource allocation
+        9. Store platform info in RAG for future reference
+        10. Initialize AI orchestration planner (AI or rule-based fallback)
+        11. Create pipeline stages if not injected
+        12. Register stages with supervisor for monitoring
 
         Args:
             card_id: Kanban card ID
@@ -276,12 +457,19 @@ class ArtemisOrchestrator:
             supervisor: Supervisor agent (default: create new SupervisorAgent)
             enable_supervision: Enable pipeline supervision (default: True)
             strategy: Pipeline execution strategy (default: StandardPipelineStrategy)
+            enable_observers: Enable pipeline observers (default: True)
+            resume: Resume from checkpoint (default: False)
+            git_agent: Git Agent for repository management (default: None)
+
+        RAISES:
+            PipelineConfigurationError: If configuration validation fails
         """
         self.card_id = card_id
         self.board = board
         self.messenger = messenger
         self.rag = rag
         self.resume = resume  # Checkpoint resume flag
+        self.git_agent = git_agent  # Git Agent for autonomous git operations
 
         # Observer Pattern - Event broadcasting for pipeline events
         # (Create observable first, then pass to strategy)
@@ -346,6 +534,12 @@ class ArtemisOrchestrator:
                 self.logger.log(f"⚠️  Could not enable supervisor learning: {e}", "WARNING")
                 # Continue without learning - supervisor still provides cost tracking and sandboxing
 
+        # Update GitAgent with observable and supervisor (if provided)
+        if self.git_agent:
+            self.git_agent.observable = self.observable
+            self.git_agent.supervisor = self.supervisor
+            self.logger.log("✅ Git Agent integrated with observer pattern and supervisor", "INFO")
+
         # Initialize LLM client for sprint workflow stages
         try:
             self.llm_client = LLMClient.create_from_env()
@@ -407,7 +601,35 @@ class ArtemisOrchestrator:
         """
         Register all stages with supervisor agent for monitoring
 
-        Each stage gets custom recovery strategy based on its characteristics
+        WHAT:
+        Configures supervisor with stage-specific recovery strategies including
+        max retries, timeouts, and circuit breaker thresholds.
+
+        WHY:
+        Different stages have different failure characteristics:
+        - Development is critical and expensive → more retries, longer timeout
+        - Project analysis is fast and cheap → fewer retries, short timeout
+        - Code review can take time → moderate timeout, moderate retries
+        - Arbitration should be quick → short timeout, minimal retries
+
+        Custom strategies per stage optimize recovery while preventing infinite loops
+        and resource exhaustion.
+
+        RECOVERY STRATEGIES:
+        - requirements_parsing: 2 retries, 240s timeout (LLM-heavy)
+        - project_analysis: 2 retries, 120s timeout (fast)
+        - architecture: 2 retries, 180s timeout (important)
+        - dependencies: 2 retries, 60s timeout (fast validation)
+        - development: 3 retries, 600s timeout (most critical)
+        - arbitration: 2 retries, 120s timeout (fast decision)
+        - code_review: 2 retries, 180s timeout (moderate)
+        - validation: 2 retries, 120s timeout (fast)
+        - integration: 2 retries, 180s timeout (important)
+        - testing: 2 retries, 300s timeout (can take time)
+
+        INTEGRATION:
+        - Called by: __init__() during orchestrator initialization
+        - Uses: SupervisorAgent.register_stage() to configure monitoring
         """
         # Requirements Parsing: LLM-heavy, needs more time
         self.supervisor.register_stage(
@@ -806,16 +1028,63 @@ class ArtemisOrchestrator:
 
     def run_full_pipeline(self, max_retries: int = None) -> Dict:
         """
-        Run complete Artemis pipeline using configured strategy.
+        Run complete Artemis pipeline using configured strategy
 
-        This method delegates execution to the strategy (Strategy Pattern)
-        while handling pipeline-level concerns like card validation and reporting.
+        WHAT:
+        Executes end-to-end autonomous development pipeline: planning → development →
+        review → testing → retrospective. Coordinates all stages, handles failures,
+        broadcasts events, and produces comprehensive execution report.
+
+        WHY:
+        This is the main entry point for autonomous task execution. It orchestrates
+        the entire workflow while maintaining separation of concerns:
+        - Orchestrator handles planning, coordination, reporting
+        - Strategy handles execution details (sequential vs parallel)
+        - Stages handle specific functionality (development, testing, etc.)
+        - Supervisor handles failure recovery
+        - Observers handle monitoring
+
+        EXECUTION FLOW:
+        1. Validate card exists and retrieve details
+        2. Generate AI-powered orchestration plan (or rule-based fallback)
+        3. Query RAG for historical context and recommendations
+        4. Broadcast pipeline_started event to observers
+        5. Use intelligent routing to filter unnecessary stages (if available)
+        6. Resume from checkpoint if requested (skip completed stages)
+        7. Delegate execution to strategy (StandardPipelineStrategy by default)
+        8. Broadcast pipeline_completed/pipeline_failed event
+        9. Print supervisor health report (if supervision enabled)
+        10. Run sprint retrospective (if LLM available and pipeline succeeded)
+        11. Generate and save comprehensive execution report
+
+        PATTERNS:
+        - Template Method: Defines algorithm structure, strategy fills in execution
+        - Strategy Pattern: Delegates execution to pluggable strategy
+        - Observer Pattern: Broadcasts events at key points
+        - Memento Pattern: Checkpoint resume capability
+
+        INTEGRATION:
+        - Calls: OrchestrationPlanner.create_plan() for AI planning
+        - Calls: IntelligentRouter.make_routing_decision() for stage filtering
+        - Calls: PipelineStrategy.execute() for stage execution
+        - Calls: RetrospectiveAgent.conduct_retrospective() for learning
+        - Calls: SupervisorAgent.print_health_report() for monitoring
 
         Args:
             max_retries: Maximum number of retries for failed code reviews (default: MAX_RETRY_ATTEMPTS - 1)
 
-        Returns:
-            Dict with pipeline execution results
+        RETURNS:
+            Dict with execution results:
+                - card_id: str
+                - workflow_plan: Dict (AI-generated plan)
+                - stages: Dict (results from each stage)
+                - status: str (COMPLETED_SUCCESSFULLY or FAILED)
+                - execution_result: Dict (detailed execution info)
+                - supervisor_statistics: Dict (health metrics)
+                - retrospective: Dict (sprint learnings)
+
+        RAISES:
+            Exception: Re-raised from strategy.execute() if pipeline fails catastrophically
         """
         if max_retries is None:
             max_retries = MAX_RETRY_ATTEMPTS - 1  # Default: 2 retries
@@ -1657,6 +1926,26 @@ def main_hydra(cfg: DictConfig) -> None:
 
     rag = RAGAgent(db_path=cfg.storage.rag_db_path, verbose=cfg.logging.verbose)
 
+    # Initialize Git Agent from repository configuration
+    from git_agent import GitAgent
+    git_agent = GitAgent(verbose=cfg.logging.verbose)
+    repo_config = git_agent.configure_repository(
+        name=cfg.repository.name,
+        local_path=cfg.repository.local_path,
+        remote_url=cfg.repository.get('remote_url', None),
+        branch_strategy=cfg.repository.branch_strategy,
+        default_branch=cfg.repository.default_branch,
+        auto_push=cfg.repository.auto_push,
+        create_if_missing=cfg.repository.create_if_missing
+    )
+
+    if cfg.logging.verbose:
+        print(f"\n🔧 Git Agent Configured:")
+        print(f"   Repository: {repo_config.name}")
+        print(f"   Path: {repo_config.local_path}")
+        print(f"   Strategy: {repo_config.branch_strategy}")
+        print(f"   Remote: {repo_config.remote_url or 'None (local only)'}")
+
     # Register orchestrator
     messenger.register_agent(
         capabilities=["coordinate_pipeline", "manage_workflow"],
@@ -1670,7 +1959,8 @@ def main_hydra(cfg: DictConfig) -> None:
             board=board,
             messenger=messenger,
             rag=rag,
-            hydra_config=cfg
+            hydra_config=cfg,
+            git_agent=git_agent
         )
 
         # Run full pipeline

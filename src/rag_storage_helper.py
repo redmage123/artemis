@@ -250,6 +250,43 @@ class RAGStorageHelper:
 
         return results
 
+    def store_code_example(
+        self,
+        code: str,
+        language: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Store a code example in RAG database
+
+        Args:
+            code: Source code content
+            language: Programming language (e.g., 'python', 'java', 'javascript')
+            metadata: Optional metadata (quality_score, framework, dependencies, etc.)
+
+        Returns:
+            bool: True if storage succeeded, False if failed
+        """
+        if not hasattr(self, 'rag') or not self.rag:
+            return False
+
+        try:
+            # Store as code_example artifact type
+            artifact_id = self.rag.store_artifact(
+                artifact_type="code_example",
+                card_id=f"code-example-{language}-{hash(code) % 10000}",
+                task_title=f"Code Example: {language}",
+                content=code,
+                metadata=metadata or {}
+            )
+
+            return artifact_id is not None
+
+        except Exception as e:
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.warning(f"Failed to store code example: {e}")
+            return False
+
 
 # Convenience function for backward compatibility
 def store_stage_artifact(

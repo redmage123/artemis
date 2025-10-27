@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
-Code Refactoring Agent - Automated Code Quality Improvements
+Module: Code Refactoring Agent - Automated Code Quality Improvements
 
-Applies refactoring patterns based on code review feedback:
-- Loop to comprehension conversion
-- If/elif chain to dictionary mapping
-- Long method extraction
-- Code duplication removal
+Purpose: Analyzes Python code and identifies refactoring opportunities to improve
+         code quality, maintainability, and adherence to best practices.
+
+Why: Post-review refactoring ensures code meets quality standards before merge.
+     Automated detection of common anti-patterns saves developers time and
+     improves code consistency across the codebase.
+
+Patterns: Strategy Pattern (different refactoring strategies), Visitor Pattern (AST traversal)
+
+Integration: Works with code review agent output to apply suggested improvements.
+            Uses Python's ast module to analyze code structure without execution.
 """
 
 import ast
@@ -18,7 +24,18 @@ from dataclasses import dataclass
 
 @dataclass
 class RefactoringRule:
-    """A refactoring rule with pattern and fix"""
+    """
+    Represents a single refactoring pattern rule.
+
+    Why it exists: Encapsulates refactoring metadata for prioritization and tracking.
+    Design pattern: Value Object - immutable data container.
+
+    Attributes:
+        name: Unique identifier for the refactoring rule
+        pattern_type: Category ('loop', 'if_elif', 'long_method', 'duplication')
+        description: Human-readable explanation of the refactoring
+        priority: Urgency level (1=critical, 2=high, 3=medium, 4=low)
+    """
     name: str
     pattern_type: str  # 'loop', 'if_elif', 'long_method', 'duplication'
     description: str
@@ -27,9 +44,22 @@ class RefactoringRule:
 
 class CodeRefactoringAgent:
     """
-    Automated code refactoring agent
+    Automated code refactoring agent for Python codebases.
 
-    Applies refactoring patterns identified in code review
+    What this class does: Analyzes Python source files using AST parsing to identify
+    common anti-patterns and suggest Pythonic improvements.
+
+    Why it exists: Bridges the gap between code review feedback and actual implementation.
+    Automates mechanical refactoring suggestions so developers can focus on logic.
+
+    Design pattern: Visitor Pattern for AST traversal, Strategy Pattern for refactoring rules.
+
+    Responsibilities:
+    - Parse Python source code into AST
+    - Detect anti-patterns (long methods, simple loops, if/elif chains)
+    - Generate actionable refactoring instructions
+    - Prioritize refactorings by impact
+    - Provide educational context for suggested changes
     """
 
     REFACTORING_RULES = [
@@ -67,17 +97,47 @@ class CodeRefactoringAgent:
 
     def __init__(self, logger=None, verbose: bool = True):
         """
-        Initialize refactoring agent
+        Initialize refactoring agent.
+
+        What this method does: Sets up the agent with logging configuration.
+
+        Why needed: Dependency injection for logger allows flexible logging backends.
 
         Args:
-            logger: Logger instance
-            verbose: Enable verbose logging
+            logger: Optional logger instance for structured logging.
+                   If None, uses simple print statements.
+            verbose: Enable verbose logging to track refactoring analysis progress.
+                    Useful for debugging but can be noisy in production.
+
+        Returns:
+            None - modifies instance state only.
+
+        Raises:
+            No exceptions raised - this is a simple initialization.
         """
         self.logger = logger
         self.verbose = verbose
 
     def log(self, message: str, level: str = "INFO"):
-        """Log message"""
+        """
+        Log a message with optional severity level.
+
+        What this method does: Conditionally logs messages based on verbosity setting.
+
+        Why needed: Provides consistent logging interface regardless of logger backend.
+        Respects user's preference for verbosity to avoid log spam.
+
+        Args:
+            message: The log message text to output
+            level: Severity level (INFO, WARNING, ERROR) for log filtering
+
+        Returns:
+            None - side effect only (logging)
+
+        Raises:
+            No exceptions - logging failures are silently ignored to avoid
+            disrupting refactoring analysis.
+        """
         if self.verbose:
             if self.logger:
                 self.logger.log(message, level)
@@ -86,13 +146,30 @@ class CodeRefactoringAgent:
 
     def analyze_file_for_refactoring(self, file_path: Path) -> Dict[str, Any]:
         """
-        Analyze a Python file for refactoring opportunities
+        Analyze a Python file for refactoring opportunities using AST parsing.
+
+        What this method does: Parses Python source into AST and runs multiple
+        analyzers to detect anti-patterns (long methods, simple loops, if/elif chains).
+
+        Why needed: Central orchestration point for all refactoring analysis.
+        Separates concerns - this method coordinates, individual methods analyze.
 
         Args:
-            file_path: Path to Python file
+            file_path: Path object pointing to Python source file.
+                      Must be readable and contain valid Python syntax.
 
         Returns:
-            Dict with refactoring suggestions
+            Dict containing:
+                - 'file': str path to analyzed file
+                - 'long_methods': List[Dict] of methods exceeding 50 lines
+                - 'simple_loops': List[Dict] of for loops that could be comprehensions
+                - 'if_elif_chains': List[Dict] of if/elif chains (3+ branches)
+                - 'total_issues': int count of all detected issues
+                - 'error': str (only if parsing fails)
+
+        Raises:
+            No exceptions raised - errors are caught and returned in result dict.
+            This design prevents one bad file from stopping batch analysis.
         """
         self.log(f"Analyzing {file_path.name} for refactoring opportunities...")
 
@@ -122,7 +199,29 @@ class CodeRefactoringAgent:
             return {'file': str(file_path), 'error': str(e), 'total_issues': 0}
 
     def _find_long_methods(self, tree: ast.AST) -> List[Dict]:
-        """Find methods longer than 50 lines"""
+        """
+        Find methods longer than 50 lines that violate Single Responsibility Principle.
+
+        What this method does: Traverses AST to find FunctionDef nodes and measures
+        their line count. Flags methods exceeding the 50-line threshold.
+
+        Why needed: Long methods are harder to test, understand, and maintain.
+        The 50-line threshold is a common industry best practice for maintainability.
+
+        Args:
+            tree: Python AST (Abstract Syntax Tree) from ast.parse()
+
+        Returns:
+            List of dicts, each containing:
+                - 'name': Function name
+                - 'line': Starting line number
+                - 'length': Total lines in function
+                - 'suggestion': Refactoring recommendation
+
+        Raises:
+            No exceptions - malformed AST nodes are silently skipped to handle
+            edge cases in Python syntax gracefully.
+        """
         long_methods = []
 
         for node in ast.walk(tree):
@@ -140,7 +239,30 @@ class CodeRefactoringAgent:
         return long_methods
 
     def _find_simple_loops(self, tree: ast.AST, source: str) -> List[Dict]:
-        """Find simple for loops that can be comprehensions"""
+        """
+        Find simple for loops that can be converted to list/dict comprehensions.
+
+        What this method does: Identifies for loops with single-statement bodies
+        that perform simple append/add operations - prime candidates for Pythonic
+        comprehensions.
+
+        Why needed: List comprehensions are:
+        - More readable (express intent clearly)
+        - Faster (optimized C implementation)
+        - More Pythonic (idiomatic code)
+
+        Args:
+            tree: Python AST to analyze
+            source: Original source code (currently unused but available for context)
+
+        Returns:
+            List of dicts with:
+                - 'line': Line number of the for loop
+                - 'suggestion': Recommendation to use comprehension
+
+        Raises:
+            No exceptions - silently skips complex loops that don't match pattern.
+        """
         simple_loops = []
 
         for node in ast.walk(tree):
@@ -160,7 +282,41 @@ class CodeRefactoringAgent:
         return simple_loops
 
     def _find_if_elif_chains(self, tree: ast.AST, source: str) -> List[Dict]:
-        """Find long if/elif chains that can use dictionary mapping"""
+        """
+        Find long if/elif chains (3+ branches) that should use dictionary mapping.
+
+        What this method does: Traverses AST to find If nodes with multiple elif
+        branches. Counts branches and flags chains with 3+ branches as candidates
+        for dict.get() refactoring.
+
+        Why needed: Long if/elif chains:
+        - Are harder to maintain (must update in multiple places)
+        - Perform slower (linear search vs constant-time dict lookup)
+        - Are less Pythonic (dict dispatch is more idiomatic)
+
+        Example transformation:
+            # Before
+            if x == 'a': return 1
+            elif x == 'b': return 2
+            elif x == 'c': return 3
+
+            # After
+            mapping = {'a': 1, 'b': 2, 'c': 3}
+            return mapping.get(x, default)
+
+        Args:
+            tree: Python AST to analyze
+            source: Original source code (currently unused)
+
+        Returns:
+            List of dicts with:
+                - 'line': Line number of if statement
+                - 'elif_count': Number of elif branches
+                - 'suggestion': Recommendation to use dictionary
+
+        Raises:
+            No exceptions - malformed if/else structures are skipped.
+        """
         if_elif_chains = []
 
         for node in ast.walk(tree):
@@ -191,14 +347,31 @@ class CodeRefactoringAgent:
         code_review_issues: List[Dict] = None
     ) -> str:
         """
-        Generate detailed refactoring instructions for developer
+        Generate detailed, actionable refactoring instructions for developers.
+
+        What this method does: Transforms raw analysis data into human-readable
+        markdown format with categorized issues and best practice recommendations.
+
+        Why needed: Bridges the gap between automated detection and human action.
+        Provides educational context so developers understand WHY to refactor,
+        not just WHAT to refactor.
 
         Args:
-            analysis: Refactoring analysis results
-            code_review_issues: Issues from code review
+            analysis: Dict from analyze_file_for_refactoring() containing:
+                - long_methods, simple_loops, if_elif_chains lists
+                - file path and total issue count
+            code_review_issues: Optional list of code review findings to merge.
+                Allows combining automated and human review feedback.
 
         Returns:
-            Formatted refactoring instructions
+            Markdown-formatted string with:
+                - File header and issue count
+                - Categorized refactoring suggestions
+                - Code review issues (if provided)
+                - Best practices summary
+
+        Raises:
+            No exceptions - missing data results in empty sections rather than errors.
         """
         instructions = []
 
@@ -255,14 +428,32 @@ class CodeRefactoringAgent:
         analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Apply automated refactoring to a file
+        Apply automated refactoring to a file (currently suggestions-only).
+
+        What this method does: Placeholder for future automated AST transformation.
+        Currently returns suggestions without modifying source code.
+
+        Why needed: Future-proofs the API for when we implement automated refactoring.
+        Keeps interface consistent - same method signature whether suggesting or applying.
+
+        WHY NOT IMPLEMENTED YET: Automated AST transformation is risky:
+        - May break code semantics (especially with complex Python features)
+        - Requires extensive testing to ensure correctness
+        - Better to provide suggestions and let developers review changes
 
         Args:
-            file_path: Path to file
-            analysis: Refactoring analysis
+            file_path: Path to Python file to refactor
+            analysis: Analysis results from analyze_file_for_refactoring()
 
         Returns:
-            Dict with refactoring results
+            Dict with:
+                - 'file': str path
+                - 'status': 'SUGGESTIONS_ONLY'
+                - 'message': Explanation of why automation is limited
+                - 'suggestions': Copy of analysis for reference
+
+        Raises:
+            No exceptions - this is a no-op wrapper for future functionality.
         """
         self.log(f"Applying automated refactoring to {file_path.name}...")
 
@@ -278,14 +469,25 @@ class CodeRefactoringAgent:
 
 def create_refactoring_agent(logger=None, verbose: bool = True) -> CodeRefactoringAgent:
     """
-    Create refactoring agent instance
+    Factory function to create refactoring agent instance.
+
+    What this function does: Creates and returns a configured CodeRefactoringAgent.
+
+    Why needed: Factory pattern provides a consistent creation interface and
+    allows future extensions (e.g., configuration file support) without changing
+    client code.
 
     Args:
-        logger: Logger instance
-        verbose: Enable verbose logging
+        logger: Optional logger for tracking refactoring operations.
+               Defaults to None (uses print statements).
+        verbose: Enable detailed logging of analysis steps.
+                Recommended for development, disable in production.
 
     Returns:
-        CodeRefactoringAgent instance
+        Fully initialized CodeRefactoringAgent ready for use.
+
+    Raises:
+        No exceptions - initialization is simple and cannot fail.
     """
     return CodeRefactoringAgent(logger=logger, verbose=verbose)
 

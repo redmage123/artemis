@@ -12,7 +12,7 @@ Dependency Inversion: Depends on LLMClientInterface abstraction
 import os
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -52,6 +52,18 @@ class LLMClientInterface(ABC):
     Abstract base class for all LLM clients
 
     Single Responsibility: Define contract for LLM communication
+
+    Why this exists: Provides unified interface for multiple LLM providers (OpenAI,
+    Anthropic), enabling easy provider switching without code changes.
+
+    Design Pattern: Strategy Pattern - different providers are interchangeable strategies
+    SOLID: Interface Segregation - minimal interface with only essential methods
+
+    Benefits:
+    - Switch providers via config (no code changes)
+    - Test with mock LLM without API costs
+    - Standardized error handling across providers
+    - Unified usage tracking and cost monitoring
     """
 
     @abstractmethod
@@ -63,7 +75,49 @@ class LLMClientInterface(ABC):
         max_tokens: int = 4000,
         response_format: Optional[Dict] = None
     ) -> LLMResponse:
-        """Send messages to LLM and get response"""
+        """
+        Send messages to LLM and get response
+
+        Args:
+            messages: Conversation history (system, user, assistant messages)
+            model: Specific model to use (provider default if None)
+            temperature: Sampling temperature 0.0-1.0 (lower = more deterministic)
+            max_tokens: Maximum tokens in response (cost control)
+            response_format: Optional format spec (e.g., {"type": "json_object"})
+
+        Returns:
+            Standardized LLMResponse with content, usage, and metadata
+        """
+        pass
+
+    @abstractmethod
+    def complete_stream(
+        self,
+        messages: List[LLMMessage],
+        on_token_callback: Optional[Callable[[str], bool]] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4000,
+        response_format: Optional[Dict] = None
+    ) -> LLMResponse:
+        """
+        Send messages to LLM and get response with streaming (token-by-token).
+
+        Args:
+            messages: Conversation history (system, user, assistant messages)
+            on_token_callback: Optional callback called for each token.
+                              Receives token string, returns True to continue or False to stop.
+            model: Specific model to use (provider default if None)
+            temperature: Sampling temperature 0.0-1.0 (lower = more deterministic)
+            max_tokens: Maximum tokens in response (cost control)
+            response_format: Optional format spec (e.g., {"type": "json_object"})
+
+        Returns:
+            Standardized LLMResponse with content, usage, and metadata
+
+        WHY: Enables real-time validation during generation.
+             Callback can stop generation if hallucination detected.
+        """
         pass
 
     @abstractmethod
@@ -192,6 +246,135 @@ class OpenAIClient(LLMClientInterface):
             response_format=response_format
         )
 
+    def complete_stream(
+        self,
+        messages: List[LLMMessage],
+        on_token_callback: Optional[Callable[[str], bool]] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4000,
+        response_format: Optional[Dict] = None
+    ) -> LLMResponse:
+        """
+        Send messages to OpenAI and get response with streaming.
+
+        WHY: Enables real-time validation during code generation.
+             Callback can stop generation if hallucination detected.
+
+        Args:
+            messages: Conversation history
+            on_token_callback: Called for each token, returns True to continue or False to stop
+            model: Model to use (default: gpt-4o)
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens in response
+            response_format: Optional format spec
+
+        Returns:
+            LLMResponse with full content (accumulated from stream)
+        """
+        # Convert our LLMMessage format to OpenAI format
+        openai_messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in messages
+        ]
+
+        # Default model
+        if model is None:
+            model = "gpt-4o"
+
+        # Build API call kwargs
+        api_kwargs = {
+            "model": model,
+            "messages": openai_messages,
+            "temperature": temperature,
+            "stream": True  # Enable streaming
+        }
+
+        # Handle model-specific parameters (same logic as complete())
+        if model.startswith("o1") or model.startswith("gpt-5"):
+            del api_kwargs["temperature"]
+            api_kwargs["max_completion_tokens"] = max_tokens
+        else:
+            api_kwargs["max_completion_tokens"] = max_tokens
+
+        if response_format:
+            api_kwargs["response_format"] = response_format
+
+        # Call OpenAI API with streaming
+        stream = self.client.chat.completions.create(**api_kwargs)
+
+        # Accumulate streamed content (avoid nested ifs - extract to helper)
+        full_content, stopped_early = self._process_openai_stream(stream, on_token_callback)
+
+        # Build usage info (estimate if stopped early)
+        usage = {
+            "prompt_tokens": 0,  # Not available in streaming
+            "completion_tokens": len(full_content.split()),  # Estimate
+            "total_tokens": len(full_content.split())
+        }
+
+        return LLMResponse(
+            content=full_content,
+            model=model,
+            provider="openai",
+            usage=usage,
+            raw_response={"stopped_early": stopped_early}
+        )
+
+    def _process_openai_stream(
+        self,
+        stream,
+        on_token_callback: Optional[Callable[[str], bool]]
+    ) -> Tuple[str, bool]:
+        """
+        Process OpenAI stream and accumulate tokens.
+
+        WHY: Extracted from complete_stream() to avoid nested ifs.
+        PATTERNS: Early return pattern when callback stops generation.
+
+        Returns:
+            Tuple of (full_content, stopped_early)
+        """
+        full_content = ""
+        stopped_early = False
+
+        for chunk in stream:
+            # Skip chunks without content (early return pattern)
+            if not chunk.choices[0].delta.content:
+                continue
+
+            token = chunk.choices[0].delta.content
+            full_content += token
+
+            # Process callback if provided (avoid nested ifs)
+            should_stop = self._process_token_callback(token, on_token_callback)
+            if should_stop:
+                stopped_early = True
+                break
+
+        return full_content, stopped_early
+
+    def _process_token_callback(
+        self,
+        token: str,
+        callback: Optional[Callable[[str], bool]]
+    ) -> bool:
+        """
+        Process token callback.
+
+        WHY: Extracted to avoid nested ifs in stream processing.
+        PERFORMANCE: Early return if no callback.
+
+        Returns:
+            True if generation should stop, False otherwise
+        """
+        # Early return if no callback (avoid nested if)
+        if not callback:
+            return False
+
+        should_continue = callback(token)
+        return not should_continue  # Return True to stop
+
     def get_available_models(self) -> List[str]:
         """Get available OpenAI models"""
         return [
@@ -288,6 +471,132 @@ class AnthropicClient(LLMClientInterface):
             raw_response=response.model_dump()
         )
 
+    def complete_stream(
+        self,
+        messages: List[LLMMessage],
+        on_token_callback: Optional[Callable[[str], bool]] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4000,
+        response_format: Optional[Dict] = None
+    ) -> LLMResponse:
+        """
+        Send messages to Anthropic and get response with streaming.
+
+        WHY: Enables real-time validation during code generation.
+             Callback can stop generation if hallucination detected.
+
+        Args:
+            messages: Conversation history
+            on_token_callback: Called for each token, returns True to continue or False to stop
+            model: Model to use (default: claude-sonnet-4-5)
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens in response
+            response_format: Not supported by Anthropic (ignored)
+
+        Returns:
+            LLMResponse with full content (accumulated from stream)
+        """
+        # Anthropic requires system message to be separate
+        system_message = None
+        anthropic_messages = []
+
+        for msg in messages:
+            if msg.role == "system":
+                system_message = msg.content
+            else:
+                anthropic_messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+
+        # Default model
+        if model is None:
+            model = "claude-sonnet-4-5-20250929"
+
+        # Call Anthropic API with streaming
+        kwargs = {
+            "model": model,
+            "messages": anthropic_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True  # Enable streaming
+        }
+
+        if system_message:
+            kwargs["system"] = system_message
+
+        stream = self.client.messages.stream(**kwargs)
+
+        # Accumulate streamed content (avoid nested ifs - extract to helper)
+        full_content, stopped_early = self._process_anthropic_stream(stream, on_token_callback)
+
+        # Build usage info (estimate if stopped early)
+        usage = {
+            "prompt_tokens": 0,  # Not available in streaming
+            "completion_tokens": len(full_content.split()),  # Estimate
+            "total_tokens": len(full_content.split())
+        }
+
+        return LLMResponse(
+            content=full_content,
+            model=model,
+            provider="anthropic",
+            usage=usage,
+            raw_response={"stopped_early": stopped_early}
+        )
+
+    def _process_anthropic_stream(
+        self,
+        stream,
+        on_token_callback: Optional[Callable[[str], bool]]
+    ) -> Tuple[str, bool]:
+        """
+        Process Anthropic stream and accumulate tokens.
+
+        WHY: Extracted from complete_stream() to avoid nested ifs.
+        PATTERNS: Early return pattern when callback stops generation.
+
+        Returns:
+            Tuple of (full_content, stopped_early)
+        """
+        full_content = ""
+        stopped_early = False
+
+        with stream as message_stream:
+            for text in message_stream.text_stream:
+                full_content += text
+
+                # Process callback if provided (avoid nested ifs)
+                # Reuse OpenAI's callback processor (same logic)
+                should_stop = self._process_token_callback(text, on_token_callback)
+                if should_stop:
+                    stopped_early = True
+                    break
+
+        return full_content, stopped_early
+
+    def _process_token_callback(
+        self,
+        token: str,
+        callback: Optional[Callable[[str], bool]]
+    ) -> bool:
+        """
+        Process token callback.
+
+        WHY: Extracted to avoid nested ifs in stream processing.
+        PERFORMANCE: Early return if no callback.
+
+        Returns:
+            True if generation should stop, False otherwise
+        """
+        # Early return if no callback (avoid nested if)
+        if not callback:
+            return False
+
+        should_continue = callback(token)
+        return not should_continue  # Return True to stop
+
     def get_available_models(self) -> List[str]:
         """Get available Anthropic models"""
         return [
@@ -308,39 +617,64 @@ class LLMClientFactory:
     Open/Closed: Can add new providers without modifying existing code
     """
 
+    # Strategy pattern: Dictionary mapping instead of if/elif chain (SOLID: Open/Closed)
+    _PROVIDER_STRATEGIES = {
+        LLMProvider.OPENAI: OpenAIClient,
+        LLMProvider.ANTHROPIC: AnthropicClient
+    }
+
     @staticmethod
     def create(
         provider: LLMProvider,
         api_key: Optional[str] = None
     ) -> LLMClientInterface:
-        """Create LLM client for specified provider"""
-        if provider == LLMProvider.OPENAI:
-            return OpenAIClient(api_key=api_key)
-        elif provider == LLMProvider.ANTHROPIC:
-            return AnthropicClient(api_key=api_key)
-        else:
+        """
+        Create LLM client for specified provider.
+
+        WHY: Factory pattern enables adding new providers without code changes.
+        PATTERNS: Strategy pattern with dictionary mapping (no if/elif chains).
+        """
+        client_class = LLMClientFactory._PROVIDER_STRATEGIES.get(provider)
+
+        if not client_class:
             raise ConfigurationError(
                 f"Unsupported provider: {provider}",
-                context={"provider": str(provider), "supported": ["openai", "anthropic"]}
+                context={
+                    "provider": str(provider),
+                    "supported": list(LLMClientFactory._PROVIDER_STRATEGIES.keys())
+                }
             )
+
+        return client_class(api_key=api_key)
+
+    # Strategy pattern: Dictionary mapping for provider string -> enum (no if/elif chains)
+    _PROVIDER_STRING_MAP = {
+        "openai": LLMProvider.OPENAI,
+        "anthropic": LLMProvider.ANTHROPIC
+    }
 
     @staticmethod
     def create_from_env() -> LLMClientInterface:
         """
-        Create LLM client from environment variables
+        Create LLM client from environment variables.
 
-        Checks ARTEMIS_LLM_PROVIDER env var (defaults to "openai")
+        WHY: Enables provider configuration via environment variables.
+        PATTERNS: Strategy pattern with dictionary mapping (no if/elif chains).
+
+        Environment Variables:
+            ARTEMIS_LLM_PROVIDER: Provider name ("openai" or "anthropic", default: "openai")
         """
         provider_str = os.getenv("ARTEMIS_LLM_PROVIDER", "openai").lower()
 
-        if provider_str == "openai":
-            provider = LLMProvider.OPENAI
-        elif provider_str == "anthropic":
-            provider = LLMProvider.ANTHROPIC
-        else:
+        provider = LLMClientFactory._PROVIDER_STRING_MAP.get(provider_str)
+
+        if not provider:
             raise ConfigurationError(
                 f"Invalid ARTEMIS_LLM_PROVIDER: {provider_str}",
-                context={"provider": provider_str, "supported": ["openai", "anthropic"]}
+                context={
+                    "provider": provider_str,
+                    "supported": list(LLMClientFactory._PROVIDER_STRING_MAP.keys())
+                }
             )
 
         return LLMClientFactory.create(provider)

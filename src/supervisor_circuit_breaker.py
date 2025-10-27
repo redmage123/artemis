@@ -1,14 +1,47 @@
 #!/usr/bin/env python3
 """
-Circuit Breaker Manager for Supervisor
+Module: supervisor_circuit_breaker.py
 
-Single Responsibility: Manage circuit breaker state for pipeline stages
+Purpose: Manage circuit breaker state for pipeline stages to prevent cascading failures
+Why: Extracted from SupervisorAgent to follow SRP, focusing solely on circuit breaker
+     logic without mixing in other supervisor responsibilities
+Patterns: Circuit Breaker (core), Strategy (configurable per-stage policies)
+Integration: Used by SupervisorAgent to track stage health and prevent retry storms
 
-Extracted from SupervisorAgent to follow Single Responsibility Principle.
+Architecture:
+    - Per-stage circuit breaker state (CLOSED/OPEN/HALF_OPEN)
+    - Configurable failure thresholds per stage
+    - Automatic timeout and recovery testing
+    - Stage health statistics (failures, executions, durations)
+    - Configurable recovery strategies per stage
 
-Design Patterns:
-- Circuit Breaker: Prevent cascading failures
-- Strategy Pattern: Configurable recovery strategies per stage
+Design Decisions:
+    - Separated from supervisor for testability and reusability
+    - Per-stage configuration allows fine-grained control
+    - Circuit breaker prevents retry storms on failing stages
+    - Auto-close after timeout enables recovery testing
+    - Health statistics inform circuit decisions
+
+Circuit States:
+    - CLOSED: Normal operation, requests pass through
+    - OPEN: Too many failures, reject immediately
+    - HALF_OPEN: Testing recovery, allow one request
+
+Circuit Breaker Pattern Benefits:
+    - Fail fast when stage is known to be down
+    - Prevent cascading failures from retrying failing stages
+    - Auto-recovery via timeout and half-open testing
+    - Reduces load on failing downstream services
+    - Provides clear failure indicators for monitoring
+
+Recovery Strategy per Stage:
+    - max_retries: How many retries before opening
+    - retry_delay: Initial delay between retries
+    - backoff_multiplier: Exponential backoff factor
+    - timeout_seconds: Stage-specific timeout
+    - circuit_breaker_threshold: Failures before opening
+    - circuit_breaker_timeout: How long circuit stays open
+    - fallback_action: Optional fallback when circuit open
 """
 
 from dataclasses import dataclass

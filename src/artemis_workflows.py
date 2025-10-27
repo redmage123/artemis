@@ -41,535 +41,80 @@ from workflow_handlers import WorkflowHandlers
 
 
 # ============================================================================
-# LEGACY HANDLER CLASS (Deprecated - use workflow_handlers.py)
-# ============================================================================
-# This class is preserved for backward compatibility only
-# All handler logic has been moved to workflow_handlers.py
-#
-# The WorkflowHandlers class in workflow_handlers.py provides the same API
-# but with better SOLID compliance (30+ classes instead of 1 god class)
-#
-# To migrate:
-# 1. Replace: from artemis_workflows import WorkflowHandlers
-# 2. With: from workflow_handlers import WorkflowHandlers
-#
-# No code changes needed - API is identical
-# ============================================================================
-
-class _LegacyWorkflowHandlers:
-    """
-    DEPRECATED: Legacy workflow handlers
-
-    This class is no longer used. All functionality has been moved to
-    workflow_handlers.py with proper SOLID design.
-
-    Import WorkflowHandlers from workflow_handlers.py instead.
-    """
-
-    # ========================================================================
-    # ALL METHODS BELOW ARE DEPRECATED - DO NOT USE
-    # ========================================================================
-
-    @staticmethod
-    def kill_hanging_process(context: Dict[str, Any]) -> bool:
-        """Kill hanging process"""
-        pid = context.get("pid")
-        if not pid:
-            return False
-
-        try:
-            process = psutil.Process(pid)
-            process.terminate()
-            time.sleep(DEFAULT_RETRY_INTERVAL_SECONDS - 3)  # 2 seconds
-
-            if process.is_running():
-                process.kill()
-
-            print(f"[Workflow] Killed hanging process {pid}")
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to kill process {pid}: {e}")
-            return False
-
-    @staticmethod
-    def increase_timeout(context: Dict[str, Any]) -> bool:
-        """Increase timeout for stage"""
-        stage_name = context.get("stage_name")
-        current_timeout = context.get("timeout_seconds", 300)
-        new_timeout = current_timeout * 2
-
-        context["timeout_seconds"] = new_timeout
-        print(f"[Workflow] Increased timeout for {stage_name}: {current_timeout}s → {new_timeout}s")
-        return True
-
-    @staticmethod
-    def free_memory(context: Dict[str, Any]) -> bool:
-        """Free up memory"""
-        try:
-            # Clear Python caches
-            import gc
-            gc.collect()
-
-            # TODO: Clear other caches (RAG, LLM, etc.)
-
-            print("[Workflow] Freed memory")
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to free memory: {e}")
-            return False
-
-    @staticmethod
-    def cleanup_temp_files(context: Dict[str, Any]) -> bool:
-        """Clean up temporary files"""
-        try:
-            # Get developer base directory from environment (same logic as DeveloperInvoker)
-            import os
-            developer_base_dir = os.getenv("ARTEMIS_DEVELOPER_DIR", "/tmp")
-            if not os.path.isabs(developer_base_dir):
-                script_dir = Path(__file__).parent.resolve()
-                developer_base_dir = script_dir / developer_base_dir
-
-            # Build list of temp directories to clean
-            temp_dirs = [
-                str(Path(developer_base_dir) / "developer-a"),
-                str(Path(developer_base_dir) / "developer-b"),
-                "/tmp/adr"  # ADR still uses /tmp (could be made configurable too)
-            ]
-
-            for temp_dir in temp_dirs:
-                if Path(temp_dir).exists():
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                    print(f"[Workflow] Cleaned up {temp_dir}")
-
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to cleanup temp files: {e}")
-            return False
-
-    @staticmethod
-    def check_disk_space(context: Dict[str, Any]) -> bool:
-        """Check and report disk space"""
-        try:
-            usage = shutil.disk_usage("/")
-            free_gb = usage.free / (1024**3)
-
-            print(f"[Workflow] Disk space: {free_gb:.2f} GB free")
-
-            if free_gb < 1:
-                print("[Workflow] ⚠️  Low disk space!")
-                return False
-
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to check disk space: {e}")
-            return False
-
-    @staticmethod
-    def retry_network_request(context: Dict[str, Any]) -> bool:
-        """Retry network request with exponential backoff"""
-        for attempt in range(MAX_RETRY_ATTEMPTS):
-            try:
-                # TODO: Implement actual network retry
-                time.sleep(RETRY_BACKOFF_FACTOR ** attempt)
-                print(f"[Workflow] Network retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
-                return True
-            except Exception:
-                if attempt == MAX_RETRY_ATTEMPTS - 1:
-                    return False
-                continue
-        return False
-
-    # ========================================================================
-    # CODE ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def run_linter_fix(context: Dict[str, Any]) -> bool:
-        """Run linter auto-fix"""
-        file_path = context.get("file_path")
-        if not file_path:
-            return False
-
-        try:
-            # Run black for Python files
-            if file_path.endswith(".py"):
-                subprocess.run(["black", file_path], check=True, capture_output=True)
-                print(f"[Workflow] Auto-fixed {file_path} with black")
-
-            # Run prettier for JS/TS files
-            elif file_path.endswith((".js", ".ts", ".jsx", ".tsx")):
-                subprocess.run(["prettier", "--write", file_path], check=True, capture_output=True)
-                print(f"[Workflow] Auto-fixed {file_path} with prettier")
-
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to auto-fix {file_path}: {e}")
-            return False
-
-    @staticmethod
-    def rerun_tests(context: Dict[str, Any]) -> bool:
-        """Re-run failed tests"""
-        test_path = context.get("test_path", ".")
-
-        try:
-            result = subprocess.run(
-                ["python3", "-m", "pytest", test_path, "-v"],
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-
-            if result.returncode == 0:
-                print(f"[Workflow] Tests passed: {test_path}")
-                return True
-            else:
-                print(f"[Workflow] Tests still failing: {test_path}")
-                return False
-        except Exception as e:
-            print(f"[Workflow] Failed to run tests: {e}")
-            return False
-
-    @staticmethod
-    def fix_security_vulnerability(context: Dict[str, Any]) -> bool:
-        """Apply security patch"""
-        vulnerability_type = context.get("vulnerability_type")
-
-        # TODO: Implement security patch logic
-        print(f"[Workflow] Applying security patch for {vulnerability_type}")
-
-        return True
-
-    @staticmethod
-    def retry_compilation(context: Dict[str, Any]) -> bool:
-        """Retry compilation"""
-        file_path = context.get("file_path")
-
-        try:
-            # For Python, check syntax
-            if file_path and file_path.endswith(".py"):
-                with open(file_path) as f:
-                    compile(f.read(), file_path, "exec")
-
-            print(f"[Workflow] Compilation successful: {file_path}")
-            return True
-        except SyntaxError as e:
-            print(f"[Workflow] Syntax error in {file_path}: {e}")
-            return False
-        except Exception as e:
-            print(f"[Workflow] Compilation failed: {e}")
-            return False
-
-    # ========================================================================
-    # DEPENDENCY ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def install_missing_dependency(context: Dict[str, Any]) -> bool:
-        """Install missing dependency"""
-        package = context.get("package")
-        if not package:
-            return False
-
-        try:
-            subprocess.run(
-                ["pip", "install", package],
-                check=True,
-                capture_output=True,
-                timeout=300
-            )
-            print(f"[Workflow] Installed dependency: {package}")
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to install {package}: {e}")
-            return False
-
-    @staticmethod
-    def resolve_version_conflict(context: Dict[str, Any]) -> bool:
-        """Resolve package version conflict"""
-        package = context.get("package")
-        version = context.get("version")
-
-        try:
-            if version:
-                subprocess.run(
-                    ["pip", "install", f"{package}=={version}"],
-                    check=True,
-                    capture_output=True,
-                    timeout=300
-                )
-            else:
-                subprocess.run(
-                    ["pip", "install", "--upgrade", package],
-                    check=True,
-                    capture_output=True,
-                    timeout=300
-                )
-
-            print(f"[Workflow] Resolved version conflict for {package}")
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to resolve version conflict: {e}")
-            return False
-
-    @staticmethod
-    def fix_import_error(context: Dict[str, Any]) -> bool:
-        """Fix import error"""
-        module_name = context.get("module")
-
-        # Try to install the module
-        try:
-            subprocess.run(
-                ["pip", "install", module_name],
-                check=True,
-                capture_output=True,
-                timeout=300
-            )
-            print(f"[Workflow] Fixed import error for {module_name}")
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to fix import error: {e}")
-            return False
-
-    # ========================================================================
-    # LLM ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def switch_llm_provider(context: Dict[str, Any]) -> bool:
-        """Switch to backup LLM provider"""
-        current_provider = context.get("current_provider", "openai")
-
-        if current_provider == "openai":
-            context["llm_provider"] = "anthropic"
-            print("[Workflow] Switched from OpenAI to Anthropic")
-        else:
-            context["llm_provider"] = "openai"
-            print("[Workflow] Switched from Anthropic to OpenAI")
-
-        return True
-
-    @staticmethod
-    def retry_llm_request(context: Dict[str, Any]) -> bool:
-        """Retry LLM request with backoff"""
-        for attempt in range(MAX_RETRY_ATTEMPTS):
-            try:
-                # TODO: Implement actual LLM retry
-                time.sleep(RETRY_BACKOFF_FACTOR ** attempt)
-                print(f"[Workflow] LLM retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
-                return True
-            except Exception:
-                if attempt == MAX_RETRY_ATTEMPTS - 1:
-                    return False
-                continue
-
-        return False
-
-    @staticmethod
-    def handle_rate_limit(context: Dict[str, Any]) -> bool:
-        """Handle LLM rate limit"""
-        wait_time = context.get("wait_time", 60)
-
-        print(f"[Workflow] Rate limited, waiting {wait_time}s...")
-        time.sleep(wait_time)
-
-        return True
-
-    @staticmethod
-    def validate_llm_response(context: Dict[str, Any]) -> bool:
-        """Validate and sanitize LLM response"""
-        response = context.get("llm_response", "")
-
-        # TODO: Implement response validation
-        if len(response) > 0:
-            print("[Workflow] LLM response validated")
-            return True
-        else:
-            print("[Workflow] Invalid LLM response")
-            return False
-
-    # ========================================================================
-    # STAGE-SPECIFIC ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def regenerate_architecture(context: Dict[str, Any]) -> bool:
-        """Regenerate architecture document"""
-        print("[Workflow] Regenerating architecture...")
-
-        # TODO: Trigger architecture stage re-run
-        return True
-
-    @staticmethod
-    def request_code_review_revision(context: Dict[str, Any]) -> bool:
-        """Request code review revision"""
-        issues = context.get("review_issues", [])
-
-        print(f"[Workflow] Requesting revision for {len(issues)} code review issues")
-
-        # TODO: Send revision request to developer agents
-        return True
-
-    @staticmethod
-    def resolve_integration_conflict(context: Dict[str, Any]) -> bool:
-        """Resolve integration conflict"""
-        conflict_files = context.get("conflict_files", [])
-
-        print(f"[Workflow] Resolving conflicts in {len(conflict_files)} files")
-
-        # TODO: Implement conflict resolution (prefer Developer A, B, or manual merge)
-        return True
-
-    @staticmethod
-    def rerun_validation(context: Dict[str, Any]) -> bool:
-        """Re-run validation"""
-        print("[Workflow] Re-running validation...")
-
-        # TODO: Trigger validation stage re-run
-        return True
-
-    # ========================================================================
-    # MULTI-AGENT ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def break_arbitration_deadlock(context: Dict[str, Any]) -> bool:
-        """Break arbitration deadlock"""
-        developer_a_score = context.get("developer_a_score", 0)
-        developer_b_score = context.get("developer_b_score", 0)
-
-        # Choose based on scores, or random if tied
-        if developer_a_score > developer_b_score:
-            context["chosen_solution"] = "developer_a"
-            print("[Workflow] Arbitration: Chose Developer A (higher score)")
-        elif developer_b_score > developer_a_score:
-            context["chosen_solution"] = "developer_b"
-            print("[Workflow] Arbitration: Chose Developer B (higher score)")
-        else:
-            import random
-            context["chosen_solution"] = random.choice(["developer_a", "developer_b"])
-            print(f"[Workflow] Arbitration: Randomly chose {context['chosen_solution']}")
-
-        return True
-
-    @staticmethod
-    def merge_developer_solutions(context: Dict[str, Any]) -> bool:
-        """Merge conflicting developer solutions"""
-        print("[Workflow] Merging developer solutions...")
-
-        # TODO: Implement intelligent merge logic
-        return True
-
-    @staticmethod
-    def restart_messenger(context: Dict[str, Any]) -> bool:
-        """Restart messenger service"""
-        print("[Workflow] Restarting messenger...")
-
-        # TODO: Restart messenger
-        return True
-
-    # ========================================================================
-    # DATA ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def validate_card_data(context: Dict[str, Any]) -> bool:
-        """Validate and sanitize card data"""
-        card = context.get("card", {})
-
-        required_fields = ["card_id", "title", "description"]
-        for field in required_fields:
-            if field not in card:
-                print(f"[Workflow] Missing required field: {field}")
-                return False
-
-        print("[Workflow] Card data validated")
-        return True
-
-    @staticmethod
-    def restore_state_from_backup(context: Dict[str, Any]) -> bool:
-        """Restore state from backup"""
-        backup_file = context.get("backup_file")
-
-        if backup_file and Path(backup_file).exists():
-            print(f"[Workflow] Restoring state from {backup_file}")
-            # TODO: Implement state restoration
-            return True
-        else:
-            print("[Workflow] No backup file found")
-            return False
-
-    @staticmethod
-    def rebuild_rag_index(context: Dict[str, Any]) -> bool:
-        """Rebuild RAG index"""
-        print("[Workflow] Rebuilding RAG index...")
-
-        # TODO: Trigger RAG rebuild
-        return True
-
-    # ========================================================================
-    # SYSTEM ISSUE HANDLERS
-    # ========================================================================
-
-    @staticmethod
-    def cleanup_zombie_processes(context: Dict[str, Any]) -> bool:
-        """Clean up zombie processes"""
-        try:
-            zombies_cleaned = 0
-
-            for proc in psutil.process_iter(['pid', 'status']):
-                if proc.info['status'] == psutil.STATUS_ZOMBIE:
-                    try:
-                        proc.wait(timeout=1)
-                        zombies_cleaned += 1
-                    except:
-                        pass
-
-            print(f"[Workflow] Cleaned up {zombies_cleaned} zombie processes")
-            return True
-        except Exception as e:
-            print(f"[Workflow] Failed to cleanup zombies: {e}")
-            return False
-
-    @staticmethod
-    def release_file_locks(context: Dict[str, Any]) -> bool:
-        """Release file locks"""
-        file_path = context.get("file_path")
-
-        # TODO: Implement file lock release
-        print(f"[Workflow] Released file lock: {file_path}")
-        return True
-
-    @staticmethod
-    def fix_permissions(context: Dict[str, Any]) -> bool:
-        """Fix file permissions"""
-        file_path = context.get("file_path")
-
-        try:
-            if file_path and Path(file_path).exists():
-                os.chmod(file_path, 0o644)
-                print(f"[Workflow] Fixed permissions for {file_path}")
-                return True
-        except Exception as e:
-            print(f"[Workflow] Failed to fix permissions: {e}")
-            return False
-
-        return True
-
-
-# ============================================================================
 # WORKFLOW BUILDER
 # ============================================================================
 
 class WorkflowBuilder:
-    """Build recovery workflows for all issue types"""
+    """
+    Build recovery workflows for all issue types
+
+    WHAT:
+    Factory class that constructs complete recovery workflows for 30+ different
+    pipeline failure scenarios, from timeout errors to LLM rate limits to zombie processes.
+
+    WHY:
+    Pipeline failures are inevitable in autonomous systems. Rather than failing fast,
+    Artemis attempts intelligent recovery using predefined workflows. Each workflow
+    contains a sequence of actions to diagnose and fix the specific issue.
+
+    This builder centralizes workflow construction, making it easy to:
+    - Add new recovery workflows
+    - Modify existing workflows
+    - Test recovery logic
+    - Document recovery procedures
+
+    PATTERNS:
+    - Builder Pattern: Constructs complex workflow objects step-by-step
+    - Factory Pattern: Creates workflows based on issue type
+    - Static Factory Methods: Each build_*_workflow() creates specific workflow
+
+    WORKFLOW CATEGORIES:
+    1. Infrastructure (5 workflows): timeout, hanging process, memory, disk, network
+    2. Code (4 workflows): compilation, tests, security, linting
+    3. Dependencies (3 workflows): missing deps, version conflicts, imports
+    4. LLM (4 workflows): API errors, timeouts, rate limits, invalid responses
+    5. Stages (4 workflows): architecture, code review, integration, validation
+    6. Multi-agent (3 workflows): arbitration deadlock, developer conflicts, messenger
+    7. Data (3 workflows): invalid card, corrupted state, RAG errors
+    8. System (3 workflows): zombie processes, file locks, permissions
+
+    INTEGRATION:
+    - Used by: SupervisorAgent to execute recovery workflows
+    - Uses: WorkflowHandlers for action execution
+    - Creates: Workflow objects with action sequences
+
+    EXAMPLE WORKFLOW:
+        timeout_workflow = WorkflowBuilder.build_timeout_workflow()
+        # Actions: [increase_timeout, kill_hanging_process]
+        # On success → PipelineState.RUNNING (continue pipeline)
+        # On failure → PipelineState.FAILED (abort pipeline)
+    """
 
     @staticmethod
     def build_all_workflows() -> Dict[IssueType, Workflow]:
         """
         Build all recovery workflows
 
-        Returns:
-            Map of issue type → workflow
+        WHAT:
+        Creates complete map of IssueType → Workflow for all 30+ failure scenarios.
+
+        WHY:
+        SupervisorAgent needs quick O(1) lookup of recovery workflow for any issue.
+        Building all workflows upfront (at initialization) is more efficient than
+        building on-demand and enables validation that all issue types have workflows.
+
+        RETURNS:
+            Dict[IssueType, Workflow]: Complete workflow map (30+ entries)
+
+        WORKFLOW CATEGORIES:
+            - Infrastructure: 5 workflows
+            - Code: 4 workflows
+            - Dependencies: 3 workflows
+            - LLM: 4 workflows
+            - Stages: 4 workflows
+            - Multi-agent: 3 workflows
+            - Data: 3 workflows
+            - System: 3 workflows
         """
         return {
             # Infrastructure issues

@@ -1992,18 +1992,27 @@ class ValidationStage(PipelineStage, SupervisedStageMixin):
 
     def _validate_developer(self, dev_name: str, card_id: str = None) -> Dict:
         """Validate a single developer's solution"""
-        # Use configured developer output directory via PathConfigService
-        test_path = get_developer_tests_path(dev_name)
+        from path_config_service import get_developer_path
+        from pathlib import Path
+
+        developer_output = Path(get_developer_path(dev_name))
 
         self.logger.log(f"Validating {dev_name} solution...", "INFO")
 
-        # Run tests
-        test_results = self.test_runner.run_tests(test_path)
+        # Check if this is a notebook task by looking for .ipynb files
+        notebooks = list(developer_output.glob("**/*.ipynb"))
 
-        # Determine status
-        status = "APPROVED" if test_results['exit_code'] == 0 else "BLOCKED"
+        if notebooks:
+            # Notebook validation: check if notebooks exist and are valid
+            self.logger.log(f"Detected notebook task - found {len(notebooks)} notebooks", "INFO")
+            status, test_results = self._validate_notebooks(notebooks)
+        else:
+            # Standard validation: run pytest tests
+            test_path = get_developer_tests_path(dev_name)
+            test_results = self.test_runner.run_tests(test_path)
+            status = "APPROVED" if test_results['exit_code'] == 0 else "BLOCKED"
 
-        self.logger.log(f"{dev_name}: {status} (exit_code={test_results['exit_code']})",
+        self.logger.log(f"{dev_name}: {status}",
                        "SUCCESS" if status == "APPROVED" else "WARNING")
 
         return {
@@ -2011,6 +2020,296 @@ class ValidationStage(PipelineStage, SupervisedStageMixin):
             "status": status,
             "test_results": test_results
         }
+
+    def _validate_notebooks(self, notebooks: list) -> tuple:
+        """
+        Validate Jupyter notebooks with comprehensive checks.
+
+        Validation layers:
+        1. Structure validation (JSON, cells key)
+        2. Import validation (check all imports exist)
+        3. Content metrics (depth, code-to-markdown ratio)
+        4. Quality scoring (information density, completeness)
+        5. Optional: Execution validation (run code cells)
+
+        Args:
+            notebooks: List of Path objects pointing to notebook files
+
+        Returns:
+            Tuple of (status, test_results_dict)
+        """
+        import json
+
+        results = {
+            "exit_code": 0,
+            "passed": 0,
+            "failed": 0,
+            "notebooks_validated": [],
+            "quality_scores": {},
+            "issues": []
+        }
+
+        for notebook_path in notebooks:
+            notebook_name = notebook_path.name
+            self.logger.log(f"📓 Validating notebook: {notebook_name}", "INFO")
+
+            notebook_issues = []
+
+            try:
+                # Layer 1: Structure validation
+                with open(notebook_path, 'r') as f:
+                    nb_data = json.load(f)
+
+                if 'cells' not in nb_data:
+                    self.logger.log(f"❌ {notebook_name}: Missing 'cells' key", "WARNING")
+                    results['failed'] += 1
+                    results['exit_code'] = 1
+                    continue
+
+                cells = nb_data['cells']
+
+                # Layer 2: Import validation
+                import_check = self._validate_notebook_imports(cells, notebook_name)
+                if not import_check['valid']:
+                    notebook_issues.extend(import_check['issues'])
+                    self.logger.log(f"⚠️  {notebook_name}: Import issues found", "WARNING")
+                    for issue in import_check['issues']:
+                        self.logger.log(f"    - {issue}", "WARNING")
+
+                # Layer 3: Content metrics
+                metrics = self._calculate_notebook_metrics(cells)
+                self.logger.log(f"📊 {notebook_name} Metrics:", "INFO")
+                self.logger.log(f"    Cells: {metrics['total_cells']} (Code: {metrics['code_cells']}, Markdown: {metrics['markdown_cells']})", "INFO")
+                self.logger.log(f"    Code/Markdown ratio: {metrics['code_to_markdown_ratio']:.2f}", "INFO")
+                self.logger.log(f"    Avg cell content: {metrics['avg_cell_length']:.0f} chars", "INFO")
+
+                # Layer 4: Quality scoring
+                quality_score = self._score_notebook_quality(cells, metrics, import_check)
+                results['quality_scores'][notebook_name] = quality_score
+
+                self.logger.log(f"🎯 Quality Score: {quality_score['overall']:.2f}/1.0",
+                               "SUCCESS" if quality_score['overall'] >= 0.7 else "WARNING")
+
+                # Quality thresholds
+                min_quality = 0.5  # Minimum acceptable quality
+                if quality_score['overall'] < min_quality:
+                    notebook_issues.append(f"Quality score {quality_score['overall']:.2f} below minimum {min_quality}")
+                    self.logger.log(f"❌ {notebook_name}: Quality score too low", "WARNING")
+
+                # Fail if critical issues found
+                has_critical_issues = (
+                    len(import_check['broken_imports']) > 0 or
+                    metrics['total_cells'] < 5 or
+                    quality_score['overall'] < min_quality
+                )
+
+                if has_critical_issues:
+                    results['failed'] += 1
+                    results['exit_code'] = 1
+                    results['issues'].extend([f"{notebook_name}: {issue}" for issue in notebook_issues])
+                    self.logger.log(f"❌ {notebook_name}: FAILED validation", "ERROR")
+                else:
+                    results['passed'] += 1
+                    results['notebooks_validated'].append(str(notebook_path))
+                    if notebook_issues:
+                        results['issues'].extend([f"{notebook_name}: {issue}" for issue in notebook_issues])
+                    self.logger.log(f"✅ {notebook_name}: PASSED validation", "SUCCESS")
+
+            except json.JSONDecodeError as e:
+                self.logger.log(f"❌ {notebook_name}: Invalid JSON - {e}", "ERROR")
+                results['failed'] += 1
+                results['exit_code'] = 1
+                results['issues'].append(f"{notebook_name}: Invalid JSON")
+            except Exception as e:
+                self.logger.log(f"❌ {notebook_name}: Validation error - {e}", "ERROR")
+                results['failed'] += 1
+                results['exit_code'] = 1
+                results['issues'].append(f"{notebook_name}: {str(e)}")
+
+        # Summary
+        self.logger.log(f"\n📈 Validation Summary:", "INFO")
+        self.logger.log(f"   Total notebooks: {len(notebooks)}", "INFO")
+        self.logger.log(f"   Passed: {results['passed']}", "SUCCESS" if results['passed'] > 0 else "INFO")
+        self.logger.log(f"   Failed: {results['failed']}", "ERROR" if results['failed'] > 0 else "INFO")
+        if results['quality_scores']:
+            avg_quality = sum(s['overall'] for s in results['quality_scores'].values()) / len(results['quality_scores'])
+            self.logger.log(f"   Average quality: {avg_quality:.2f}/1.0", "INFO")
+
+        status = "APPROVED" if results['exit_code'] == 0 else "BLOCKED"
+        return status, results
+
+    def _validate_notebook_imports(self, cells: list, notebook_name: str) -> dict:
+        """
+        Check all imports in notebook code cells.
+
+        Returns dict with 'valid' bool and list of issues.
+        """
+        import ast
+        import sys
+        from pathlib import Path
+
+        broken_imports = []
+        placeholder_imports = []
+        all_imports = []
+
+        for cell in cells:
+            if cell.get('cell_type') != 'code':
+                continue
+
+            source = cell.get('source', '')
+            if isinstance(source, list):
+                source = ''.join(source)
+
+            # Skip empty cells
+            if not source.strip():
+                continue
+
+            # Parse code to find imports
+            try:
+                tree = ast.parse(source)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            all_imports.append(alias.name.split('.')[0])
+                    elif isinstance(node, ast.ImportFrom):
+                        if node.module:
+                            all_imports.append(node.module.split('.')[0])
+            except SyntaxError:
+                # If code doesn't parse, skip import checking for this cell
+                continue
+
+        # Check if imports actually exist
+        for module_name in set(all_imports):
+            # Skip standard library modules
+            if module_name in sys.stdlib_module_names:
+                continue
+
+            # Common third-party modules (known to be available)
+            common_modules = {'numpy', 'pandas', 'matplotlib', 'scipy', 'sklearn',
+                            'requests', 'json', 'pathlib', 'typing', 'dataclasses'}
+            if module_name in common_modules:
+                continue
+
+            # Check if module appears to be a placeholder
+            placeholder_names = {'artemis_core', 'artemis_demo', 'project_module',
+                                'your_module', 'example_module', 'sample_module'}
+            if module_name in placeholder_names or 'path/to' in module_name:
+                placeholder_imports.append(module_name)
+                continue
+
+            # Try to import
+            try:
+                __import__(module_name)
+            except ImportError:
+                broken_imports.append(module_name)
+
+        issues = []
+        if broken_imports:
+            issues.append(f"Broken imports: {', '.join(broken_imports)}")
+        if placeholder_imports:
+            issues.append(f"Placeholder imports: {', '.join(placeholder_imports)}")
+
+        return {
+            'valid': len(broken_imports) == 0,
+            'broken_imports': broken_imports,
+            'placeholder_imports': placeholder_imports,
+            'all_imports': list(set(all_imports)),
+            'issues': issues
+        }
+
+    def _calculate_notebook_metrics(self, cells: list) -> dict:
+        """Calculate content metrics for notebook."""
+        code_cells = [c for c in cells if c.get('cell_type') == 'code']
+        markdown_cells = [c for c in cells if c.get('cell_type') == 'markdown']
+
+        total_cells = len(cells)
+        code_count = len(code_cells)
+        markdown_count = len(markdown_cells)
+
+        # Calculate content lengths
+        def get_cell_length(cell):
+            source = cell.get('source', '')
+            if isinstance(source, list):
+                source = ''.join(source)
+            return len(source.strip())
+
+        code_length = sum(get_cell_length(c) for c in code_cells)
+        markdown_length = sum(get_cell_length(c) for c in markdown_cells)
+
+        return {
+            'total_cells': total_cells,
+            'code_cells': code_count,
+            'markdown_cells': markdown_count,
+            'code_to_markdown_ratio': code_count / markdown_count if markdown_count > 0 else 0,
+            'code_length': code_length,
+            'markdown_length': markdown_length,
+            'total_length': code_length + markdown_length,
+            'avg_cell_length': (code_length + markdown_length) / total_cells if total_cells > 0 else 0,
+            'avg_code_length': code_length / code_count if code_count > 0 else 0,
+            'avg_markdown_length': markdown_length / markdown_count if markdown_count > 0 else 0
+        }
+
+    def _score_notebook_quality(self, cells: list, metrics: dict, import_check: dict) -> dict:
+        """
+        Score notebook quality on multiple dimensions.
+
+        Returns scores dict with 'overall' score (0.0-1.0).
+        """
+        scores = {
+            'structure': 0.0,    # Cell count, balance
+            'depth': 0.0,        # Content length, detail
+            'code_quality': 0.0, # Working code, no placeholders
+            'completeness': 0.0, # Has intro, conclusion, examples
+            'overall': 0.0
+        }
+
+        # Structure score (0.0-1.0)
+        # Good: 10-30 cells, balanced code/markdown
+        cell_count_score = min(metrics['total_cells'] / 15, 1.0) * 0.5  # Prefer 15+ cells
+        if metrics['total_cells'] > 30:
+            cell_count_score *= 0.8  # Penalty for too many cells
+
+        ratio = metrics['code_to_markdown_ratio']
+        balance_score = 1.0 - abs(ratio - 0.7) if ratio <= 1.5 else 0.5  # Prefer ~0.7 ratio
+        scores['structure'] = (cell_count_score + balance_score) / 2
+
+        # Depth score (0.0-1.0)
+        # Good: Substantial content per cell
+        avg_length_score = min(metrics['avg_cell_length'] / 200, 1.0)  # Prefer 200+ chars/cell
+        total_length_score = min(metrics['total_length'] / 3000, 1.0)  # Prefer 3000+ total chars
+        scores['depth'] = (avg_length_score + total_length_score) / 2
+
+        # Code quality score (0.0-1.0)
+        import_score = 1.0 if len(import_check['broken_imports']) == 0 else 0.3
+        placeholder_penalty = len(import_check['placeholder_imports']) * 0.1
+        scores['code_quality'] = max(0, import_score - placeholder_penalty)
+
+        # Completeness score (0.0-1.0)
+        # Check for key sections
+        has_intro = any('intro' in str(c.get('source', '')).lower() or
+                       c.get('source', '') and isinstance(c.get('source'), (list, str))
+                       for c in cells[:3] if c.get('cell_type') == 'markdown')
+        has_conclusion = any('conclusion' in str(c.get('source', '')).lower() or
+                            'summary' in str(c.get('source', '')).lower()
+                            for c in cells[-3:] if c.get('cell_type') == 'markdown')
+        has_code = metrics['code_cells'] > 0
+        has_visualizations = any('plt.' in str(c.get('source', '')) or
+                                'matplotlib' in str(c.get('source', ''))
+                                for c in cells if c.get('cell_type') == 'code')
+
+        completeness_checks = [has_intro, has_conclusion, has_code, has_visualizations]
+        scores['completeness'] = sum(completeness_checks) / len(completeness_checks)
+
+        # Overall score (weighted average)
+        weights = {
+            'structure': 0.2,
+            'depth': 0.3,
+            'code_quality': 0.3,
+            'completeness': 0.2
+        }
+        scores['overall'] = sum(scores[k] * weights[k] for k in weights)
+
+        return scores
 
     def _handle_validation_override(self, message: Dict) -> Dict:
         """

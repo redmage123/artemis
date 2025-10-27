@@ -1,11 +1,58 @@
 #!/usr/bin/env python3
 """
-Circuit Breaker Pattern for Artemis
+Module: circuit_breaker.py
 
-Prevents cascading failures by failing fast when a component is down.
+Purpose: Implement Circuit Breaker pattern to prevent cascading failures
+Why: Protects Artemis from retry storms and cascading failures when external
+     services (RAG, LLM, Git) are down or slow
+Patterns: Circuit Breaker (core), Decorator (@protect), Context Manager (with statement)
+Integration: Used throughout Artemis to wrap calls to unreliable external services
 
-Design Pattern: Circuit Breaker
-Single Responsibility: Prevent cascading failures
+Architecture:
+    - Three-state circuit: CLOSED → OPEN → HALF_OPEN → CLOSED
+    - Failure counting and threshold detection
+    - Timeout-based auto-recovery
+    - Success threshold for closing from HALF_OPEN
+    - Thread-safe state management via locks
+    - Global registry for centralized monitoring
+
+Design Decisions:
+    - Decorator pattern for easy function protection
+    - Context manager for explicit block protection
+    - Global registry for monitoring all circuits
+    - Thread-safe via threading.Lock
+    - Configurable thresholds per circuit
+
+Circuit Breaker States:
+    1. CLOSED (normal):
+       - All requests pass through
+       - Count failures
+       - Open if failure_threshold reached
+
+    2. OPEN (failing):
+       - Reject all requests immediately (fail fast)
+       - Don't call underlying service
+       - Wait for timeout_seconds
+       - Transition to HALF_OPEN after timeout
+
+    3. HALF_OPEN (testing):
+       - Allow limited requests to test recovery
+       - Close if success_threshold successes
+       - Re-open if any failure
+
+Why Circuit Breaker is Essential:
+    - Prevents retry storms on failing services
+    - Fails fast instead of waiting for timeouts
+    - Allows failed services time to recover
+    - Reduces load on struggling systems
+    - Provides clear failure visibility
+    - Enables graceful degradation
+
+Usage Patterns:
+    1. Decorator: @breaker.protect
+    2. Context manager: with breaker: ...
+    3. Direct call: breaker.call(func, *args)
+    4. Global registry: get_circuit_breaker("service_name")
 """
 
 from dataclasses import dataclass

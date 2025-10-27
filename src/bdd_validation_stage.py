@@ -1,14 +1,34 @@
 #!/usr/bin/env python3
 """
-BDD Scenario Validation Stage
+Module: bdd_validation_stage.py
 
-Executes BDD scenarios using pytest-bdd to validate behavior.
-Ensures implementation meets business requirements.
+Purpose: Execute pytest-bdd tests to validate that developer implementations
+         satisfy business requirements expressed in Gherkin scenarios.
 
-Integration Points:
-- Runs after DevelopmentStage (or ValidationStage)
-- Validates BDD scenarios pass
-- Provides coverage metrics
+Why: Quality gate ensuring implementations match business specifications.
+     BDD scenarios are executable specifications - if they pass, business
+     requirements are satisfied. If they fail, implementation doesn't match specs.
+
+Patterns:
+- Template Method Pattern: Implements PipelineStage execution contract
+- Supervised Execution Pattern: Health monitoring via SupervisorAgent
+- Command Pattern: Subprocess execution of pytest with timeout
+- Parser Pattern: Regex extraction of test results from pytest output
+
+Integration:
+- Runs after DevelopmentStage (developer implementations complete)
+- Validates BDD scenarios pass using pytest-bdd
+- Provides coverage metrics (scenarios passed/failed/skipped)
+- Stores validation results in RAG
+- Generates failure reports for debugging
+- May trigger iteration if scenarios fail
+
+SOLID Principles:
+- S: Single Responsibility - Only executes and validates BDD tests
+- O: Open/Closed - Extensible to other BDD frameworks (behave, cucumber-py)
+- L: Liskov Substitution - Implements PipelineStage contract
+- I: Interface Segregation - Focused on test execution
+- D: Dependency Inversion - Depends on abstractions (RAGAgent, LoggerInterface)
 """
 
 from typing import Dict, Optional
@@ -27,12 +47,33 @@ class BDDValidationStage(PipelineStage, SupervisedStageMixin):
     """
     Execute BDD scenarios and validate business behavior.
 
-    Single Responsibility: Run pytest-bdd tests and report scenario coverage
+    What it does: Runs pytest-bdd tests in developer workspace, analyzes results,
+                  and generates validation report with pass/fail metrics.
+
+    Why it exists: Quality gate ensuring implementations satisfy business requirements.
+                   BDD scenarios are executable specifications - automated validation
+                   confirms behavior matches specifications.
+
+    Responsibilities:
+    - Locate BDD tests and feature files in developer workspace
+    - Execute pytest-bdd tests with timeout (120 seconds)
+    - Parse pytest output to extract passed/failed/skipped counts
+    - Analyze results and calculate pass rate
+    - Extract failing scenario details for debugging
+    - Generate human-readable validation report
+    - Store results in RAG for traceability
+    - Track progress via supervised execution
+
+    Design Pattern: Command Pattern + Parser Pattern
+    - Command: subprocess.run() executes pytest as external command
+    - Parser: Regex extraction of PASSED/FAILED/SKIPPED from pytest output
+    - Performance optimization: Single-pass Counter parsing (O(n) vs O(3n))
 
     Integrates with supervisor for:
-    - Test execution monitoring
-    - Scenario validation tracking
-    - Coverage reporting
+    - Test execution monitoring (detects hanging tests via timeout)
+    - Scenario validation tracking (monitors test progress)
+    - Coverage reporting (tracks pass/fail metrics)
+    - Heartbeat monitoring (30 second interval for test execution)
     """
 
     def __init__(
@@ -150,7 +191,43 @@ class BDDValidationStage(PipelineStage, SupervisedStageMixin):
         }
 
     def _run_bdd_tests(self, impl_dir: Path, test_dir: Path) -> Dict:
-        """Run pytest-bdd tests"""
+        """
+        Run pytest-bdd tests and parse results.
+
+        What it does: Executes pytest as subprocess, captures output, and parses
+                      test results (passed/failed/skipped counts).
+
+        Why: Command Pattern - delegates test execution to pytest subprocess.
+             Timeout prevents hanging tests from blocking pipeline.
+             Output parsing enables automated pass/fail determination.
+
+        Command Pattern Implementation:
+        - Command: pytest with -v (verbose), --tb=short (short traceback)
+        - Timeout: 120 seconds (prevents infinite hangs)
+        - Working directory: Developer implementation directory
+        - Capture: Both stdout and stderr for complete output
+
+        Args:
+            impl_dir: Developer implementation directory (pytest working directory)
+            test_dir: BDD test directory to execute
+
+        Returns:
+            Dict with test results:
+            - passed: Number of passing scenarios
+            - failed: Number of failing scenarios
+            - skipped: Number of skipped scenarios
+            - exit_code: Pytest exit code (0=success, 1=failures)
+            - output: Complete pytest output text
+            - error: Error message if timeout/exception occurred
+
+        Performance: Single-pass Counter parsing O(n) vs naive O(3n)
+        Why: collections.Counter counts all matches in one pass instead of
+             three separate output.count() calls.
+
+        Edge cases:
+        - Timeout: Returns failure with timeout error
+        - Exception: Returns failure with exception message
+        """
         try:
             # Run pytest with BDD tests
             result = subprocess.run(
@@ -211,7 +288,36 @@ class BDDValidationStage(PipelineStage, SupervisedStageMixin):
             }
 
     def _analyze_bdd_results(self, test_results: Dict) -> Dict:
-        """Analyze BDD test results and generate report"""
+        """
+        Analyze BDD test results and generate validation report.
+
+        What it does: Calculates pass rate, determines overall status, extracts
+                      failing scenario details, and generates human-readable summary.
+
+        Why: Transforms raw pytest output into actionable validation report for:
+             - Orchestrator (decides whether to pass/fail/iterate)
+             - Developers (debugging information for failures)
+             - Stakeholders (business requirement satisfaction metrics)
+
+        Args:
+            test_results: Dict from _run_bdd_tests() with counts and output
+
+        Returns:
+            Dict with validation report:
+            - status: "PASS" (all pass), "FAIL" (has failures), "NO_TESTS" (none found)
+            - total_scenarios: Total number of scenarios
+            - scenarios_passed: Count of passing scenarios
+            - scenarios_failed: Count of failing scenarios
+            - scenarios_skipped: Count of skipped scenarios
+            - pass_rate: Percentage (0-100) of passing scenarios
+            - failing_scenarios: List of failure details (file, test, scenario name)
+            - summary: Human-readable summary string
+
+        Edge cases:
+        - No tests: Returns NO_TESTS status with 0% pass rate
+        - All pass: Returns PASS status with 100% pass rate
+        - Division by zero: Handled by guard clause (total == 0)
+        """
         passed = test_results.get('passed', 0)
         failed = test_results.get('failed', 0)
         skipped = test_results.get('skipped', 0)
@@ -242,7 +348,37 @@ class BDDValidationStage(PipelineStage, SupervisedStageMixin):
         return report
 
     def _extract_failing_scenarios(self, output: str) -> list:
-        """Extract details about failing scenarios from pytest output"""
+        """
+        Extract details about failing scenarios from pytest output.
+
+        What it does: Uses regex to parse pytest output and extract information
+                      about failing scenarios for debugging.
+
+        Why: Developers need to know WHICH scenarios failed and WHERE to look.
+             Regex parsing extracts file path, test name, and converts to
+             readable scenario name.
+
+        Parser Pattern Implementation:
+        - Regex: (tests/bdd/\S+)::(test_\w+)\s+FAILED
+        - Captures: File path and test function name
+        - Transform: test_create_user -> "Create User" (human-readable)
+
+        Args:
+            output: Pytest output text
+
+        Returns:
+            List of failure dicts:
+            [
+                {
+                    "file": "tests/bdd/test_feature.py",
+                    "test": "test_create_user",
+                    "scenario": "Create User"
+                }
+            ]
+
+        Name transformation: test_ prefix removed, underscores to spaces, title case
+        Why: Makes scenario names human-readable for debugging
+        """
         failing_scenarios = []
 
         # Look for FAILED lines in pytest output

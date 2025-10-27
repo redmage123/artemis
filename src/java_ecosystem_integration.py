@@ -69,11 +69,21 @@ class JavaEcosystemManager:
     """
     Unified Java ecosystem manager for Artemis.
 
+    Why this exists: Provides single entry point for Java project analysis and
+    build automation, abstracting away differences between Maven and Gradle.
+
     Provides comprehensive Java project understanding including:
     - Build system (Maven/Gradle)
     - Web frameworks (Spring Boot, Jakarta EE, etc.)
     - Project structure and dependencies
     - Automated building and testing
+
+    What it does:
+    - Auto-detects Maven (pom.xml) or Gradle (build.gradle)
+    - Analyzes web framework and dependencies
+    - Provides unified build() and run_tests() methods
+    - Recommends appropriate test frameworks
+    - Detects microservices vs monolith architecture
     """
 
     def __init__(

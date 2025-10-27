@@ -1,14 +1,33 @@
 #!/usr/bin/env python3
 """
-BDD Test Generation Stage
+Module: bdd_test_generation_stage.py
 
-Generates pytest-bdd step definitions from Gherkin scenarios.
-Converts business-readable scenarios into executable tests.
+Purpose: Transform Gherkin scenarios into executable pytest-bdd step definitions
+         using LLM-powered code generation.
 
-Integration Points:
-- Runs after BDDScenarioGenerationStage
-- Provides test files to DevelopmentStage
-- Feeds into BDD Validation Stage
+Why: Bridges the gap between business-readable specifications and executable tests.
+     pytest-bdd requires Python step definitions to implement Given/When/Then steps.
+     LLM generates these definitions automatically from Gherkin scenarios.
+
+Patterns:
+- Template Method Pattern: Implements PipelineStage execution contract
+- Strategy Pattern: AI Query Service fallback to direct LLM calls
+- Supervised Execution Pattern: Health monitoring via SupervisorAgent
+- Parser Pattern: Extracts steps from Gherkin using regex
+
+Integration:
+- Runs after BDDScenarioGenerationStage (scenarios available)
+- Provides pytest-bdd test files to DevelopmentStage
+- Feeds into BDD Validation Stage (executes generated tests)
+- Stores test files in developer workspace
+- Stores test code in RAG for reference
+
+SOLID Principles:
+- S: Single Responsibility - Only generates pytest-bdd tests
+- O: Open/Closed - Extensible to other BDD frameworks (behave, cucumber-py)
+- L: Liskov Substitution - Implements PipelineStage contract
+- I: Interface Segregation - Focused on test generation
+- D: Dependency Inversion - Depends on abstractions (LLMClient, RAGAgent)
 """
 
 from typing import Dict, Optional, List
@@ -27,12 +46,31 @@ class BDDTestGenerationStage(PipelineStage, SupervisedStageMixin):
     """
     Generate pytest-bdd step definitions from Gherkin scenarios.
 
-    Single Responsibility: Transform Gherkin scenarios into executable pytest-bdd tests
+    What it does: Uses LLM to convert Gherkin Given/When/Then steps into executable
+                  Python pytest-bdd test code with proper fixtures and assertions.
+
+    Why it exists: pytest-bdd requires Python step definitions to execute Gherkin scenarios.
+                   Writing these manually is tedious and error-prone. LLM automates this
+                   conversion while ensuring proper pytest-bdd syntax and patterns.
+
+    Responsibilities:
+    - Retrieve Gherkin scenarios from context or RAG
+    - Extract unique Given/When/Then steps using regex parsing
+    - Generate pytest-bdd step definitions using LLM (with AI Query Service optimization)
+    - Extract Python code from LLM response (handles markdown code blocks)
+    - Store test files in developer workspace
+    - Store test code in RAG for reference
+    - Track progress via supervised execution
+
+    Design Pattern: Parser Pattern + Strategy Pattern
+    - Parser: Regex extraction of Given/When/Then steps from Gherkin
+    - Strategy: AI Query Service with fallback to direct LLM calls
 
     Integrates with supervisor for:
-    - LLM call monitoring
-    - Test generation tracking
-    - Step definition validation
+    - LLM call monitoring (tracks token usage and cost)
+    - Test generation tracking (monitors code generation progress)
+    - Step definition validation (detects malformed Python code)
+    - Heartbeat monitoring (20 second interval for LLM-heavy stage)
     """
 
     def __init__(
@@ -155,7 +193,29 @@ class BDDTestGenerationStage(PipelineStage, SupervisedStageMixin):
         }
 
     def _extract_steps_from_gherkin(self, content: str) -> List[str]:
-        """Extract unique Given/When/Then steps from Gherkin scenarios"""
+        """
+        Extract unique Given/When/Then steps from Gherkin scenarios.
+
+        What it does: Uses regex to parse Gherkin text and extract all Given/When/Then/And/But
+                      steps, returning unique normalized steps.
+
+        Why: LLM needs to know which steps require Python implementations. Extracting unique
+             steps prevents duplicate code generation and shows LLM the full step vocabulary.
+
+        Parser Pattern Implementation:
+        - Regex: ^\s*(Given|When|Then|And|But)\s+(.+)$
+        - Multiline mode: Matches steps across entire document
+        - Set deduplication: O(1) lookup for uniqueness
+
+        Args:
+            content: Gherkin scenario text
+
+        Returns:
+            List of (keyword, step_text) tuples
+            Example: [("Given", "I am on the homepage"), ("When", "I click login")]
+
+        Performance: O(n) single-pass regex matching
+        """
         steps = set()
 
         # Match Given/When/Then/And/But lines
@@ -176,7 +236,40 @@ class BDDTestGenerationStage(PipelineStage, SupervisedStageMixin):
         scenarios_content: str,
         steps: List[tuple]
     ) -> str:
-        """Generate pytest-bdd test file using LLM"""
+        """
+        Generate pytest-bdd test file using LLM.
+
+        What it does: Uses LLM to convert Gherkin scenarios into complete pytest-bdd
+                      Python test file with imports, fixtures, and step definitions.
+
+        Why: LLM excels at code generation from specifications. It generates:
+             - Proper pytest-bdd imports (@scenarios, @given, @when, @then)
+             - Fixtures for shared state (browser, API clients)
+             - Step definitions with parsers for parameterized steps
+             - Clear assertions in Then steps
+
+        Strategy Pattern Implementation:
+        - Primary: AI Query Service (token-optimized routing)
+        - Fallback: Direct LLM call (if service unavailable)
+
+        Args:
+            card_id: Card ID for context tracking
+            title: Feature title for test file reference
+            scenarios_content: Full Gherkin scenario text
+            steps: Extracted unique steps for LLM reference
+
+        Returns:
+            Complete Python test file content as string
+
+        LLM Prompt Design:
+        - Temperature: 0.3 (deterministic, consistent code)
+        - Max tokens: 3000 (sufficient for 10-15 step definitions)
+        - Prompt includes: Scenarios, guidelines, format requirements
+        - Instructs LLM to use: @scenarios decorator, parsers.parse(), proper assertions
+
+        Code Extraction: Handles both ```python and ``` markdown code blocks
+        Why: LLMs often wrap code in markdown; extraction ensures clean Python code
+        """
 
         prompt = f"""You are a BDD test automation expert. Generate pytest-bdd step definitions for the following Gherkin scenarios.
 

@@ -22,8 +22,18 @@ class KnowledgeGraphFactory:
     """
     Singleton factory for Knowledge Graph
 
+    Why this exists: Ensures single shared KnowledgeGraph instance across all
+    agents, preventing connection pool exhaustion and maintaining consistency.
+
     Ensures only one instance exists and provides graceful degradation
     if Memgraph is not available.
+
+    Design Pattern: Singleton + Factory
+    Why Singleton: Knowledge Graph represents shared system state (code relationships)
+    Why Factory: Encapsulates complex initialization logic and error handling
+
+    Graceful degradation: If Memgraph unavailable, returns None and logs warning
+    rather than crashing, allowing Artemis to continue without KG features.
     """
 
     _instance: Optional[KnowledgeGraph] = None

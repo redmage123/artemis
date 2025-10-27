@@ -1,0 +1,34 @@
+# GitLab Remote Repository Configuration
+# Use for working with GitLab repositories
+
+# Repository configuration
+name: ${oc.env:ARTEMIS_TARGET_REPO_NAME,???}
+local_path: ${oc.env:ARTEMIS_TARGET_REPO_PATH,../../.artemis_data/target_repo}
+remote_url: ${oc.env:ARTEMIS_TARGET_REPO_URL,???}  # git@gitlab.com:username/repo.git
+
+# Git workflow configuration
+branch_strategy: gitflow  # GitLab commonly uses GitFlow
+default_branch: main
+develop_branch: develop
+commit_convention: conventional
+
+# Automation settings
+auto_push: ${oc.env:ARTEMIS_AUTO_PUSH,false}
+auto_pull: true
+create_if_missing: true
+
+# Merge Request settings
+create_mr_on_complete: ${oc.env:ARTEMIS_CREATE_MR,false}
+mr_target_branch: develop
+mr_draft: true
+
+# Protection settings
+protected_branches:
+  - main
+  - master
+  - develop
+  - production
+
+# Output settings
+save_artifacts: true
+artifact_path: ../.artemis_data/artifacts

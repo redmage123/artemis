@@ -1,0 +1,32 @@
+# GitHub Remote Repository Configuration
+# Use for working with GitHub repositories
+
+# Repository configuration
+name: ${oc.env:ARTEMIS_TARGET_REPO_NAME,???}
+local_path: ${oc.env:ARTEMIS_TARGET_REPO_PATH,../../.artemis_data/target_repo}
+remote_url: ${oc.env:ARTEMIS_TARGET_REPO_URL,???}  # git@github.com:username/repo.git
+
+# Git workflow configuration
+branch_strategy: github_flow  # Feature branches from main
+default_branch: main
+commit_convention: conventional
+
+# Automation settings
+auto_push: ${oc.env:ARTEMIS_AUTO_PUSH,false}
+auto_pull: true
+create_if_missing: true
+
+# Pull Request settings
+create_pr_on_complete: ${oc.env:ARTEMIS_CREATE_PR,false}
+pr_base_branch: main
+pr_draft: true  # Create as draft PR initially
+
+# Protection settings
+protected_branches:
+  - main
+  - master
+  - production
+
+# Output settings
+save_artifacts: true
+artifact_path: ../.artemis_data/artifacts

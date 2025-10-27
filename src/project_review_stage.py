@@ -689,4 +689,10 @@ Score: {result.get('score', 0):.1f}/10
         )
 
     def get_stage_name(self) -> str:
+        """
+        Get the name of this pipeline stage.
+
+        Returns:
+            String identifier for this stage in the pipeline
+        """
         return "project_review"

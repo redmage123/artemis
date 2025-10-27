@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Sprint Planning Stage - Agile Sprint Management (REFACTORED)
+Module: sprint_planning_stage.py
 
-Refactoring improvements:
-1. ✅ Uses Hydra configuration (no magic numbers)
-2. ✅ Uses value objects (Feature, PrioritizedFeature, Sprint)
-3. ✅ Uses Clock abstraction (testable datetime)
-4. ✅ Uses StageNotificationHelper (DRY observer pattern)
-5. ✅ Proper exception handling (no bare exceptions)
-6. ✅ Agent communication via messenger
-7. ✅ Observer pattern for event broadcasting
+Purpose: Transform product requirements into estimated, prioritized sprint backlogs
+Why: Enables realistic project planning and capacity management using Planning Poker estimation
+Patterns: Strategy (SprintScheduler/Allocator), Value Objects (Feature/Sprint), Observer (notifications)
+Integration: Receives requirements from requirements_stage, feeds Architecture stage with sprint plans
+
+REFACTORED Design:
+- Strategy Pattern: Different allocation/scheduling strategies without modifying stage logic
+- Value Objects: Immutable Feature/Sprint models ensure data integrity
+- Dependency Injection: Clock abstraction enables deterministic testing
+- Observer Pattern: Real-time progress notifications to UI/monitoring systems
+- DRY Principle: StageNotificationHelper eliminates duplicate notification code
 
 Single Responsibility: Plan and organize sprints from feature backlog
 """
@@ -47,17 +50,29 @@ from rag_storage_helper import RAGStorageHelper
 
 class SprintPlanningStage(PipelineStage, SupervisedStageMixin, DebugMixin):
     """
-    Sprint Planning Stage - Create sprints using Planning Poker
+    Sprint Planning Stage - Create sprints using Planning Poker estimation
+
+    What it does: Converts raw feature backlog into estimated, prioritized sprint plans
+
+    Why it exists: Traditional planning often fails due to poor estimates and priorities.
+    This stage uses collaborative Planning Poker with multiple agent perspectives to
+    produce realistic estimates and optimal feature prioritization.
+
+    Design pattern: Strategy Pattern
+    Why: Allows swapping allocation/scheduling algorithms (velocity-based, risk-adjusted, etc.)
+    without changing stage interface. Enables A/B testing different planning approaches.
+
+    Responsibilities:
+    - Extract features from requirements documents or card descriptions
+    - Run Planning Poker with multiple agent perspectives (conservative/moderate/aggressive)
+    - Prioritize features using weighted scoring (business value, complexity, risk)
+    - Allocate features to sprints respecting team velocity constraints
+    - Broadcast sprint plans to Architecture agent and Kanban board
+    - Store plans in RAG for learning from estimation accuracy over time
 
     Pipeline Position: BEFORE Architecture stage
     Input: Product requirements and feature backlog
     Output: Prioritized sprint backlogs with story point estimates
-
-    Design Patterns:
-    - Strategy Pattern: SprintScheduler, SprintAllocator
-    - Value Object: Feature, Sprint
-    - Dependency Injection: Clock
-    - Observer: Event broadcasting
     """
 
     def __init__(
@@ -74,19 +89,31 @@ class SprintPlanningStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         ai_service: Optional[Any] = None
     ):
         """
-        Initialize Sprint Planning Stage
+        Initialize Sprint Planning Stage with injected dependencies
+
+        What it does: Sets up sprint planning infrastructure with configurable strategies
+
+        Why needed: Dependency injection enables testing with mocks and allows runtime
+        configuration of planning algorithms without code changes
 
         Args:
-            board: KanbanBoard instance
-            messenger: AgentMessenger instance
-            rag: RAG agent for storing sprint plans
-            logger: Logger interface
-            llm_client: LLM client for Planning Poker
-            config: ConfigurationAgent for settings
-            observable: Observable for event broadcasting
-            supervisor: SupervisorAgent for health monitoring
-            clock: Clock implementation (defaults to SystemClock)
-            ai_service: AI Query Service for intelligent querying (KG→RAG→LLM)
+            board: KanbanBoard for storing sprint cards and tracking progress
+            messenger: AgentMessenger for notifying Architecture/Orchestrator agents
+            rag: RAGAgent for storing plans and learning from estimation accuracy
+            logger: LoggerInterface for structured logging (not print statements)
+            llm_client: LLMClient for Planning Poker multi-agent estimation
+            config: ConfigurationAgent providing team velocity, sprint duration, weights
+                    (avoids magic numbers scattered throughout code)
+            observable: PipelineObservable for real-time progress events to UI
+            supervisor: SupervisorAgent for health monitoring and cost tracking
+            clock: Clock abstraction for testable time-based logic (defaults to SystemClock)
+            ai_service: AIQueryService for KG→RAG→LLM intelligent feature extraction
+
+        Returns:
+            None (constructor)
+
+        Raises:
+            None (initialization errors logged but not fatal)
         """
         PipelineStage.__init__(self)
         SupervisedStageMixin.__init__(

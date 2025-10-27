@@ -1,14 +1,39 @@
 #!/usr/bin/env python3
 """
-Health Monitor for Supervisor
+Module: supervisor_health_monitor.py
 
-Single Responsibility: Monitor agent and process health
+Purpose: Monitor agent and process health for the Artemis supervisor
+Why: Extracted from SupervisorAgent to follow Single Responsibility Principle,
+     focusing solely on health monitoring without recovery logic
+Patterns: Observer (health event notifications), Strategy (configurable monitoring),
+          Watchdog (background monitoring thread)
+Integration: Used by SupervisorAgent to detect crashes, hangs, and stalls
 
-Extracted from SupervisorAgent to follow Single Responsibility Principle.
+Architecture:
+    - Agent registration with configurable heartbeat intervals
+    - Heartbeat tracking for liveness detection
+    - Process health monitoring (CPU, memory, hanging detection)
+    - Watchdog thread for autonomous monitoring
+    - Observer notification for health events
 
-Design Patterns:
-- Observer Pattern: Notify observers of health events
-- Strategy Pattern: Configurable heartbeat intervals
+Design Decisions:
+    - Separated from recovery logic (RecoveryEngine handles actual recovery)
+    - Thread-safe via locks for concurrent access
+    - Configurable heartbeat intervals per agent type
+    - Automatic timeout and stall detection
+    - Observer pattern for loose coupling with supervisor
+
+Health States:
+    - HEALTHY: All agents responding within timeout
+    - DEGRADED: Some agents stalled (<50%)
+    - FAILING: Many agents stalled (50-75%)
+    - CRITICAL: Most agents stalled (75%+)
+
+Monitoring Strategies:
+    1. Heartbeat-based: Agents call agent_heartbeat() periodically
+    2. State machine-based: Monitor state transitions via state_machine
+    3. Process-based: Monitor CPU/memory via psutil
+    4. Watchdog-based: Background thread checks all metrics
 """
 
 import psutil
@@ -55,18 +80,38 @@ class HealthStatus(Enum):
 
 class HealthMonitor:
     """
-    Monitor agent and process health
+    Monitor agent and process health for Artemis supervisor.
+
+    Why it exists: Provides real-time health monitoring of all agents and
+    processes in the pipeline, detecting crashes, hangs, and performance issues
+    before they cause catastrophic failures.
+
+    Design pattern: Observer + Watchdog
 
     Responsibilities:
-    - Register/unregister agents
-    - Track agent heartbeats
-    - Detect hanging processes
-    - Detect agent crashes
-    - Check agent progress
-    - Run watchdog thread for monitoring
-    - Notify observers of health events
+    - Register/unregister agents for monitoring
+    - Track agent heartbeats (liveness)
+    - Detect hanging processes (high CPU, no progress)
+    - Detect agent crashes (via state machine FAILED states)
+    - Check agent progress (state transitions)
+    - Run watchdog thread for autonomous monitoring
+    - Notify observers of health events (CRASHED, HUNG, STALLED)
+    - Track monitoring statistics
 
-    Thread-Safety: Thread-safe (uses locks for shared state)
+    Architecture notes:
+    - Thread-safe via _agents_lock, _process_lock, _observers_lock
+    - Watchdog runs in daemon thread for background monitoring
+    - Integrates with state machine for crash/progress detection
+    - Uses psutil for process-level monitoring
+    - Observer notifications decouple monitoring from recovery
+
+    Health detection:
+    - CRASHED: State machine in FAILED state
+    - HUNG: No state transition for > timeout_seconds
+    - STALLED: No progress for > timeout_seconds/2
+    - HANGING: High CPU (>90%) for extended period (>5min)
+
+    Thread-safety: Thread-safe (uses locks for all shared state)
     """
 
     def __init__(
@@ -76,12 +121,25 @@ class HealthMonitor:
         state_machine: Optional[Any] = None
     ):
         """
-        Initialize Health Monitor
+        Initialize Health Monitor.
+
+        Why needed: Sets up health monitoring infrastructure with optional
+        state machine integration for crash detection.
 
         Args:
-            logger: Logger for recording events
-            verbose: Enable verbose logging
-            state_machine: Optional state machine for crash detection
+            logger: Logger for recording events (LoggerInterface)
+            verbose: Enable verbose logging (prints to console if no logger)
+            state_machine: Optional ArtemisStateMachine for crash/progress detection
+                          Enables state-based monitoring if provided
+
+        Side effects:
+            - Initializes empty agent registry
+            - Initializes empty process registry
+            - Initializes empty observer list
+            - Creates thread locks for synchronization
+            - Initializes statistics counters
+
+        Thread-safety: Constructor is not thread-safe (call before threading)
         """
         self.logger = logger
         self.verbose = verbose
@@ -375,7 +433,10 @@ class HealthMonitor:
         timeout_seconds: int = 300
     ) -> threading.Thread:
         """
-        Start a watchdog thread to monitor agents
+        Start a watchdog thread to monitor agents autonomously.
+
+        Why needed: Provides continuous background monitoring without requiring
+        manual checks. Detects crashes, hangs, and stalls automatically.
 
         The watchdog checks for:
         1. CRASHED - State machine in FAILED state
@@ -384,10 +445,22 @@ class HealthMonitor:
 
         Args:
             check_interval: Seconds between checks (default 5)
+                           Lower = more responsive, higher = less CPU
             timeout_seconds: Max time before considering hung (default 300 = 5min)
+                            Adjust based on expected agent execution time
 
         Returns:
-            Watchdog thread (already started)
+            Watchdog thread (already started as daemon)
+
+        Side effects:
+            - Starts daemon thread running watchdog_loop()
+            - Sets _watchdog_running flag to True
+            - Thread exits when _watchdog_running set to False
+
+        Thread-safety: Thread-safe (watchdog runs independently)
+
+        Design decision: Daemon thread ensures watchdog doesn't prevent
+        process exit if main thread terminates.
         """
         def watchdog_loop():
             """Watchdog monitoring loop"""

@@ -102,6 +102,19 @@ class ScopeAnalyzer(DimensionAnalyzer):
     """Single Responsibility: Analyze scope & requirements"""
 
     def analyze(self, card: Dict, context: Dict) -> AnalysisResult:
+        """
+        Analyze task scope and requirements clarity.
+
+        Validates that requirements are well-defined with clear descriptions and
+        acceptance criteria. This prevents implementation based on vague requirements.
+
+        Args:
+            card: Kanban card containing task information
+            context: Pipeline context (unused by this analyzer)
+
+        Returns:
+            AnalysisResult with scope-related issues and recommendations
+        """
         issues = []
         recommendations = []
 
@@ -140,6 +153,12 @@ class ScopeAnalyzer(DimensionAnalyzer):
         )
 
     def get_dimension_name(self) -> str:
+        """
+        Get the name of this analysis dimension.
+
+        Returns:
+            String identifier for scope analysis dimension
+        """
         return "scope"
 
 
@@ -147,6 +166,20 @@ class SecurityAnalyzer(DimensionAnalyzer):
     """Single Responsibility: Analyze security concerns"""
 
     def analyze(self, card: Dict, context: Dict) -> AnalysisResult:
+        """
+        Analyze security concerns in task requirements.
+
+        Detects security-sensitive operations (authentication, data storage, APIs)
+        and recommends appropriate security measures. This prevents shipping
+        insecure implementations.
+
+        Args:
+            card: Kanban card containing task information
+            context: Pipeline context (unused by this analyzer)
+
+        Returns:
+            AnalysisResult with security issues and recommendations
+        """
         issues = []
         recommendations = []
 
@@ -190,6 +223,12 @@ class SecurityAnalyzer(DimensionAnalyzer):
         )
 
     def get_dimension_name(self) -> str:
+        """
+        Get the name of this analysis dimension.
+
+        Returns:
+            String identifier for security analysis dimension
+        """
         return "security"
 
 
@@ -197,6 +236,20 @@ class PerformanceAnalyzer(DimensionAnalyzer):
     """Single Responsibility: Analyze scalability & performance"""
 
     def analyze(self, card: Dict, context: Dict) -> AnalysisResult:
+        """
+        Analyze scalability and performance requirements.
+
+        Detects performance-critical features (dashboards, search, analytics)
+        and ensures performance targets are defined. This prevents slow UX
+        and scalability issues in production.
+
+        Args:
+            card: Kanban card containing task information
+            context: Pipeline context (unused by this analyzer)
+
+        Returns:
+            AnalysisResult with performance issues and recommendations
+        """
         issues = []
         recommendations = []
 
@@ -229,6 +282,12 @@ class PerformanceAnalyzer(DimensionAnalyzer):
         )
 
     def get_dimension_name(self) -> str:
+        """
+        Get the name of this analysis dimension.
+
+        Returns:
+            String identifier for performance analysis dimension
+        """
         return "performance"
 
 
@@ -236,6 +295,19 @@ class TestingAnalyzer(DimensionAnalyzer):
     """Single Responsibility: Analyze testing strategy"""
 
     def analyze(self, card: Dict, context: Dict) -> AnalysisResult:
+        """
+        Analyze testing strategy and coverage requirements.
+
+        Ensures tasks include testing requirements and promotes TDD practices.
+        This prevents untested code from reaching production.
+
+        Args:
+            card: Kanban card containing task information
+            context: Pipeline context (unused by this analyzer)
+
+        Returns:
+            AnalysisResult with testing issues and recommendations
+        """
         issues = []
         recommendations = []
 
@@ -263,6 +335,12 @@ class TestingAnalyzer(DimensionAnalyzer):
         )
 
     def get_dimension_name(self) -> str:
+        """
+        Get the name of this analysis dimension.
+
+        Returns:
+            String identifier for testing analysis dimension
+        """
         return "testing"
 
 
@@ -270,6 +348,19 @@ class ErrorHandlingAnalyzer(DimensionAnalyzer):
     """Single Responsibility: Analyze error handling & edge cases"""
 
     def analyze(self, card: Dict, context: Dict) -> AnalysisResult:
+        """
+        Analyze error handling and edge case coverage.
+
+        Ensures tasks consider failure scenarios, input validation, and
+        proper error handling. This prevents crashes and improper error states.
+
+        Args:
+            card: Kanban card containing task information
+            context: Pipeline context (unused by this analyzer)
+
+        Returns:
+            AnalysisResult with error handling issues and recommendations
+        """
         issues = []
         recommendations = []
 
@@ -297,6 +388,12 @@ class ErrorHandlingAnalyzer(DimensionAnalyzer):
         )
 
     def get_dimension_name(self) -> str:
+        """
+        Get the name of this analysis dimension.
+
+        Returns:
+            String identifier for error handling analysis dimension
+        """
         return "error_handling"
 
 
@@ -404,6 +501,12 @@ class LLMPoweredAnalyzer(DimensionAnalyzer):
             )
 
     def get_dimension_name(self) -> str:
+        """
+        Get the name of this analysis dimension.
+
+        Returns:
+            String identifier for LLM-powered analysis dimension
+        """
         return "llm_powered"
 
     def _build_system_message(self) -> str:

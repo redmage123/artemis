@@ -62,6 +62,9 @@ class BuildSystem(Enum):
     TERRAFORM = "terraform"
     BASH = "bash"
 
+    # Lua
+    LUA = "lua"
+
 
 class BuildManagerFactory:
     """
@@ -258,7 +261,8 @@ class BuildManagerFactory:
             BuildSystem.PIPENV: ["Pipfile.lock"],
             BuildSystem.COMPOSER: ["composer.json"],
             BuildSystem.BUNDLER: ["Gemfile.lock"],
-            BuildSystem.DOTNET: ["*.csproj", "*.sln"]
+            BuildSystem.DOTNET: ["*.csproj", "*.sln"],
+            BuildSystem.LUA: ["*.rockspec", ".busted", "init.lua"]
         }
 
         for build_system, markers in detection_map.items():

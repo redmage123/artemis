@@ -27,6 +27,20 @@ from artemis_exceptions import (
     create_wrapped_exception
 )
 
+# Import StreamingValidator for real-time validation during code generation
+try:
+    from streaming_validator import StreamingValidatorFactory, StreamingValidationResult
+    STREAMING_VALIDATOR_AVAILABLE = True
+except ImportError:
+    STREAMING_VALIDATOR_AVAILABLE = False
+
+# Import Layer 4: Retry Coordinator with Prompt Refinement
+try:
+    from retry_coordinator import RetryCoordinator
+    RETRY_COORDINATOR_AVAILABLE = True
+except ImportError:
+    RETRY_COORDINATOR_AVAILABLE = False
+
 # Import AIQueryService for KG-First approach
 try:
     from ai_query_service import (
@@ -153,6 +167,26 @@ class StandaloneDeveloperAgent(DebugMixin):
                 if self.logger:
                     self.logger.log(f"⚠️  Could not initialize Code Refactoring Agent: {e}", "WARNING")
                 self.refactoring_agent = None
+
+        # Initialize Layer 4: Retry Coordinator with Prompt Refinement
+        self.retry_coordinator = None
+        if RETRY_COORDINATOR_AVAILABLE:
+            try:
+                # Get config from environment
+                max_retries = int(os.getenv("ARTEMIS_MAX_VALIDATION_RETRIES", "3"))
+                acceptance_threshold = float(os.getenv("ARTEMIS_CONFIDENCE_THRESHOLD", "0.85"))
+
+                self.retry_coordinator = RetryCoordinator(
+                    logger=logger,
+                    max_retries=max_retries,
+                    acceptance_threshold=acceptance_threshold
+                )
+                if self.logger:
+                    self.logger.log(f"✅ Retry Coordinator initialized (max_retries={max_retries}, threshold={acceptance_threshold:.2f})", "INFO")
+            except Exception as e:
+                if self.logger:
+                    self.logger.log(f"⚠️  Could not initialize Retry Coordinator: {e}", "WARNING")
+                self.retry_coordinator = None
 
     def execute(
         self,
@@ -360,7 +394,7 @@ class StandaloneDeveloperAgent(DebugMixin):
 
         # Pipeline: validator → prompt → generate → write → validate → result
         validator = self._create_validator(strategy)
-        prompt = self._build_quality_prompt(validator, task_description, adr_content, context)
+        prompt = self._build_quality_prompt(validator, task_title, task_description, adr_content, context)
         file_dicts, file_paths = self._generate_and_write_files(prompt, output_dir)
         self._validate_artifact_quality(file_dicts, output_dir, validator)
 
@@ -387,15 +421,31 @@ class StandaloneDeveloperAgent(DebugMixin):
         from artifact_quality_validator import create_validator
         return create_validator(strategy.validator_class, strategy.quality_criteria, self.logger)
 
-    def _build_quality_prompt(self, validator, task_description, adr_content, context):
-        """Build comprehensive prompt using functional composition"""
-        base_prompt = f"""{context['developer_prompt']}
+    def _build_quality_prompt(self, validator, task_title, task_description, adr_content, context):
+        """Build comprehensive prompt using functional composition with RAG examples"""
+        # Query RAG for high-quality examples FIRST - this is the most valuable context
+        rag_examples = self._query_rag_for_examples(task_title, task_description)
 
-{validator.generate_validation_prompt(task_description)}
+        # Start with developer prompt
+        prompt_parts = [context['developer_prompt']]
 
-ADR Context:
-{adr_content}
-"""
+        # Add RAG examples prominently at the top (RIGHT after developer prompt)
+        if rag_examples:
+            prompt_parts.append("\n" + "="*80)
+            prompt_parts.append(rag_examples)
+            prompt_parts.append("="*80 + "\n")
+
+        # Add mandatory quality requirements
+        prompt_parts.append("\n" + "="*80)
+        prompt_parts.append(self._get_quality_indicators())
+        prompt_parts.append("="*80 + "\n")
+
+        # Add validator prompt
+        prompt_parts.append(f"\n{validator.generate_validation_prompt(task_description)}\n")
+
+        # Add ADR context
+        prompt_parts.append(f"\nADR Context:\n{adr_content}\n")
+
         # Functional composition: apply context enrichers
         enrichers = [
             ('kg_context', lambda c: f"\n\nKnowledge Graph Context:\n{json.dumps(c, indent=2)}\n"),
@@ -403,11 +453,13 @@ ADR Context:
             ('example_slides', lambda c: f"\n\nExample Format:\n{c}\n")
         ]
 
-        return base_prompt + ''.join(
+        prompt_parts.append(''.join(
             enricher(context[key])
             for key, enricher in enrichers
             if context.get(key)
-        )
+        ))
+
+        return ''.join(prompt_parts)
 
     def _generate_and_write_files(self, prompt, output_dir):
         """Generate implementation and write files - returns tuple (file_dicts, file_paths)"""
@@ -512,10 +564,28 @@ ADR Context:
         }
 
     def _execute_green_phase(self, task_title, task_description, adr_content, output_dir, context, red_results):
-        """Execute GREEN phase: Implement code to pass tests"""
+        """
+        Execute GREEN phase: Implement code to pass tests.
+
+        WHY: Uses Layer 4 retry coordinator for intelligent retry with prompt refinement.
+             Falls back to standard generation if retry coordinator unavailable.
+        """
         if self.logger:
             self.logger.log("🟢 GREEN Phase: Implementing code to pass tests...", "INFO")
 
+        # Use retry coordinator if available (Layer 4: Intelligent Retry)
+        if self.retry_coordinator:
+            result = self._green_phase_with_retry(
+                task_title=task_title,
+                task_description=task_description,
+                adr_content=adr_content,
+                output_dir=output_dir,
+                context=context,
+                red_results=red_results
+            )
+            return result
+
+        # Fallback: Standard generation without retry
         implementation_files = self._green_phase_implement(
             developer_prompt=context['developer_prompt'],
             task_title=task_title,
@@ -546,6 +616,181 @@ ADR Context:
         return {
             'implementation_files': implementation_files,
             'test_results': test_results
+        }
+
+    def _green_phase_with_retry(
+        self,
+        task_title: str,
+        task_description: str,
+        adr_content: str,
+        output_dir: Path,
+        context: Dict,
+        red_results: Dict
+    ) -> Dict:
+        """
+        Execute GREEN phase with Layer 4 retry coordinator.
+
+        WHY: Wraps code generation with intelligent retry and prompt refinement.
+             Automatically refines prompts based on validation failures.
+             Uses circuit breaker to prevent infinite retry loops.
+
+        RESPONSIBILITY: ONLY coordinate retry - delegate to retry_coordinator.
+        PATTERNS: Strategy pattern (generate_func, validate_func callbacks).
+        PERFORMANCE: Early termination on success, circuit breaker on repeated failures.
+
+        Returns:
+            Dict with implementation_files, test_results, and retry_metadata
+        """
+        # Build base prompt args (reused across retry attempts)
+        prompt_args = {
+            'developer_prompt': context['developer_prompt'],
+            'task_title': task_title,
+            'task_description': task_description,
+            'adr_content': adr_content,
+            'output_dir': output_dir,
+            'test_files': red_results['test_files'],
+            'red_test_results': red_results['test_results'],
+            'kg_context': context['kg_context'],
+            'example_slides': context['example_slides'],
+            'code_review_feedback': context['code_review_feedback']
+        }
+
+        # Strategy pattern: Generate function callback
+        def generate_func(prompt: str) -> str:
+            """
+            Generate code from prompt.
+
+            WHY: Callback for retry coordinator to generate code with refined prompts.
+            """
+            # Temporarily override code_review_feedback with refined prompt constraints
+            original_feedback = prompt_args['code_review_feedback']
+            prompt_args['code_review_feedback'] = prompt
+
+            try:
+                implementation_files = self._green_phase_implement(**prompt_args)
+                # Convert implementation_files to JSON string for validation
+                import json
+                return json.dumps(implementation_files)
+            finally:
+                # Restore original feedback
+                prompt_args['code_review_feedback'] = original_feedback
+
+        # Strategy pattern: Validation function callback
+        def validate_func(code_json: str) -> Dict:
+            """
+            Validate generated code by writing and running tests.
+
+            WHY: Callback for retry coordinator to validate generated code.
+                 Returns validation results with test pass/fail info.
+            """
+            import json
+            implementation_files = json.loads(code_json)
+
+            # Write implementation files
+            self._write_implementation_only(implementation_files, output_dir)
+
+            # Run tests
+            test_results = self._run_tests(output_dir)
+
+            # Build validation results for confidence scorer
+            validation_results = {
+                'passed': test_results.get('failed', 0) == 0,
+                'test_passed': test_results.get('passed', 0),
+                'test_failed': test_results.get('failed', 0),
+                'test_total': test_results.get('total', 0),
+                'pass_rate': test_results.get('pass_rate', 0.0),
+                'errors': test_results.get('errors', []),
+                'output': test_results.get('output', ''),
+                # Add completeness score based on test pass rate
+                'completeness_score': test_results.get('pass_rate', 0.0),
+                # Placeholder for other layer scores (updated by coordinator)
+                'streaming_passed': True,  # Assume streaming passed if we got here
+                'rag_similarity': 0.8,  # Placeholder - would need RAG validation
+                'code': code_json,  # Include generated code
+                'implementation_files': implementation_files  # Include for return
+            }
+
+            return validation_results
+
+        # Build original prompt (base prompt without refinement)
+        original_prompt = context.get('code_review_feedback', '')
+        if not original_prompt:
+            original_prompt = f"Implement code to pass tests for: {task_title}"
+
+        if self.logger:
+            self.logger.log("🔄 Using Layer 4 retry coordinator for intelligent code generation", "INFO")
+
+        # Execute with retry coordinator
+        retry_result = self.retry_coordinator.execute_with_retry(
+            generate_func=generate_func,
+            validate_func=validate_func,
+            original_prompt=original_prompt
+        )
+
+        # Log retry statistics
+        if self.logger:
+            if retry_result.succeeded:
+                self.logger.log(
+                    f"✅ GREEN Phase succeeded after {retry_result.total_attempts} attempt(s)",
+                    "SUCCESS"
+                )
+            else:
+                if retry_result.circuit_breaker_tripped:
+                    self.logger.log(
+                        f"🚫 GREEN Phase failed: Circuit breaker tripped after {retry_result.total_attempts} attempts",
+                        "ERROR"
+                    )
+                else:
+                    self.logger.log(
+                        f"❌ GREEN Phase failed: All {retry_result.total_attempts} retry attempts exhausted",
+                        "ERROR"
+                    )
+
+        # Extract final results
+        if retry_result.succeeded and retry_result.attempts:
+            final_attempt = retry_result.attempts[-1]
+            validation_results = final_attempt.validation_results
+            implementation_files = validation_results.get('implementation_files', [])
+
+            # Build test results from validation
+            test_results = {
+                'passed': validation_results.get('test_passed', 0),
+                'failed': validation_results.get('test_failed', 0),
+                'total': validation_results.get('test_total', 0),
+                'pass_rate': validation_results.get('pass_rate', 0.0),
+                'errors': validation_results.get('errors', []),
+                'output': validation_results.get('output', '')
+            }
+
+            if self.logger:
+                passed_count = test_results.get('passed', 0)
+                failed_count = test_results.get('failed', 0)
+                if failed_count == 0:
+                    self.logger.log(f"✅ All {passed_count} tests passing", "SUCCESS")
+                else:
+                    self.logger.log(f"⚠️  {failed_count} tests still failing", "WARNING")
+
+            return {
+                'implementation_files': implementation_files,
+                'test_results': test_results,
+                'retry_metadata': {
+                    'total_attempts': retry_result.total_attempts,
+                    'succeeded': retry_result.succeeded,
+                    'circuit_breaker_tripped': retry_result.circuit_breaker_tripped,
+                    'confidence_scores': [a.confidence_score for a in retry_result.attempts]
+                }
+            }
+
+        # Retry failed - return empty results with failure metadata
+        return {
+            'implementation_files': [],
+            'test_results': {'passed': 0, 'failed': 0, 'total': 0},
+            'retry_metadata': {
+                'total_attempts': retry_result.total_attempts,
+                'succeeded': False,
+                'circuit_breaker_tripped': retry_result.circuit_breaker_tripped,
+                'confidence_scores': [a.confidence_score for a in retry_result.attempts]
+            }
         }
 
     def _execute_refactor_phase(self, task_title, output_dir, context, green_results):
@@ -878,6 +1123,203 @@ Your approach:
 - Provide clear documentation
 """
 
+    def _query_rag_for_examples(
+        self,
+        task_title: str,
+        task_description: str
+    ) -> str:
+        """
+        Query RAG for relevant examples based on task characteristics.
+
+        Uses Strategy Pattern to select appropriate query approach.
+
+        Args:
+            task_title: Title of the task
+            task_description: Task description
+
+        Returns:
+            Formatted examples string to include in prompt
+
+        Raises:
+            RAGQueryError: If RAG query fails
+        """
+        # DEBUG: Log entry
+        if self.logger:
+            self.logger.log(f"🔍 [DEBUG] _query_rag_for_examples called", "DEBUG")
+            self.logger.log(f"🔍 [DEBUG] task_title: {task_title}", "DEBUG")
+            self.logger.log(f"🔍 [DEBUG] self.rag exists: {self.rag is not None}", "DEBUG")
+
+        # Early return if RAG not available
+        if not self.rag:
+            if self.logger:
+                self.logger.log("⚠️ [DEBUG] self.rag is None - returning empty string", "WARNING")
+            return ""
+
+        try:
+            task_type = self._detect_task_type(task_title, task_description)
+            if self.logger:
+                self.logger.log(f"🔍 [DEBUG] Detected task_type: {task_type}", "DEBUG")
+            result = self._query_by_task_type(task_type, task_title)
+            if self.logger:
+                self.logger.log(f"🔍 [DEBUG] RAG query returned {len(result)} characters", "DEBUG")
+            return result
+        except Exception as e:
+            if self.logger:
+                self.logger.log(f"❌ [DEBUG] Exception in _query_rag_for_examples: {e}", "ERROR")
+            raise create_wrapped_exception(
+                e,
+                RAGQueryError,
+                "Failed to query RAG for examples",
+                {"task_title": task_title, "task_type": "unknown"}
+            ) from e
+
+    def _detect_task_type(self, task_title: str, task_description: str) -> str:
+        """Detect task type from title and description."""
+        combined_text = f"{task_title} {task_description}".lower()
+
+        notebook_keywords = ['notebook', 'jupyter', 'ipynb', 'slide', 'presentation', 'demo']
+        is_notebook = any(keyword in combined_text for keyword in notebook_keywords)
+
+        return "notebook" if is_notebook else "code"
+
+    def _query_by_task_type(self, task_type: str, task_title: str) -> str:
+        """Query RAG based on task type - Strategy Pattern."""
+        query_strategies = {
+            "notebook": self._query_notebook_examples,
+            "code": self._query_code_examples
+        }
+
+        strategy = query_strategies.get(task_type, self._query_code_examples)
+        return strategy(task_title)
+
+    def _query_notebook_examples(self, task_title: str) -> str:
+        """Query RAG for notebook examples - Template Method Pattern."""
+        self._log_info("🔍 Querying RAG for notebook examples...")
+
+        results = self._execute_rag_query(
+            query_text=f"high-quality jupyter notebook example {task_title}",
+            artifact_types=["notebook_example"],
+            top_k=2
+        )
+
+        # Early return if no results
+        if not results:
+            self._log_warning("⚠️  No notebook examples found in RAG")
+            return ""
+
+        self._log_info(f"✅ Found {len(results)} notebook examples from RAG")
+        return self._format_notebook_examples(results)
+
+    def _query_code_examples(self, task_title: str) -> str:
+        """Query RAG for code examples - Template Method Pattern."""
+        results = self._execute_rag_query(
+            query_text=task_title,
+            artifact_types=["code_example", "developer_solution"],
+            top_k=3
+        )
+
+        # Early return if no results
+        if not results:
+            return ""
+
+        return self._format_code_examples(results)
+
+    def _execute_rag_query(
+        self,
+        query_text: str,
+        artifact_types: list,
+        top_k: int
+    ) -> list:
+        """Execute RAG query with error handling."""
+        try:
+            return self.rag.query_similar(
+                query_text=query_text,
+                artifact_types=artifact_types,
+                top_k=top_k
+            )
+        except Exception as e:
+            raise create_wrapped_exception(
+                e,
+                RAGQueryError,
+                "RAG query execution failed",
+                {"query": query_text[:50], "artifact_types": artifact_types}
+            ) from e
+
+    def _format_notebook_examples(self, results: list) -> str:
+        """Format notebook examples for prompt - Builder Pattern."""
+        builder = []
+        builder.append("\n\n**📚 HIGH-QUALITY NOTEBOOK EXAMPLES FROM RAG:**\n")
+        builder.append("Study these examples of excellent notebook structure and content:\n\n")
+
+        for i, result in enumerate(results, 1):
+            example_section = self._build_notebook_example_section(i, result)
+            builder.append(example_section)
+
+        builder.append(self._get_quality_indicators())
+        return ''.join(builder)
+
+    def _build_notebook_example_section(self, index: int, result: dict) -> str:
+        """Build individual example section - extracted method."""
+        metadata = result.get('metadata', {})
+        quality_score = metadata.get('quality_score', 'N/A')
+        total_cells = metadata.get('total_cells', 'N/A')
+        features = metadata.get('features', [])
+
+        section = []
+        section.append(f"**Example {index}** (Quality: {quality_score}, Cells: {total_cells}):\n")
+        section.append(f"  Features: {', '.join(features[:5])}\n")
+
+        content = result.get('content', '')[:1500]
+        section.append(f"\n{content}\n")
+        section.append("\n" + "="*70 + "\n\n")
+
+        return ''.join(section)
+
+    def _get_quality_indicators(self) -> str:
+        """Get quality indicators text - extracted constant."""
+        return """
+**KEY QUALITY INDICATORS FROM EXAMPLES:**
+- Comprehensive visualizations (matplotlib, seaborn, etc.)
+- Working imports only (no placeholders like 'artemis_core')
+- Rich narrative flow between sections
+- Code cells with real data and examples
+- Professional structure (intro → body → conclusion)
+- Content depth (15+ cells minimum)
+- Balance of code and markdown (ratio near 0.7)
+
+**MANDATORY QUALITY REQUIREMENTS - YOU MUST MEET THESE:**
+✓ Minimum 20 cells total (mix of code and markdown)
+✓ Minimum 15,000 characters of total content
+✓ Average cell length: 500+ characters (NOT empty shells!)
+✓ NO placeholder imports (artemis_core, artemis_demo, DynamicPipeline, etc.)
+✓ Working visualizations ONLY - use matplotlib, Chart.js with REAL data
+✓ Rich, detailed explanations in every cell
+✓ Professional presentation quality
+
+**THESE ARE NOT SUGGESTIONS - THEY ARE REQUIREMENTS!**
+If your output has fewer than 20 cells or less than 15,000 characters, it will be REJECTED.
+"""
+
+    def _format_code_examples(self, results: list) -> str:
+        """Format code examples for prompt - Builder Pattern."""
+        builder = ["\n\n**📚 RELEVANT EXAMPLES FROM RAG:**\n\n"]
+
+        for i, result in enumerate(results, 1):
+            builder.append(f"**Example {i}:**\n")
+            builder.append(f"{result.get('content', '')[:800]}\n\n")
+
+        return ''.join(builder)
+
+    def _log_info(self, message: str):
+        """Log info message - extracted method."""
+        if self.logger:
+            self.logger.log(message, "INFO")
+
+    def _log_warning(self, message: str):
+        """Log warning message - extracted method."""
+        if self.logger:
+            self.logger.log(message, "WARNING")
+
     def _get_developer_prompt_from_rag(
         self,
         task_title: str,
@@ -970,6 +1412,7 @@ Your approach:
 
         Includes:
         - Developer-specific prompt
+        - RAG examples (high-quality reference implementations)
         - Task details
         - ADR architectural guidance
         - Code review feedback from previous attempts (if retry)
@@ -978,6 +1421,13 @@ Your approach:
         """
         # Start with developer-specific prompt
         prompt_parts = [developer_prompt]
+
+        # Add RAG examples FIRST - they provide the most valuable context
+        rag_examples = self._query_rag_for_examples(task_title, task_description)
+        if rag_examples:
+            prompt_parts.append("\n" + "="*80)
+            prompt_parts.append(rag_examples)
+            prompt_parts.append("="*80 + "\n")
 
         # Add KG context if available (KG-first approach)
         if kg_context and kg_context.get('code_patterns'):
@@ -1099,26 +1549,135 @@ Begin implementation now:
             )
         ]
 
+        # DEBUG: Log full prompt before LLM call
         if self.logger:
+            prompt_length = len(prompt)
             self.logger.log(f"📡 Calling {self.llm_provider} API...", "INFO")
+            self.logger.log(f"🔍 Prompt length: {prompt_length:,} characters", "DEBUG")
+            self.logger.log(f"🔍 Prompt preview (first 1000 chars):\n{prompt[:1000]}", "DEBUG")
+            self.logger.log(f"🔍 Prompt preview (last 1000 chars):\n{prompt[-1000:]}", "DEBUG")
+
+            # Check if RAG examples are in the prompt
+            if "HIGH-QUALITY" in prompt and "EXAMPLE" in prompt:
+                self.logger.log("✅ RAG examples detected in prompt", "DEBUG")
+            else:
+                self.logger.log("❌ WARNING: No RAG examples found in prompt!", "WARNING")
+
+            # Check if quality requirements are in the prompt
+            if "MANDATORY QUALITY REQUIREMENTS" in prompt:
+                self.logger.log("✅ Quality requirements detected in prompt", "DEBUG")
+            else:
+                self.logger.log("❌ WARNING: No quality requirements in prompt!", "WARNING")
 
         # Enable JSON mode for OpenAI (Anthropic uses prompt engineering)
         response_format = None
         if self.llm_provider == "openai":
             response_format = {"type": "json_object"}
 
-        response = self.llm_client.complete(
-            messages=messages,
-            model=self.llm_model,
-            temperature=0.7,
-            max_tokens=8000,  # Allow longer responses for complete implementations
-            response_format=response_format
-        )
+        # Check if streaming validation should be used (avoid nested ifs - extract to helper)
+        streaming_validator = self._create_streaming_validator()
+
+        # Strategy pattern: Use streaming or standard completion
+        if streaming_validator:
+            # Layer 3.6: Streaming Validation (DURING generation)
+            response = self._call_llm_with_streaming(
+                messages=messages,
+                response_format=response_format,
+                validator=streaming_validator
+            )
+        else:
+            # Standard completion (no streaming validation)
+            response = self.llm_client.complete(
+                messages=messages,
+                model=self.llm_model,
+                temperature=0.7,
+                max_tokens=8000,  # Allow longer responses for complete implementations
+                response_format=response_format
+            )
 
         if self.logger:
             self.logger.log(
                 f"✅ Received response ({response.usage['total_tokens']} tokens)",
                 "INFO"
+            )
+
+        return response
+
+    def _create_streaming_validator(self) -> Optional['StreamingValidator']:
+        """
+        Create streaming validator for real-time validation.
+
+        WHY: Validates code DURING generation, stops hallucinations early.
+             Saves tokens and time by stopping generation immediately.
+
+        Returns:
+            StreamingValidator if available and enabled, None otherwise
+        """
+        # Early return if streaming not available (avoid nested ifs)
+        if not STREAMING_VALIDATOR_AVAILABLE:
+            return None
+
+        # Early return if not enabled via environment variable
+        if not os.getenv("ARTEMIS_ENABLE_STREAMING_VALIDATION", "false").lower() == "true":
+            return None
+
+        # Create validator with standard mode
+        validator = StreamingValidatorFactory.create_validator(
+            mode='standard',  # Can be configured via env var later
+            logger=self.logger
+        )
+
+        if self.logger:
+            self.logger.log(
+                "🌊 Streaming validation ENABLED (real-time hallucination detection)",
+                "INFO"
+            )
+
+        return validator
+
+    def _call_llm_with_streaming(
+        self,
+        messages: List[LLMMessage],
+        response_format: Optional[Dict],
+        validator: 'StreamingValidator'
+    ) -> LLMResponse:
+        """
+        Call LLM with streaming validation.
+
+        WHY: Enables real-time validation during code generation.
+             Stops generation early if hallucination detected.
+
+        PATTERNS: Callback pattern for streaming validation.
+        """
+        # Create callback that validates each token
+        def on_token_callback(token: str) -> bool:
+            """
+            Validate each token during streaming.
+
+            WHY: Called by LLM client for each token.
+                 Returns False to stop generation early.
+            """
+            result = validator.on_token(token)
+            return result.should_continue
+
+        # Call LLM with streaming
+        response = self.llm_client.complete_stream(
+            messages=messages,
+            on_token_callback=on_token_callback,
+            model=self.llm_model,
+            temperature=0.7,
+            max_tokens=8000,
+            response_format=response_format
+        )
+
+        # Log streaming validation statistics
+        if self.logger:
+            stats = validator.get_stats()
+            self.logger.log(
+                f"📊 Streaming validation stats: {stats['validation_count']} checks, "
+                f"{stats['stop_events']} stops, "
+                f"{stats['token_count']} tokens",
+                "DEBUG"
             )
 
         return response

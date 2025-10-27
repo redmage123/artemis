@@ -342,7 +342,7 @@ class ResearchStage(PipelineStage):
 
     def get_stage_name(self) -> str:
         """Get stage name"""
-        return "ResearchStage"
+        return "research"
 
     def get_stage_description(self) -> str:
         """Get stage description"""

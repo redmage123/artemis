@@ -17,13 +17,61 @@ class WorkflowStatusTracker:
     """
     Tracks workflow execution status and persists to disk
 
-    Usage:
+    WHAT:
+    Monitors pipeline execution in real-time, recording stage transitions, durations,
+    errors, and overall workflow status to JSON files on disk.
+
+    WHY:
+    Autonomous pipelines can run for hours. Users need to:
+    - Check pipeline status without waiting for completion
+    - Resume failed pipelines from last successful stage
+    - Debug failures with detailed execution history
+    - Monitor multiple concurrent pipelines
+    - Generate execution reports
+
+    File-based persistence provides:
+    - Crash recovery (status survives process termination)
+    - Multi-process safety (can query from different processes)
+    - Simple implementation (no database required)
+    - Easy debugging (human-readable JSON)
+
+    PATTERNS:
+    - Context Manager: track_workflow() and track_stage() use Python's with statement
+    - State Pattern: Workflow transitions through states (not_started → running → completed/failed)
+    - Memento Pattern: Persists state snapshots to disk for recovery
+
+    INTEGRATION:
+    - Used by: ArtemisOrchestrator (optional status tracking)
+    - Read by: artemis_orchestrator.py display_workflow_status()
+    - Storage: {status_dir}/{card_id}.json files
+
+    WORKFLOW STATES:
+        - not_started: Initial state
+        - running: Pipeline executing
+        - completed: Pipeline succeeded
+        - failed: Pipeline failed with error
+
+    STAGE STATES:
+        - pending: Not yet started
+        - in_progress: Currently executing
+        - completed: Stage succeeded
+        - failed: Stage failed with error
+        - skipped: Stage skipped (intentionally)
+
+    USAGE:
         tracker = WorkflowStatusTracker(card_id="card-123")
 
         with tracker.track_workflow():
             with tracker.track_stage("STAGE_1", "Project Analysis"):
                 # Do stage work
-                pass
+                tracker.update_stage_progress("STAGE_1", "Analyzing files...")
+                # Stage auto-completes on exit
+
+            with tracker.track_stage("STAGE_2", "Development"):
+                # Do stage work
+                # Stage auto-fails if exception raised
+
+        # Status saved to: ../../.artemis_data/status/card-123.json
     """
 
     def __init__(self, card_id: str, status_dir: str = "../../.artemis_data/status"):
@@ -50,7 +98,22 @@ class WorkflowStatusTracker:
         }
 
     def start_workflow(self):
-        """Mark workflow as started"""
+        """
+        Mark workflow as started
+
+        WHAT:
+        Transitions workflow from 'not_started' to 'running' and records start time.
+
+        WHY:
+        Start time enables duration calculation and provides audit trail of when
+        pipeline execution began. Status file creation allows external processes
+        to monitor progress.
+
+        SIDE EFFECTS:
+            - Sets status_data['status'] = 'running'
+            - Sets status_data['start_time'] = current ISO timestamp
+            - Writes status file to disk
+        """
         self.status_data['status'] = 'running'
         self.status_data['start_time'] = datetime.now().isoformat()
         self._save()
@@ -131,7 +194,28 @@ class WorkflowStatusTracker:
 
     @contextmanager
     def track_workflow(self):
-        """Context manager for tracking entire workflow"""
+        """
+        Context manager for tracking entire workflow
+
+        WHAT:
+        Wraps workflow execution to automatically track start/completion/failure.
+
+        WHY:
+        Context manager pattern ensures status is always updated, even if exceptions
+        are raised. No manual cleanup required - Python's with statement handles it.
+
+        GUARANTEES:
+        - start_workflow() called on entry
+        - complete_workflow() called on normal exit
+        - fail_workflow() called if exception raised
+        - Exception always re-raised (never swallowed)
+
+        USAGE:
+            with tracker.track_workflow():
+                # Do pipeline work
+                # Auto-completes on success
+                # Auto-fails on exception
+        """
         try:
             self.start_workflow()
             yield self

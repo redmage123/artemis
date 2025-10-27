@@ -1,7 +1,28 @@
 #!/usr/bin/env python3
 """
-Kanban Board Management Utility
-Provides functions for creating, moving, and updating cards on the Agile pipeline Kanban board.
+Module: kanban_manager.py
+
+Purpose: Manages Kanban board operations for Agile workflow in Artemis pipeline
+Why: Provides structured task tracking, sprint management, and workflow visualization
+     for coordinating multiple developer agents and tracking feature development progress.
+Patterns: Builder Pattern (CardBuilder), Repository Pattern (KanbanBoard data access)
+Integration: Used by ArtemisOrchestrator, sprint planning stages, and developer agents
+             to track card states, manage WIP limits, and coordinate work.
+
+Key Responsibilities:
+- Card lifecycle management (create, move, update, block/unblock)
+- Sprint planning and velocity tracking
+- Work-in-progress (WIP) limit enforcement
+- Metrics collection (cycle time, throughput, velocity)
+- Definition of Done (DoD) validation
+- Test status tracking per card
+- Visual board representation for monitoring
+
+Design Decisions:
+- Builder pattern eliminates parameter overload (9 params -> 2 required)
+- Fluent API makes card creation readable and maintainable
+- Automatic timestamp tracking for cycle time calculations
+- History tracking for audit trail and retrospectives
 """
 
 import json
@@ -27,12 +48,23 @@ BOARD_PATH = str(KANBAN_BOARD_PATH)
 
 class CardBuilder:
     """
-    Builder pattern for creating Kanban cards (Design Pattern: Builder)
+    Builder pattern for creating Kanban cards with sensible defaults
 
-    Reduces complexity from 9 parameters to 2 required parameters.
-    Provides fluent API for optional parameters with validation.
+    Why it exists: Eliminates "parameter overload" anti-pattern where card creation
+                   required 9+ parameters, making code hard to read and maintain.
 
-    Usage:
+    Design pattern: Builder Pattern
+    Why this design: Provides fluent, readable API for card creation while ensuring
+                     all required fields are set and optional fields have sensible defaults.
+
+    Responsibilities:
+    - Enforce required fields (task_id, title)
+    - Provide sensible defaults for optional fields
+    - Validate field values (priority, size, story points)
+    - Auto-normalize story points to Fibonacci scale
+    - Generate unique card_id and timestamps on build()
+
+    Usage Example:
         card = (CardBuilder("TASK-001", "Add feature")
             .with_description("Implement new API endpoint")
             .with_priority("high")
@@ -40,15 +72,22 @@ class CardBuilder:
             .with_story_points(8)
             .with_assigned_agents(["developer-a"])
             .build())
+
+    Why fluent API: Method chaining makes card creation self-documenting and easy to modify.
     """
 
     def __init__(self, task_id: str, title: str):
         """
-        Initialize builder with required fields only
+        Initialize builder with only required fields
+
+        Why minimal constructor: Reduces cognitive load - developers only need to remember
+                                2 required fields instead of 9+.
 
         Args:
-            task_id: Unique task identifier
-            title: Card title
+            task_id: Unique task identifier (e.g., "TASK-001" or "card-123")
+            title: Human-readable card title
+
+        Note: All other fields have sensible defaults and can be set via with_* methods
         """
         self._card = {
             'task_id': task_id,
@@ -72,13 +111,22 @@ class CardBuilder:
 
     def with_priority(self, priority: str) -> 'CardBuilder':
         """
-        Set priority level
+        Set card priority level with validation
+
+        Why needed: Ensures consistent priority values across the board, preventing
+                    typos like "urgent" or "normal" which would break filtering.
 
         Args:
-            priority: Must be 'high', 'medium', or 'low'
+            priority: Must be 'high', 'medium', or 'low' (validated)
+
+        Returns:
+            Self for method chaining
 
         Raises:
-            ValueError: If priority is invalid
+            ValueError: If priority is not one of the valid values
+
+        Design note: Validation happens at build-time, not runtime, to fail fast
+                     and provide clear error messages during card creation.
         """
         valid_priorities = ['high', 'medium', 'low']
         if priority not in valid_priorities:
@@ -113,13 +161,30 @@ class CardBuilder:
 
     def with_story_points(self, points: int) -> 'CardBuilder':
         """
-        Set story points (Fibonacci scale)
+        Set story points using Fibonacci scale
+
+        Why Fibonacci scale: Research shows Fibonacci numbers provide better estimation
+                            granularity for software tasks than linear scales. The increasing
+                            gaps reflect growing uncertainty with larger tasks.
+
+        Why auto-rounding: Allows callers to use any integer (e.g., from LLM estimation)
+                          and automatically normalizes to valid Fibonacci value.
 
         Args:
-            points: Will be rounded to nearest Fibonacci: [1, 2, 3, 5, 8, 13]
+            points: Desired story points (will be rounded to nearest Fibonacci)
+                   Valid values: [1, 2, 3, 5, 8, 13]
 
-        Note:
-            Non-Fibonacci values are automatically rounded to nearest valid value
+        Returns:
+            Self for method chaining
+
+        Behavior:
+            - 4 rounds to 3 or 5 (whichever is closer)
+            - 7 rounds to 8
+            - 15 rounds to 13
+            - Values outside range use nearest boundary
+
+        Note: Non-Fibonacci values are automatically rounded, not rejected, to be
+              forgiving to LLM-generated values while maintaining scale consistency.
         """
         valid_points = [1, 2, 3, 5, 8, 13]
         if points not in valid_points:
@@ -161,10 +226,25 @@ class CardBuilder:
 
     def build(self) -> Dict:
         """
-        Build and return the complete card dictionary
+        Build and return the complete card dictionary with generated fields
+
+        Why needed: Finalizes card creation by adding system-generated fields like
+                    timestamps, card_id, and default tracking structures.
+
+        What it does:
+        - Generates unique card_id from timestamp
+        - Sets created_at and updated_at timestamps
+        - Initializes test_status tracking structure
+        - Initializes definition_of_done checklist
+        - Creates initial history entry for audit trail
+        - Sets default column to 'backlog'
 
         Returns:
-            Complete card dictionary with all metadata
+            Complete card dictionary ready to be added to board via add_card()
+
+        Design note: Build() is the "commit" operation - card is immutable after this.
+                     This ensures all validation and defaults are applied before card
+                     enters the system.
         """
         # Generate unique card ID
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
@@ -205,15 +285,79 @@ class CardBuilder:
 
 
 class KanbanBoard(DebugMixin):
-    """Manages Kanban board operations"""
+    """
+    Manages all Kanban board operations for Artemis Agile workflow
+
+    Why it exists: Provides centralized board state management, enforces Agile best
+                   practices (WIP limits, DoD tracking), and enables metrics collection
+                   for sprint planning and retrospectives.
+
+    Design pattern: Repository Pattern + Active Record
+    Why this design: Combines data access (load/save JSON) with business logic
+                     (WIP validation, metrics calculation) for simplicity.
+
+    Responsibilities:
+    - Load and persist board state to JSON file
+    - Card CRUD operations (create, read, update, delete, move)
+    - Sprint management (create, start, complete sprints)
+    - WIP limit enforcement with violations tracking
+    - Metrics calculation (cycle time, velocity, throughput)
+    - Card blocking/unblocking workflow
+    - Definition of Done (DoD) validation
+    - Test status tracking per card
+    - Board visualization and reporting
+
+    Key Features:
+    - Supports both dict and list column formats (backward compatibility)
+    - Automatic timestamp tracking for cycle time calculation
+    - History tracking for every card state change
+    - Metrics auto-update on card completion
+    - Generator expressions for performance (early termination on searches)
+
+    Integration points:
+    - Used by ArtemisOrchestrator for card lifecycle management
+    - Used by sprint planning stages to assign work
+    - Used by developer agents to update progress
+    - Provides data for retrospectives and planning poker
+    """
 
     def __init__(self, board_path: str = BOARD_PATH):
+        """
+        Initialize KanbanBoard with JSON file backend
+
+        Why separate board_path param: Allows testing with different board files
+                                       without modifying constants.
+
+        Args:
+            board_path: Path to kanban_board.json file (defaults to constant)
+        """
         DebugMixin.__init__(self, component_name="kanban")
         self.board_path = board_path
         self.board = self._load_board()
 
     def _load_board(self) -> Dict:
-        """Load board from JSON file"""
+        """
+        Load board state from JSON file with backward compatibility
+
+        Why needed: Reads persisted board state, ensuring metrics field exists
+                    for older board versions that might not have it.
+
+        What it does:
+        - Validates board file exists
+        - Loads JSON into memory
+        - Adds metrics field if missing (backward compatibility)
+        - Wraps I/O errors in custom exceptions with context
+
+        Returns:
+            Board dictionary with columns, metrics, sprints, etc.
+
+        Raises:
+            KanbanBoardError: If file not found
+            FileReadError: If JSON parsing fails
+
+        Design note: Uses wrap_exception to preserve original error while adding
+                     Artemis-specific context for better debugging.
+        """
         if not os.path.exists(self.board_path):
             raise KanbanBoardError(
                 f"Kanban board not found at {self.board_path}",
@@ -349,16 +493,43 @@ class KanbanBoard(DebugMixin):
         comment: str = ""
     ) -> bool:
         """
-        Move a card to a different column
+        Move a card between columns with WIP enforcement and metrics tracking
+
+        Why needed: Core workflow operation that transitions cards through pipeline stages
+                    while enforcing Agile practices (WIP limits) and collecting metrics.
+
+        What it does:
+        - Finds card in current column
+        - Validates destination column exists
+        - Checks WIP limit (warns but allows, tracks violations)
+        - Removes card from source column
+        - Updates card timestamps and column tracking
+        - Adds history entry for audit trail
+        - Adds card to destination column
+        - Calculates cycle time if moving to 'done'
+        - Updates board-level metrics
+        - Persists changes to JSON file
 
         Args:
-            card_id: Card to move
-            to_column: Destination column ID
-            agent: Agent performing the move
-            comment: Optional comment
+            card_id: Card identifier to move (task_id or card_id)
+            to_column: Destination column ID (e.g., 'development', 'review', 'done')
+            agent: Name of agent/user performing move (for history tracking)
+            comment: Optional comment explaining the move
 
         Returns:
-            True if successful
+            True if move succeeded, False if card or column not found
+
+        Side effects:
+            - Updates board JSON file
+            - Increments WIP violation counter if limit exceeded
+            - Updates completion metrics if moved to 'done'
+            - Prints status messages to console
+
+        Design decisions:
+            - WIP limit is a warning, not a hard block (allows flexibility)
+            - Cycle time auto-calculated on completion (no manual tracking needed)
+            - History tracking for every move enables detailed retrospectives
+            - Dual card_id lookup (task_id or card_id) for backward compatibility
         """
         self.debug_log("Moving card", card_id=card_id, from_column="searching", to_column=to_column, agent=agent)
 

@@ -1,22 +1,37 @@
 #!/usr/bin/env python3
 """
-Pipeline Observer Pattern
+Module: pipeline_observer.py
 
-Implements Observer Pattern for pipeline events, allowing multiple
-observers to react to pipeline events without tight coupling.
+Purpose: Implements Observer Pattern for decoupled event-driven pipeline monitoring
+Why: Allows multiple components to react to pipeline events without tight coupling,
+     enabling extensible monitoring, metrics, logging, and notifications
+Patterns: Observer (core), Strategy (configurable observers), Factory (observer creation)
+Integration: Central event hub for all pipeline stages, supervisor, and monitoring systems
 
-Benefits:
-- Decouples event producers from consumers (Open/Closed Principle)
-- Easy to add new observers without modifying pipeline
-- Centralized event handling
-- Support for logging, monitoring, notifications, metrics
+Architecture:
+    - PipelineObservable: Event producer (Subject in Observer pattern)
+    - PipelineObserver: Event consumer interface (Observer interface)
+    - Concrete observers: LoggingObserver, MetricsObserver, StateTrackingObserver, etc.
+    - PipelineEvent: Immutable event data structure
+    - EventType: Enum of all event types in system
+    - SupervisorCommandObserver: Bidirectional command routing
 
-Event Types:
-1. Pipeline events - start, complete, fail
-2. Stage events - start, complete, fail, skip
-3. Developer events - start, complete, fail
-4. Code review events - start, complete, fail
-5. Validation events - start, complete, fail
+Design Decisions:
+    - Observer pattern decouples event producers from consumers (Open/Closed)
+    - Immutable events prevent observer interference
+    - Error isolation prevents observer failures from breaking pipeline
+    - Command observer enables supervisor to send commands back to pipeline
+    - Set-based active developers for O(1) add/remove operations
+
+Event Flow:
+    Pipeline Stage -> notify(event) -> PipelineObservable -> all observers
+    Supervisor -> SUPERVISOR_COMMAND_* event -> SupervisorCommandObserver -> stage handler
+
+Why Observer Pattern:
+    - Easy to add new observers without modifying pipeline code
+    - Observers can be enabled/disabled dynamically
+    - Multiple independent monitoring systems can coexist
+    - Supports both reactive monitoring and proactive control
 """
 
 from abc import ABC, abstractmethod
@@ -33,7 +48,28 @@ from artemis_services import PipelineLogger
 # ============================================================================
 
 class EventType(Enum):
-    """Types of pipeline events"""
+    """
+    Types of pipeline events.
+
+    Why needed: Centralized enum of all event types in the Artemis pipeline,
+    ensuring type safety and preventing string typos. Enables IDE autocomplete
+    and compile-time checking.
+
+    Categories:
+    - Pipeline lifecycle: PIPELINE_STARTED, PIPELINE_COMPLETED, PIPELINE_FAILED
+    - Stage lifecycle: STAGE_STARTED, STAGE_COMPLETED, STAGE_FAILED, STAGE_SKIPPED
+    - Developer: DEVELOPER_STARTED, DEVELOPER_COMPLETED, DEVELOPER_FAILED
+    - Code review: CODE_REVIEW_*
+    - Validation: VALIDATION_*
+    - Integration: INTEGRATION_*
+    - Workflow: WORKFLOW_*
+    - Supervisor commands: SUPERVISOR_COMMAND_* (bidirectional control)
+    - Agent responses: AGENT_COMMAND_*, AGENT_STATUS_*
+    - Git operations: GIT_*
+
+    Design decision: Single enum for all event types provides centralized
+    event catalog and prevents event name collisions.
+    """
 
     # Pipeline lifecycle
     PIPELINE_STARTED = "pipeline_started"
@@ -96,6 +132,24 @@ class EventType(Enum):
     AGENT_COMMAND_FAILED = "agent_command_failed"
     AGENT_STATUS_RESPONSE = "agent_status_response"
 
+    # Git Agent events
+    GIT_REPOSITORY_CONFIGURED = "git_repository_configured"
+    GIT_BRANCH_CREATED = "git_branch_created"
+    GIT_BRANCH_SWITCHED = "git_branch_switched"
+    GIT_BRANCH_DELETED = "git_branch_deleted"
+    GIT_COMMIT_CREATED = "git_commit_created"
+    GIT_PUSH_STARTED = "git_push_started"
+    GIT_PUSH_COMPLETED = "git_push_completed"
+    GIT_PUSH_FAILED = "git_push_failed"
+    GIT_PULL_STARTED = "git_pull_started"
+    GIT_PULL_COMPLETED = "git_pull_completed"
+    GIT_PULL_FAILED = "git_pull_failed"
+    GIT_TAG_CREATED = "git_tag_created"
+    GIT_MERGE_STARTED = "git_merge_started"
+    GIT_MERGE_COMPLETED = "git_merge_completed"
+    GIT_MERGE_CONFLICT = "git_merge_conflict"
+    GIT_OPERATION_FAILED = "git_operation_failed"
+
 
 # ============================================================================
 # EVENT DATA
@@ -104,9 +158,23 @@ class EventType(Enum):
 @dataclass
 class PipelineEvent:
     """
-    Represents a pipeline event
+    Represents a pipeline event.
 
-    Immutable event object passed to observers
+    Why it exists: Immutable, structured event data passed to all observers,
+    ensuring consistent event information and preventing observers from
+    modifying event data.
+
+    Design pattern: Data Transfer Object (DTO)
+
+    Responsibilities:
+    - Carry event information between producer and observers
+    - Provide structured access to event metadata
+    - Support serialization to dict for logging/storage
+
+    Immutability: Fields should not be modified after creation to prevent
+    observers from interfering with each other.
+
+    Thread-safety: Thread-safe (immutable after creation)
     """
     event_type: EventType
     timestamp: datetime = field(default_factory=datetime.now)
@@ -117,7 +185,15 @@ class PipelineEvent:
     error: Optional[Exception] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert event to dictionary"""
+        """
+        Convert event to dictionary for serialization.
+
+        Why needed: Enables event storage in logs, databases, message queues,
+        and metrics systems. Provides JSON-compatible representation.
+
+        Returns:
+            Dict with all event fields serialized to JSON-compatible types
+        """
         return {
             "event_type": self.event_type.value,
             "timestamp": self.timestamp.isoformat(),
@@ -135,23 +211,56 @@ class PipelineEvent:
 
 class PipelineObserver(ABC):
     """
-    Abstract base class for pipeline observers
+    Abstract base class for pipeline observers.
 
-    Observers implement this interface to receive pipeline events
+    Why it exists: Defines the contract for all pipeline observers, ensuring
+    consistent event handling interface across the system.
+
+    Design pattern: Observer interface (Gang of Four Observer pattern)
+
+    Responsibilities:
+    - Define event handling contract via on_event()
+    - Provide observer identification via get_observer_name()
+
+    Implementation notes:
+    - Observers must handle errors internally to prevent breaking pipeline
+    - Observers should be fast (avoid blocking operations)
+    - Observers should not modify pipeline state directly
+    - Use commands/callbacks for pipeline interaction
+
+    Thread-safety: Implementations must be thread-safe if used in
+    multi-threaded context
     """
 
     @abstractmethod
     def on_event(self, event: PipelineEvent) -> None:
         """
-        Handle pipeline event
+        Handle pipeline event.
+
+        Why needed: Core event handling method called by PipelineObservable
+        when events occur. Subclasses implement this to react to events.
 
         Args:
-            event: Pipeline event to handle
+            event: Pipeline event to handle (immutable)
+
+        Raises:
+            Should not raise exceptions - errors should be logged internally
+            to prevent breaking pipeline execution
+
+        Performance: Should return quickly to avoid blocking other observers
         """
         pass
 
     def get_observer_name(self) -> str:
-        """Get observer name for logging"""
+        """
+        Get observer name for logging and identification.
+
+        Why needed: Allows PipelineObservable to log which observers are
+        attached and which observer failed if errors occur.
+
+        Returns:
+            Observer class name (default implementation)
+        """
         return self.__class__.__name__
 
 
@@ -161,9 +270,25 @@ class PipelineObserver(ABC):
 
 class PipelineObservable:
     """
-    Observable pipeline subject
+    Observable pipeline subject (Subject in Observer pattern).
 
-    Manages observers and notifies them of events
+    Why it exists: Central event broadcasting hub that manages observer
+    registration and notification. Decouples event producers (pipeline stages)
+    from event consumers (observers).
+
+    Design pattern: Observable/Subject (Gang of Four Observer pattern)
+
+    Responsibilities:
+    - Maintain list of registered observers
+    - Broadcast events to all observers
+    - Isolate observer errors from pipeline execution
+    - Log observer attachment/detachment
+    - Provide observer count for debugging
+
+    Error handling: Observer exceptions are caught and logged to prevent
+    one failing observer from breaking the entire notification chain.
+
+    Thread-safety: Not thread-safe (assumes single-threaded pipeline)
     """
 
     def __init__(self, verbose: bool = True):
@@ -197,10 +322,20 @@ class PipelineObservable:
 
     def notify(self, event: PipelineEvent) -> None:
         """
-        Notify all observers of event
+        Notify all observers of event.
+
+        Why needed: Core event broadcasting method. Ensures all registered
+        observers receive events while isolating errors.
 
         Args:
-            event: Event to broadcast
+            event: Event to broadcast (immutable)
+
+        Error handling: Catches exceptions from observers to prevent cascade
+        failures. Failed observers are logged but don't stop notification
+        of other observers.
+
+        Performance: O(n) where n is number of observers. Observers should
+        return quickly to avoid blocking pipeline.
         """
         if self.verbose:
             self.logger.log(
@@ -366,13 +501,23 @@ class MetricsObserver(PipelineObserver):
 
 class StateTrackingObserver(PipelineObserver):
     """
-    Observer that tracks current pipeline state
+    Observer that tracks current pipeline state.
 
-    Maintains:
-    - Current stage
-    - Active developers
-    - Pipeline status
-    - Recent errors
+    Why it exists: Maintains real-time snapshot of pipeline state for
+    monitoring dashboards, health checks, and status queries.
+
+    Design pattern: Observer + State pattern
+
+    Responsibilities:
+    - Track current card ID and stage
+    - Monitor active developers (set for O(1) operations)
+    - Update pipeline status (idle/running/completed/failed/paused)
+    - Maintain recent error history (bounded queue)
+
+    Performance optimization: Uses set for active_developers instead of list
+    for O(1) add/remove operations instead of O(n).
+
+    Thread-safety: Not thread-safe (assumes single-threaded pipeline)
     """
 
     def __init__(self):
@@ -510,13 +655,31 @@ class NotificationObserver(PipelineObserver):
 
 class SupervisorCommandObserver(PipelineObserver):
     """
-    Observer that receives and executes supervisor commands
+    Observer that receives and executes supervisor commands (bidirectional control).
 
-    This observer is attached to the pipeline observable and listens for
-    SUPERVISOR_COMMAND_* events, then routes them to the appropriate stage/agent.
+    Why it exists: Enables supervisor to send commands back to pipeline stages
+    for dynamic control (pause, resume, retry, skip, etc.). Implements the
+    command pattern for supervisor-to-pipeline communication.
 
-    Each stage implements command handlers that are registered with this observer.
-    When a command event is received, the observer dispatches it to the registered handler.
+    Design pattern: Observer + Command + Registry
+
+    Responsibilities:
+    - Register command handlers from stages
+    - Route SUPERVISOR_COMMAND_* events to appropriate handlers
+    - Execute commands and track results
+    - Maintain command execution history
+    - Handle missing handlers gracefully
+
+    Architecture:
+    - Supervisor broadcasts SUPERVISOR_COMMAND_* event via PipelineObservable
+    - This observer receives event and looks up registered handler
+    - Handler is called with event data
+    - Result is recorded in command history
+
+    Handler registration: Stages call register_command_handler() during init
+    to register callbacks for specific command types.
+
+    Thread-safety: Not thread-safe (assumes single-threaded pipeline)
     """
 
     def __init__(self, verbose: bool = True):
@@ -782,3 +945,83 @@ class EventBuilder:
             developer_name=developer_name,
             data=data
         )
+
+    @staticmethod
+    def validation_event(developer_name: str, event_type: str, validation_data: dict) -> dict:
+        """
+        Create a validation event for Layer 3 (Validation Pipeline).
+
+        Args:
+            developer_name: Name of developer performing validation
+            event_type: Type of validation event:
+                - 'validation_started': Validation check initiated
+                - 'validation_passed': Validation check passed
+                - 'validation_failed': Validation check failed
+                - 'validation_max_retries': Max retries exceeded
+            validation_data: Event data including:
+                - stage: ValidationStage value
+                - attempt: Attempt number
+                - feedback: List of validation feedback (if failed)
+                - score: Validation score (if passed)
+
+        Returns:
+            Event dict for observer pattern
+
+        Why: Validation events enable real-time monitoring of code quality
+             during generation, not just at the end. This allows:
+             - UI dashboards to show live validation status
+             - Supervisor to learn from validation patterns
+             - Metrics collection for retrospective analysis
+        """
+        from datetime import datetime
+
+        return {
+            "type": "validation",
+            "subtype": event_type,
+            "developer": developer_name,
+            "timestamp": datetime.now().isoformat(),
+            "data": validation_data
+        }
+
+    @staticmethod
+    def rag_validation_event(developer_name: str, rag_result, passed: bool) -> dict:
+        """
+        Create a RAG validation event for Layer 3.5 (RAG-Enhanced Validation).
+
+        WHY: RAG validation events enable monitoring of hallucination prevention:
+             - Track how often generated code matches proven patterns
+             - Identify frameworks/languages with lower confidence scores
+             - Collect metrics on RAG validation effectiveness
+             - Enable supervisor to learn from RAG feedback patterns
+
+        Args:
+            developer_name: Name of developer performing validation
+            rag_result: RAGValidationResult from rag_enhanced_validation
+            passed: Whether RAG validation passed
+
+        Returns:
+            Event dict for observer pattern with RAG-specific data
+        """
+        from datetime import datetime
+
+        return {
+            "type": "rag_validation",
+            "subtype": "passed" if passed else "failed",
+            "developer": developer_name,
+            "timestamp": datetime.now().isoformat(),
+            "data": {
+                "confidence": rag_result.confidence,
+                "similar_examples_count": len(rag_result.similar_examples),
+                "similarity_results_count": len(rag_result.similarity_results),
+                "warnings": rag_result.warnings,
+                "recommendations": rag_result.recommendations,
+                "best_match_source": (
+                    max(rag_result.similar_examples, key=lambda e: e.relevance_score).source
+                    if rag_result.similar_examples else None
+                ),
+                "best_match_score": (
+                    max(rag_result.similar_examples, key=lambda e: e.relevance_score).relevance_score
+                    if rag_result.similar_examples else 0.0
+                )
+            }
+        }

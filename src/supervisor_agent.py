@@ -1,23 +1,55 @@
 #!/usr/bin/env python3
 """
-Artemis Supervisor Agent - Pipeline Traffic Cop and Circuit Breaker
+Module: supervisor_agent.py
 
-Single Responsibility: Monitor pipeline health, detect failures, and orchestrate graceful recovery
+Purpose: Orchestrate pipeline health monitoring and graceful recovery
+Why: Serves as the "traffic cop" for the Artemis pipeline, monitoring all stages
+     and agents, detecting failures, and coordinating recovery efforts
+Patterns: Observer (health monitoring), Strategy (recovery policies), Facade (unified interface),
+          Composite (delegates to specialized engines)
+Integration: Central coordinator for HealthMonitor, RecoveryEngine, CircuitBreakerManager,
+            LearningEngine, and all pipeline stages
+
+Architecture:
+    - Delegates to specialized components (SRP compliance):
+      * HealthMonitor: Detects crashes, hangs, stalls
+      * RecoveryEngine: Applies recovery strategies
+      * CircuitBreakerManager: Prevents cascading failures
+      * LearningEngine: Learns from unexpected states
+    - Observes health events via SupervisorHealthObserver
+    - Coordinates recovery workflows
+    - Manages resource cleanup (processes, file locks)
+    - Integrates with AgentMessenger for alerts
+
+SOLID Principles Applied:
+    - Single Responsibility: Orchestration only (delegates actual work)
+    - Open/Closed: Extensible via new recovery strategies, learning patterns
+    - Liskov Substitution: Works with any PipelineStage implementation
+    - Interface Segregation: Minimal supervision interface (AgentHealthObserver)
+    - Dependency Inversion: Depends on abstractions (LoggerInterface, PipelineStage)
 
 Features:
-- Process health monitoring (hanging, timeouts, crashes)
-- Automatic retry with exponential backoff
-- Circuit breaker pattern for failing stages
-- Graceful failover and degradation
-- Resource cleanup (zombie processes, file locks)
-- Real-time alerting via AgentMessenger
+    - Process health monitoring (CPU, memory, hanging detection)
+    - Automatic retry with exponential backoff
+    - Circuit breaker pattern for failing stages
+    - Graceful failover and degradation
+    - Resource cleanup (zombie processes, file locks)
+    - Real-time alerting via AgentMessenger
+    - LLM-powered auto-fix for crashes
+    - Learning from unexpected states (RAG storage)
 
-SOLID Principles:
-- Single Responsibility: Only monitors and recovers pipeline health
-- Open/Closed: Extensible recovery strategies without modification
-- Liskov Substitution: Works with any PipelineStage implementation
-- Interface Segregation: Minimal supervision interface
-- Dependency Inversion: Depends on abstractions (PipelineStage, LoggerInterface)
+Supervision Flow:
+    1. HealthMonitor detects issue (crash/hang/stall)
+    2. Notify SupervisorHealthObserver
+    3. RecoveryEngine attempts recovery
+    4. If recovery fails, escalate to LearningEngine
+    5. If learning fails, request manual intervention
+    6. Track all events and statistics
+
+Design Philosophy:
+    "Orchestrate, don't implement" - Delegates to specialized engines
+    "Fail gracefully, learn continuously" - Automated recovery with learning
+    "Observe, don't poll" - Event-driven health monitoring
 """
 
 import os

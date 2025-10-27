@@ -1,0 +1,30 @@
+[Unit]
+Description=Artemis Code Examples Downloader
+Documentation=https://github.com/artemis-ai/artemis
+After=network.target
+
+[Service]
+Type=simple
+User=artemis
+Group=artemis
+WorkingDirectory=/home/bbrelin/src/repos/artemis/src
+ExecStart=/usr/bin/python3 /home/bbrelin/src/repos/artemis/src/code_examples_downloader.py --interval 3600 --max-examples 100
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+Environment="GITHUB_TOKEN="
+
+# Resource limits
+MemoryLimit=2G
+CPUQuota=50%
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

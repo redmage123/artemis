@@ -1,14 +1,87 @@
 #!/usr/bin/env python3
 """
-Artemis Exception Hierarchy
+Module: artemis_exceptions.py
 
-Custom exception classes for the Artemis pipeline system.
-All exceptions inherit from ArtemisException base class.
+Purpose: Defines hierarchical exception types with context preservation for Artemis pipeline
+Why: Enables granular error handling, preserves debugging context through exception chains,
+     and standardizes error reporting across 50+ modules. Before this module, every
+     component used ValueError or generic Exception, making debugging nearly impossible
+     and preventing intelligent error recovery (retry transient vs fail permanent).
 
-This follows best practices:
-- Never use bare 'except Exception' - always use specific exceptions
-- Provides clear error context and debugging information
-- Enables proper error handling and recovery strategies
+Patterns: Exception Hierarchy Pattern, Wrapper Pattern (original_exception preservation)
+Integration: Foundation used by ALL Artemis modules. Orchestrator uses exception types
+            to determine retry strategy. Logging uses types for categorization. Monitoring
+            uses types for alerting rules.
+
+Exception Hierarchy:
+```
+ArtemisException (base with context support)
+├── RAGException (RAG database errors)
+│   ├── RAGQueryError
+│   ├── RAGStorageError
+│   └── RAGConnectionError
+├── RedisException (Redis cache errors)
+│   ├── RedisConnectionError
+│   └── RedisCacheError
+├── LLMException (LLM service errors)
+│   ├── LLMAPIError
+│   ├── LLMResponseParsingError
+│   ├── LLMRateLimitError (retryable)
+│   └── LLMAuthenticationError (permanent)
+├── DeveloperException (agent execution errors)
+│   ├── DeveloperExecutionError
+│   ├── DeveloperPromptError
+│   └── DeveloperOutputError
+├── CodeReviewException
+│   ├── CodeReviewExecutionError
+│   ├── CodeReviewScoringError
+│   └── CodeReviewFeedbackError
+├── RequirementsException (requirements parsing)
+│   ├── RequirementsFileError
+│   ├── RequirementsParsingError
+│   ├── RequirementsValidationError
+│   └── UnsupportedDocumentFormatError
+├── PipelineException (orchestration errors)
+│   ├── PipelineStageError
+│   ├── PipelineValidationError
+│   └── PipelineConfigurationError
+├── KnowledgeGraphError
+│   ├── KGQueryError
+│   └── KGConnectionError
+├── KanbanException (board operations)
+│   ├── KanbanCardNotFoundError
+│   ├── KanbanBoardError
+│   └── KanbanWIPLimitError
+├── ArtemisFileError (file I/O)
+│   ├── FileNotFoundError
+│   ├── FileWriteError
+│   └── FileReadError
+├── ProjectAnalysisException
+│   ├── ADRGenerationError
+│   └── DependencyAnalysisError
+└── SprintException (workflow errors)
+    ├── SprintPlanningError
+    ├── FeatureExtractionError
+    ├── PlanningPokerError
+    └── UIUXEvaluationError
+        ├── WCAGEvaluationError
+        └── GDPREvaluationError
+```
+
+Key Features:
+- Context preservation (card_id, stage, file paths in exception metadata)
+- Original exception chaining (never lose root cause)
+- Hierarchical catching (catch category or specific type)
+- Human-readable __str__ with context formatting
+- Decorator support (@wrap_exception) for automatic wrapping
+
+Design Decision - Why so many exception types:
+Specific exceptions enable:
+1. Intelligent retry logic (retry LLMRateLimitError, fail on LLMAuthenticationError)
+2. Alerting rules (page on PipelineConfigurationError, log LLMTimeoutError)
+3. Error categorization in monitoring (transient vs permanent failures)
+4. Granular exception handling (catch LLMException vs all errors)
+5. Clear code intent (seeing WCAGEvaluationError immediately tells you what failed)
 """
 
 from typing import Optional, Dict, Any
@@ -16,10 +89,38 @@ from typing import Optional, Dict, Any
 
 class ArtemisException(Exception):
     """
-    Base exception for all Artemis errors
+    Base exception for all Artemis errors with context preservation
 
-    All custom Artemis exceptions should inherit from this class.
-    This allows catching all Artemis-specific errors with a single handler.
+    Why it exists: Provides foundation for entire exception hierarchy. Every Artemis
+                   exception inherits from this to enable:
+                   1. Catch-all error handling (catch ArtemisException vs Exception)
+                   2. Context preservation (metadata attached to every exception)
+                   3. Exception chaining (original_exception never lost)
+                   4. Consistent error formatting across system
+
+    Design pattern: Base Exception with Context
+    Why this design: Adding context and original_exception fields to base class means
+                     ALL derived exceptions automatically get these capabilities without
+                     reimplementing logic.
+
+    Responsibilities:
+    - Store human-readable error message
+    - Preserve contextual metadata (card_id, stage, file paths, etc.)
+    - Chain original exception (root cause never lost)
+    - Format error string with context for logging
+    - Provide type-based exception catching
+
+    Use cases:
+    - Catch all Artemis errors: except ArtemisException
+    - Add context to errors: raise LLMError("API failed", context={"card_id": "001"})
+    - Wrap exceptions: raise FileReadError("Read failed", original_exception=e)
+    - Debug errors: exception.context shows all metadata, original_exception shows root cause
+
+    Context examples:
+    - {"card_id": "TASK-001", "stage": "architecture"}
+    - {"file_path": "/path/to/file.py", "operation": "read"}
+    - {"llm_model": "gpt-4", "prompt_length": 5000}
+    - {"developer": "developer-a", "test_status": "failed"}
     """
 
     def __init__(
@@ -29,12 +130,26 @@ class ArtemisException(Exception):
         original_exception: Optional[Exception] = None
     ):
         """
-        Initialize Artemis exception
+        Initialize Artemis exception with message, context, and original exception
+
+        Why needed: Captures all information needed for debugging - the WHAT (message),
+                    the WHERE/WHEN (context), and the WHY (original exception).
 
         Args:
-            message: Human-readable error message
-            context: Additional context about the error (card_id, stage, etc.)
-            original_exception: Original exception that was wrapped
+            message: Human-readable error message describing what went wrong
+            context: Dictionary with debugging metadata (card_id, stage, file paths, etc.)
+                    Automatically included in error string and logging
+            original_exception: Original exception if this is wrapping another exception
+                               Preserves root cause for debugging stack traces
+
+        Example:
+            raise LLMAPIError(
+                "Failed to call OpenAI API",
+                context={"model": "gpt-4", "timeout": 30, "attempt": 3},
+                original_exception=original_api_exception
+            )
+            # Output: "Failed to call OpenAI API (Context: model=gpt-4, timeout=30, attempt=3)
+            #         | Caused by: requests.exceptions.Timeout: Connection timeout"
         """
         super().__init__(message)
         self.message = message
@@ -42,7 +157,25 @@ class ArtemisException(Exception):
         self.original_exception = original_exception
 
     def __str__(self) -> str:
-        """Format exception message with context"""
+        """
+        Format exception as human-readable string with full context
+
+        Why needed: Default Exception.__str__ only shows message. This adds context
+                    and original exception for complete debugging picture.
+
+        What it does:
+        - Starts with error message
+        - Appends context dict as "key=value" pairs if present
+        - Appends original exception type and message if present
+        - Creates single-line string suitable for logging
+
+        Returns:
+            Formatted string: "Message (Context: key1=val1, key2=val2) | Caused by: Type: message"
+
+        Example output:
+            "Failed to read file (Context: file_path=/tmp/test.py, operation=read) |
+             Caused by: FileNotFoundError: [Errno 2] No such file or directory"
+        """
         msg = self.message
         if self.context:
             context_str = ", ".join(f"{k}={v}" for k, v in self.context.items())
@@ -436,19 +569,61 @@ def create_wrapped_exception(
 # Decorator factory version for use with @wrap_exception syntax
 def wrap_exception(artemis_exception_class: type[ArtemisException], message: str):
     """
-    Decorator factory to wrap exceptions raised in a function
+    Decorator to automatically wrap exceptions in Artemis exception types
+
+    Why needed: Eliminates repetitive try-except-wrap boilerplate in every method.
+                Instead of 10 lines of exception handling, just add one @decorator.
+
+    Design pattern: Decorator Pattern
+    Why this design: Allows adding exception wrapping behavior to functions without
+                     modifying their code. Follows DRY principle - write once, apply
+                     to many functions.
+
+    What it does:
+    - Wraps decorated function in try-except block
+    - On exception, wraps in specified Artemis exception type
+    - Preserves original exception in original_exception field
+    - Adds message prefix to exception
+    - Re-raises ArtemisExceptions without wrapping (prevents double-wrapping)
+
+    Args:
+        artemis_exception_class: Artemis exception type to wrap with (e.g., PipelineStageError)
+        message: Human-readable message prefix (e.g., "Stage execution failed")
+
+    Returns:
+        Decorator function that wraps exceptions
 
     Usage:
         @wrap_exception(PipelineStageError, "Stage execution failed")
         def execute(self, card, context):
-            # ... function code
+            # Any exception here becomes PipelineStageError
+            llm_call()  # LLM exception wrapped
+            file.read() # IO exception wrapped
+            return result
 
-    Args:
-        artemis_exception_class: The Artemis exception class to wrap with
-        message: Human-readable error message
+    Without decorator (11 lines):
+        def execute(self, card, context):
+            try:
+                llm_call()
+                file.read()
+                return result
+            except ArtemisException:
+                raise  # Don't double-wrap
+            except Exception as e:
+                raise PipelineStageError(
+                    f"Stage execution failed: {e}",
+                    original_exception=e
+                )
 
-    Returns:
-        Decorator function that wraps exceptions
+    With decorator (4 lines):
+        @wrap_exception(PipelineStageError, "Stage execution failed")
+        def execute(self, card, context):
+            llm_call()
+            file.read()
+            return result
+
+    Design note: Doesn't wrap ArtemisExceptions to prevent double-wrapping. If function
+                 raises LLMError, that exception passes through unchanged.
     """
     def decorator(func):
         def wrapper(*args, **kwargs):

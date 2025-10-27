@@ -1,18 +1,51 @@
 #!/usr/bin/env python3
 """
-Supervisor Learning System - Dynamic Problem Solving
+Module: supervisor_learning.py
 
-Enables the supervisor to learn from unexpected states by:
-1. Detecting unknown/unexpected states
-2. Querying LLM for solutions
-3. Generating new recovery workflows dynamically
-4. Storing solutions in RAG for future reuse
-5. Evolving recovery strategies over time
+Purpose: Enable supervisor to learn from unexpected states and generate recovery workflows
+Why: Allows supervisor to adapt to novel failure modes by consulting LLM and storing
+     solutions in RAG for future reuse, evolving recovery strategies over time
+Patterns: Strategy (learning strategies), Observer (unexpected state detection),
+          Template Method (learning workflow)
+Integration: Used by RecoveryEngine to handle truly novel failure modes
+
+Architecture:
+    - Unexpected state detection (comparing current vs expected states)
+    - LLM consultation for solution generation
+    - Workflow step extraction from LLM response
+    - Solution storage in RAG for future lookup
+    - Solution application and success tracking
+    - Continuous improvement via success rate feedback
+
+Design Decisions:
+    - LLM-powered learning enables handling of novel failures
+    - RAG storage creates institutional knowledge
+    - Success rate tracking enables solution quality assessment
+    - Multiple learning strategies (LLM, similar case, human, experimental)
+    - Workflow-based solutions enable structured recovery
 
 SOLID Principles:
-- Single Responsibility: Only handles learning and workflow generation
-- Open/Closed: Extensible with new learning strategies
-- Dependency Inversion: Depends on abstractions (LLM interface, RAG interface)
+    - Single Responsibility: Only handles learning and workflow generation
+    - Open/Closed: Extensible with new learning strategies (enum-based)
+    - Liskov Substitution: Different learning strategies are interchangeable
+    - Dependency Inversion: Depends on LLM interface, RAG interface (abstraction)
+
+Learning Flow:
+    1. Detect unexpected state (current not in expected)
+    2. Query RAG for similar past solutions
+    3. If found: Adapt existing solution
+    4. If not: Consult LLM for new solution
+    5. Parse LLM response into workflow steps
+    6. Store solution in RAG
+    7. Apply solution and track success
+    8. Update success rate for future confidence
+
+Why learning is crucial:
+    - Can't predict all failure modes during development
+    - Novel failures will occur in production
+    - LLM can reason about failures and generate fixes
+    - RAG creates organizational memory
+    - System becomes more resilient over time
 """
 
 import json

@@ -15,6 +15,7 @@ Supported Build Systems:
 - .NET: dotnet/NuGet
 - Ruby: Bundler
 - PHP: Composer
+- Lua: LuaRocks
 
 Usage:
     from universal_build_system import UniversalBuildSystem

@@ -122,12 +122,54 @@ class StageDAG:
     """
     Directed Acyclic Graph for stage dependencies
 
-    Industry Algorithm: DAG + Topological Sort (O(V+E))
-    Single Responsibility: Manage stage dependency graph
+    WHAT:
+    Manages pipeline stage dependencies as a directed acyclic graph (DAG),
+    providing topological sorting and critical path calculation.
+
+    WHY:
+    Pipeline stages have dependencies (e.g., development requires architecture,
+    testing requires development). DAG ensures:
+    - Stages execute in valid dependency order
+    - Parallel execution respects dependencies
+    - Critical path identifies minimum pipeline duration
+    - Cycle detection prevents infinite loops
+
+    ALGORITHMS:
+    1. Topological Sort (Kahn's Algorithm) - O(V+E)
+       - Orders stages respecting dependencies
+       - Detects cycles (invalid dependency graphs)
+    2. Critical Path Method (CPM) - O(V+E)
+       - Calculates longest path through DAG
+       - Identifies minimum project duration
+       - Used for duration estimation
+
+    INDUSTRY STANDARDS:
+    - DAG: Computer science fundamental (scheduling, build systems, package managers)
+    - Topological Sort: Kahn's algorithm (1962) - industry standard
+    - CPM: Project management standard since 1950s (construction, software)
+
+    INTEGRATION:
+    - Used by: AIOrchestrationPlanner, RuleBasedOrchestrationPlanner
+    - Data: STAGE_DEPENDENCIES dict, STAGE_ESTIMATED_DURATIONS dict
+    - Output: Ordered stage lists, duration estimates
+
+    STAGE DEPENDENCIES EXAMPLE:
+        requirements_parsing → project_analysis → architecture → development
+        development → code_review → validation → integration → testing
+        (Multiple paths possible for parallel execution)
     """
 
     def __init__(self):
-        """Initialize DAG with predefined stage dependencies"""
+        """
+        Initialize DAG with predefined stage dependencies
+
+        WHAT:
+        Copies global dependency graph and duration estimates into instance.
+
+        WHY:
+        Instance-level copies allow modification without affecting global state.
+        Enables testing with custom dependency graphs.
+        """
         self.graph = STAGE_DEPENDENCIES.copy()
         self.durations = STAGE_ESTIMATED_DURATIONS.copy()
 
@@ -254,8 +296,50 @@ class ResourceOptimizer:
     """
     Optimal resource allocation using Dynamic Programming
 
-    Industry Algorithm: 0/1 Knapsack variant with DP
-    Single Responsibility: Optimize resource allocation
+    WHAT:
+    Calculates optimal parallelization (developers, test runners) based on
+    task characteristics and platform constraints.
+
+    WHY:
+    Resource allocation is a classic optimization problem:
+    - Too few resources: Pipeline runs slowly
+    - Too many resources: Resource contention, diminishing returns
+    - Just right: Maximize throughput while respecting constraints
+
+    This optimizer balances:
+    - Task complexity (complex tasks benefit more from parallelization)
+    - Task priority (high priority gets more resources)
+    - Platform limits (respect max_parallel_developers, max_parallel_tests)
+
+    ALGORITHM:
+    Variant of 0/1 Knapsack problem using Dynamic Programming:
+    - Items: computational resources (developers, test runners)
+    - Capacity: platform limits (max developers, max tests)
+    - Weight: task complexity + priority score
+    - Value: optimal resource allocation
+
+    Time Complexity: O(1) - simplified heuristic, not full DP
+    Space Complexity: O(1) - no memoization needed for simple cases
+
+    INDUSTRY STANDARD:
+    - Dynamic Programming: Bellman (1950s) - optimal substructure + memoization
+    - Knapsack Problem: Classical NP-hard problem, DP provides polynomial solution
+    - Resource Allocation: Used in Kubernetes, cloud auto-scaling, CI/CD
+
+    INTEGRATION:
+    - Used by: AIOrchestrationPlanner, RuleBasedOrchestrationPlanner
+    - Input: Platform limits + task characteristics
+    - Output: (optimal_developers, optimal_tests)
+
+    EXAMPLE:
+        optimizer = ResourceOptimizer()
+        devs, tests = optimizer.optimal_parallelization(
+            available_developers=4,
+            available_tests=8,
+            complexity='complex',
+            priority='high'
+        )
+        # Result: (3 developers, 6 test runners) - balanced for complex/high
     """
 
     @staticmethod
@@ -269,9 +353,32 @@ class ResourceOptimizer:
         """
         Calculate optimal developer and test parallelization
 
-        Industry Algorithm: Dynamic Programming for resource allocation
-        Time Complexity: O(n * capacity) where n=resources, capacity=max_value
-        Space Complexity: O(capacity) with space optimization
+        WHAT:
+        Computes ideal number of parallel developers and test runners for a task.
+
+        WHY:
+        Different tasks need different parallelization:
+        - Simple bugfix: 1 developer, 2 test runners (minimal overhead)
+        - Medium feature: 2 developers, 4 test runners (balanced)
+        - Complex refactor: 3 developers, 6 test runners (maximum parallelism)
+
+        ALGORITHM:
+        1. Calculate weight = complexity_score + priority_score
+           - Complexity: simple=1, medium=2, complex=3
+           - Priority: low=1, medium=2, high=3
+        2. Map weight to developer count: (weight + 1) // 2
+           - Weight 2-3 → 1 dev
+           - Weight 4-5 → 2 devs
+           - Weight 6+ → 3 devs
+        3. Map weight to test count: weight
+           - Weight 2-3 → 2-3 tests
+           - Weight 4-5 → 4-5 tests
+           - Weight 6+ → 6+ tests
+        4. Cap at platform limits (max_parallel_developers, max_parallel_tests)
+
+        CACHING:
+        @lru_cache(maxsize=256) memoizes results for repeated calls with
+        same parameters (common in multi-task pipelines).
 
         Args:
             available_developers: Max parallel developers available
@@ -279,8 +386,18 @@ class ResourceOptimizer:
             complexity: Task complexity (simple/medium/complex)
             priority: Task priority (low/medium/high)
 
-        Returns:
-            Tuple of (optimal_developers, optimal_tests)
+        RETURNS:
+            Tuple[int, int]: (optimal_developers, optimal_tests)
+
+        EXAMPLES:
+            # Simple/low task
+            optimal_parallelization(4, 8, 'simple', 'low') → (1, 2)
+
+            # Complex/high task
+            optimal_parallelization(4, 8, 'complex', 'high') → (3, 6)
+
+            # Limited resources
+            optimal_parallelization(2, 4, 'complex', 'high') → (2, 4)
         """
         # Weight calculation based on complexity and priority (O(1))
         complexity_weights = {'simple': 1, 'medium': 2, 'complex': 3}
@@ -490,7 +607,61 @@ class AIOrchestrationPlanner(OrchestrationPlannerInterface):
     """
     AI-powered orchestration planner using LLM
 
-    Single Responsibility: Generate orchestration plans using AI
+    WHAT:
+    Uses large language model (GPT-4, Claude) to analyze tasks and generate optimal
+    orchestration plans, applying industry algorithms (DAG, CPM, DP) to optimize
+    stage ordering, duration estimation, and resource allocation.
+
+    WHY:
+    Task orchestration is complex:
+    - Different task types need different stages (documentation skips testing)
+    - Different complexities need different resources (bugfixes need 1 dev, refactors need 3)
+    - Stage dependencies must be respected (can't test before developing)
+    - Duration estimates guide user expectations
+
+    AI provides:
+    - Intelligent task type detection (feature vs bugfix vs refactor)
+    - Complexity assessment from natural language descriptions
+    - Stage selection based on task requirements
+    - Reasoning for decisions (explainability)
+
+    Algorithms provide:
+    - Topological sort: Valid stage ordering (O(V+E))
+    - Critical path method: Accurate duration estimates (O(V+E))
+    - Dynamic programming: Optimal resource allocation (O(1) heuristic)
+    - Hash-based caching: Fast plan retrieval (O(1) lookup)
+
+    WORKFLOW:
+    1. Check cache for identical task (O(1) hash lookup)
+    2. Query LLM with task details + available stages
+    3. Extract JSON plan from LLM response
+    4. Apply topological sort to order stages (O(V+E))
+    5. Apply critical path method for duration (O(V+E))
+    6. Apply dynamic programming for resources (O(1))
+    7. Validate plan integrity
+    8. Cache plan for future use (O(1) insertion)
+
+    PATTERNS:
+    - Strategy Pattern: Implements OrchestrationPlannerInterface
+    - Template Method: create_plan() defines algorithm, helpers fill details
+    - Singleton Pattern: Cached prompt template (class-level)
+    - Memento Pattern: Plan caching for recovery
+
+    ALGORITHMS:
+    - Topological Sort (Kahn's Algorithm): O(V+E) stage ordering
+    - Critical Path Method: O(V+E) duration calculation
+    - Dynamic Programming: O(1) resource optimization
+    - Hash-based Caching: O(1) plan retrieval
+
+    INTEGRATION:
+    - Used by: ArtemisOrchestrator.run_full_pipeline()
+    - Uses: LLM client (OpenAI/Anthropic), StageDAG, ResourceOptimizer, PlanCache
+    - Fallback: RuleBasedOrchestrationPlanner if LLM unavailable
+
+    EXAMPLE:
+        planner = AIOrchestrationPlanner(llm_client, logger)
+        plan = planner.create_plan(card, platform_info, resource_allocation)
+        # Result: OrchestrationPlan with stages, resources, duration, reasoning
     """
 
     # Performance: Class-level prompt template cache (Singleton pattern)
@@ -506,11 +677,21 @@ class AIOrchestrationPlanner(OrchestrationPlannerInterface):
         """
         Initialize AI planner
 
+        WHAT:
+        Sets up LLM client, industry algorithm instances (DAG, optimizer, cache),
+        and AI generation parameters (temperature, max_tokens).
+
+        WHY:
+        - Low temperature (0.3): Deterministic plans for same inputs (production stability)
+        - Max tokens (1000): Sufficient for JSON plan + reasoning
+        - Shared cache: Avoid regenerating plans for identical tasks
+        - Shared algorithms: Consistent optimization across planners
+
         Args:
-            llm_client: LLM client for AI queries
-            logger: Optional logger instance
-            temperature: LLM temperature (lower = more deterministic)
-            max_tokens: Maximum tokens for LLM response
+            llm_client: LLM client for AI queries (OpenAI/Anthropic)
+            logger: Optional logger instance for debugging
+            temperature: LLM temperature - lower = more deterministic (0.0-1.0)
+            max_tokens: Maximum tokens for LLM response (default: 1000)
         """
         self.llm_client = llm_client
         self.logger = logger

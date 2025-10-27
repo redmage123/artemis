@@ -237,6 +237,10 @@ def get_developer_prompt_path(agent_name: str) -> Path:
     """
     Get the prompt file path for a developer agent.
 
+    WHAT: Maps developer agent names to their corresponding prompt file paths.
+    WHY: Centralizes the mapping logic so agent names can vary while file locations stay consistent.
+         This allows flexible agent naming (dev-a, developer-a, a all map to same file).
+
     Args:
         agent_name: Name of the developer agent (e.g., "developer-a")
 
@@ -259,6 +263,10 @@ def get_developer_output_dir(agent_name: str) -> Path:
     """
     Get the output directory for a developer agent.
 
+    WHAT: Maps developer agent names to their dedicated output directories.
+    WHY: Separates outputs from different developers to prevent conflicts and enable
+         side-by-side comparison of their work during arbitration.
+
     Args:
         agent_name: Name of the developer agent
 
@@ -277,6 +285,10 @@ def ensure_directory_exists(path: Path) -> Path:
     """
     Ensure a directory exists, creating it if necessary.
 
+    WHAT: Creates directory and all parent directories if they don't exist.
+    WHY: Prevents file write failures by ensuring the directory structure exists first.
+         Returns path to enable method chaining for cleaner code.
+
     Args:
         path: Path to the directory
 
@@ -290,6 +302,10 @@ def ensure_directory_exists(path: Path) -> Path:
 def validate_config():
     """
     Validate that all required paths and configurations are accessible.
+
+    WHAT: Checks that critical directories exist and configuration values are valid.
+    WHY: Fail fast with clear errors during startup rather than cryptic failures later.
+         Validates numeric constants are in sensible ranges to prevent misconfiguration.
 
     Raises:
         FileNotFoundError: If required files are missing

@@ -1,26 +1,40 @@
 #!/usr/bin/env python3
 """
-Notebook Generation Stage - Creates Jupyter Notebooks as Project Artifacts
+Module: notebook_generation_stage.py
 
-Generates Jupyter notebooks for:
-- Data analysis workflows
-- Machine learning experiments
-- API demonstrations
-- Documentation with executable examples
-- Test result visualization
+Purpose: Generate Jupyter notebooks as project artifacts for data analysis,
+         machine learning, API demos, documentation, and test visualization.
+
+Why: Jupyter notebooks serve as executable documentation that combines code,
+     results, and narrative. They enable interactive exploration, reproducible
+     analysis, and knowledge transfer.
+
+Patterns:
+- Strategy Pattern: Different generation strategies per notebook type
+- Template Method: Common structure with customizable content
+- Builder Pattern: NotebookBuilder constructs notebooks incrementally
+- Factory Pattern: Creates appropriate notebook type based on context
+- Observer Pattern: Pipeline event notifications for stage lifecycle
+- Dispatch Table Pattern: O(1) notebook type lookup vs O(n) elif chain
+
+Integration:
+- Runs after DevelopmentStage or as standalone stage
+- Generates .ipynb files for data analysis, ML, API demos, testing, docs
+- Stores notebooks in output directory for user access
+- Sends notebook paths to IntegrationAgent via messenger
+- Notifies observers of stage events
 
 SOLID Principles:
-- Single Responsibility: Notebook generation only
-- Open/Closed: Extensible via templates
-- Liskov Substitution: Implements StageInterface
-- Interface Segregation: Minimal, focused interface
-- Dependency Inversion: Depends on abstractions
+- S: Single Responsibility - Only generates Jupyter notebooks
+- O: Open/Closed - Extensible to new notebook types via dispatch table
+- L: Liskov Substitution - Could implement PipelineStage (not currently)
+- I: Interface Segregation - Minimal interface (execute method)
+- D: Dependency Inversion - Depends on LoggerInterface abstraction
 
-Design Patterns:
-- Strategy Pattern: Different notebook generation strategies
-- Template Method: Common notebook structure with customizable content
-- Builder Pattern: Uses NotebookBuilder for construction
-- Factory Pattern: Creates appropriate notebook type based on context
+Performance Optimizations:
+- O(1) dispatch table for notebook type lookup vs O(n) elif chain
+- Single-pass text analysis for type inference
+- Generator expressions for line processing
 """
 
 from typing import Dict, Any, List, Optional
@@ -43,11 +57,31 @@ from agent_messenger import AgentMessenger
 
 class NotebookGenerationStage:
     """
-    Pipeline stage for generating Jupyter notebooks
+    Pipeline stage for generating Jupyter notebooks.
 
-    SOLID: Single Responsibility - Notebook generation only
-    Pattern: Strategy for different notebook types
-    Performance: O(1) notebook type dispatch
+    What it does: Uses Strategy Pattern to generate different types of Jupyter notebooks
+                  (data analysis, ML, API demos, tests, docs) based on card content.
+
+    Why it exists: Jupyter notebooks provide executable documentation combining code,
+                   results, and narrative. They enable interactive exploration and
+                   knowledge transfer.
+
+    Responsibilities:
+    - Infer notebook type from card title/description
+    - Dispatch to type-specific generator (Strategy Pattern)
+    - Build notebook using NotebookBuilder
+    - Write .ipynb files to output directory
+    - Send notebook paths to integration agent
+    - Notify observers of stage lifecycle events
+
+    Design Patterns:
+    - Strategy: Type-specific generators (_generate_data_analysis_notebook, etc.)
+    - Dispatch Table: O(1) lookup in _generator_dispatch vs O(n) elif chain
+    - Builder: NotebookBuilder constructs notebooks incrementally
+    - Observer: Notifies PipelineObservable of events
+
+    Performance: O(1) notebook type dispatch using dictionary
+    Why: Dictionary lookup is O(1) vs O(n) for elif chain of type checks
     """
 
     # Performance: Dict dispatch for O(1) notebook type lookup

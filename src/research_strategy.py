@@ -129,6 +129,12 @@ class GitHubResearchStrategy(ResearchStrategy):
     """
 
     def get_source_name(self) -> str:
+        """
+        Get the name of this research source.
+
+        Returns:
+            Human-readable name of the research source
+        """
         return "GitHub"
 
     def search(self, query: str, technologies: List[str], max_results: int = 5) -> List[ResearchExample]:
@@ -236,6 +242,12 @@ class HuggingFaceResearchStrategy(ResearchStrategy):
     """
 
     def get_source_name(self) -> str:
+        """
+        Get the name of this research source.
+
+        Returns:
+            Human-readable name of the research source
+        """
         return "HuggingFace"
 
     def search(self, query: str, technologies: List[str], max_results: int = 5) -> List[ResearchExample]:
@@ -338,6 +350,12 @@ class LocalExamplesResearchStrategy(ResearchStrategy):
         self.search_paths = search_paths or [".", "src", "examples"]
 
     def get_source_name(self) -> str:
+        """
+        Get the name of this research source.
+
+        Returns:
+            Human-readable name of the research source
+        """
         return "Local"
 
     def search(self, query: str, technologies: List[str], max_results: int = 5) -> List[ResearchExample]:

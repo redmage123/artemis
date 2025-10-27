@@ -263,6 +263,18 @@ class NotebookBuilder:
     Builder for creating complete Jupyter notebooks
 
     Design Pattern: Builder Pattern with fluent API
+
+    Why this exists: Provides programmatic Jupyter notebook generation for
+    data analysis and ML tasks, enabling Artemis to create executable
+    documentation and analysis workflows.
+
+    What it does:
+    - Creates valid .ipynb JSON structure
+    - Adds code and markdown cells via fluent API
+    - Manages cell metadata and execution counts
+    - Supports data analysis and ML templates
+
+    Performance: O(1) cell addition, lazy rendering
     """
 
     def __init__(self, title: Optional[str] = None):
@@ -270,7 +282,13 @@ class NotebookBuilder:
         Initialize notebook builder
 
         Args:
-            title: Optional notebook title (added as first markdown cell)
+            title: Optional notebook title (added as first markdown cell with timestamp)
+
+        What it initializes:
+        - Empty cells list
+        - Python 3 kernel metadata
+        - Language info for syntax highlighting
+        - Optional title cell with creation timestamp
         """
         self.cells: List[NotebookCell] = []
         self.metadata = {

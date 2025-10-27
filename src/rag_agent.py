@@ -478,6 +478,62 @@ class RAGAgent(DebugMixin):
 
         return stats
 
+    def search_code_examples(
+        self,
+        query: str,
+        language: Optional[str] = None,
+        framework: Optional[str] = None,
+        top_k: int = 5
+    ) -> List[Dict]:
+        """
+        Search for code examples in RAG database.
+
+        WHY: Provides code examples for RAG-enhanced validation.
+             Queries code_example artifacts stored from books, repos, documentation.
+
+        WHAT: Searches code examples with optional language/framework filtering.
+
+        Args:
+            query: Code snippet or description to search for
+            language: Filter by programming language (python, ruby, etc.)
+            framework: Filter by framework (django, rails, react, etc.)
+            top_k: Number of results to return
+
+        Returns:
+            List of code examples with metadata
+        """
+        # Build filters
+        filters = {}
+
+        if language:
+            filters['language'] = language
+
+        if framework:
+            filters['framework'] = framework
+
+        # Query code_example artifacts
+        results = self.query_similar(
+            query_text=query,
+            artifact_types=['code_example'],
+            top_k=top_k,
+            filters=filters if filters else None
+        )
+
+        # Format results for validation
+        formatted_results = []
+
+        for result in results:
+            formatted_results.append({
+                'code': result.get('content', ''),
+                'source': result.get('metadata', {}).get('source', 'unknown'),
+                'language': result.get('metadata', {}).get('language', language or 'python'),
+                'framework': result.get('metadata', {}).get('framework'),
+                'metadata': result.get('metadata', {}),
+                'score': result.get('similarity', 0.0)
+            })
+
+        return formatted_results
+
 
 # Convenience functions
 def create_rag_agent(db_path: str = "db") -> RAGAgent:

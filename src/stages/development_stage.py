@@ -83,7 +83,8 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         rag: RAGAgent,
         logger: LoggerInterface,
         observable: Optional['PipelineObservable'] = None,
-        supervisor: Optional['SupervisorAgent'] = None
+        supervisor: Optional['SupervisorAgent'] = None,
+        git_agent: Optional['GitAgent'] = None
     ):
         # Initialize PipelineStage
         PipelineStage.__init__(self)
@@ -104,6 +105,7 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self.logger = logger
         self.observable = observable
         self.supervisor = supervisor
+        self.git_agent = git_agent  # Git Agent for autonomous repository operations
         self.invoker = DeveloperInvoker(logger, observable=observable)
 
     def execute(self, card: Dict, context: Dict) -> Dict:
@@ -129,6 +131,20 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
 
         # Update progress: starting
         self.update_progress({"step": "starting", "progress_percent": 10})
+
+        # Create feature branch if git_agent is configured
+        feature_branch = None
+        if self.git_agent:
+            try:
+                card_title = card.get('title', 'feature').lower().replace(' ', '-')
+                feature_branch = self.git_agent.create_feature_branch(
+                    feature_name=card_title,
+                    card_id=card_id
+                )
+                self.logger.log(f"Created feature branch: {feature_branch}", "INFO")
+            except Exception as e:
+                self.logger.log(f"Failed to create feature branch: {e}", "WARNING")
+                # Continue without git operations
 
         # Register stage with supervisor
         if self.supervisor:
@@ -281,12 +297,39 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             # Update progress: complete
             self.update_progress({"step": "complete", "progress_percent": 100})
 
+            # Commit changes to git if git_agent is configured and we have successful developers
+            git_commit_hash = None
+            if self.git_agent and successful_devs:
+                try:
+                    # Determine scope from card
+                    scope = card.get('component', 'core')
+                    card_title = card.get('title', 'development work')
+
+                    # Commit all changes
+                    git_commit_hash = self.git_agent.commit_changes(
+                        message=f"implement {card_title}",
+                        commit_type="feat",
+                        scope=scope
+                    )
+                    self.logger.log(f"Committed changes: {git_commit_hash}", "INFO")
+
+                    # Optionally push if auto_push is enabled
+                    if self.git_agent.repo_config.auto_push:
+                        self.git_agent.push_changes(set_upstream=True)
+                        self.logger.log(f"Pushed changes to remote", "INFO")
+
+                except Exception as e:
+                    self.logger.log(f"Failed to commit changes: {e}", "WARNING")
+                    # Continue - git failure shouldn't fail the stage
+
             return {
                 "stage": "development",
                 "num_developers": num_developers,
                 "developers": developer_results,
                 "successful_developers": len(successful_devs),
-                "status": "COMPLETE"
+                "status": "COMPLETE",
+                "git_branch": feature_branch,
+                "git_commit": git_commit_hash
             }
 
         except Exception as e:

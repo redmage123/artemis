@@ -39,6 +39,12 @@ class ValidationStrategy:
     validator_class: str
 
     def to_dict(self):
+        """
+        Convert validation strategy to dictionary format.
+
+        Returns:
+            Dictionary representation of validation strategy for serialization
+        """
         return {
             'artifact_type': self.artifact_type.value,
             'workflow': self.workflow.value,

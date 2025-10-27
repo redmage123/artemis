@@ -93,6 +93,7 @@ class IntelligentRouter(DebugMixin):
         "project_analysis",
         "architecture",
         "project_review",
+        "research",  # Research stage - retrieves code examples before development
         "dependency_validation",
         "development",
         "arbitration",  # Adjudicator selects winner when multiple developers compete
@@ -154,11 +155,21 @@ class IntelligentRouter(DebugMixin):
         """
         Analyze task to extract requirements
 
+        Why this method: Uses AI or rule-based analysis to determine which pipeline
+        stages are needed for a task, optimizing resource usage by skipping
+        unnecessary stages.
+
+        How it works:
+        1. Extracts task title and description
+        2. If AI service available: Prompts LLM to classify requirements
+        3. If AI unavailable: Falls back to regex pattern matching
+        4. Returns structured TaskRequirements with detected needs
+
         Args:
             card: Kanban card with task details
 
         Returns:
-            TaskRequirements with analyzed needs
+            TaskRequirements with analyzed needs (frontend, backend, API, etc.)
         """
         task_title = card.get('title', '')
         task_description = card.get('description', '')
@@ -454,6 +465,12 @@ Complexity Classification (CRITICAL - be conservative, err on the side of SIMPLE
         else:
             stage_decisions['project_review'] = StageDecision.SKIP
             reasoning_parts.append("Skipping project review for simple task")
+
+        # Research stage - always run to gather task-specific code examples
+        # Searches GitHub, HuggingFace, and local sources for relevant examples
+        # Provides context-rich examples to developers before implementation
+        stage_decisions['research'] = StageDecision.REQUIRED
+        reasoning_parts.append("Research stage retrieves task-specific code examples for developers")
 
         # Dependency validation - only if external dependencies detected
         if requirements.has_external_dependencies:

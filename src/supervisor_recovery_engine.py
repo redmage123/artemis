@@ -1,15 +1,41 @@
 #!/usr/bin/env python3
 """
-Recovery Engine for Supervisor
+Module: supervisor_recovery_engine.py
 
-Single Responsibility: Handle failure recovery strategies
+Purpose: Handle failure recovery strategies for crashed and hung agents
+Why: Extracted from SupervisorAgent to follow Single Responsibility Principle,
+     focusing solely on recovery logic without monitoring
+Patterns: Strategy (multiple recovery approaches), Chain of Responsibility (fallback chain),
+          Template Method (common recovery workflow)
+Integration: Used by SupervisorAgent to recover from detected health issues
 
-Extracted from SupervisorAgent to follow Single Responsibility Principle.
+Architecture:
+    - Multiple recovery strategies tried in sequence
+    - LLM-powered auto-fix for intelligent error resolution
+    - RAG-based solution lookup for known issues
+    - Learning engine integration for solution storage
+    - Fallback chain: LLM fix → retry → defaults → skip → manual
 
-Design Patterns:
-- Strategy Pattern: Multiple recovery strategies
-- Chain of Responsibility: Try strategies in sequence
-- Template Method: Common recovery workflow
+Design Decisions:
+    - Separated from monitoring (HealthMonitor detects, this recovers)
+    - Strategy pattern allows easy addition of new recovery methods
+    - Chain of Responsibility ensures graceful degradation
+    - LLM integration enables intelligent auto-fix
+    - Learning engine captures successful solutions
+
+Recovery Strategies (in order):
+    1. LLM auto-fix: Analyze error, suggest code fix, apply and restart
+    2. JSON parsing fix: Extract/clean malformed JSON responses
+    3. Fallback retry: Exponential backoff retry
+    4. Default values: Substitute defaults for missing data
+    5. Skip stage: Skip non-critical stages
+    6. Manual intervention: Request human help
+
+Design philosophy: "Fail gracefully, learn continuously"
+    - Try automated fixes first
+    - Fall back to simpler strategies
+    - Learn from successful fixes
+    - Request human help only as last resort
 """
 
 import re
@@ -36,23 +62,50 @@ class RecoveryStrategy:
 
 class RecoveryEngine:
     """
-    Handle failure recovery for crashed and hung agents
+    Handle failure recovery for crashed and hung agents.
+
+    Why it exists: Provides intelligent, multi-strategy recovery from failures,
+    maximizing pipeline resilience through automated fixes before falling back
+    to manual intervention.
+
+    Design pattern: Strategy + Chain of Responsibility + Template Method
 
     Responsibilities:
-    - Recover crashed agents
-    - Recover hung agents
-    - Handle unexpected states
-    - Apply recovery strategies (retry, defaults, skip, LLM auto-fix)
-    - Restart failed stages
+    - Recover crashed agents via error analysis and code fixes
+    - Recover hung agents via termination and restart
+    - Handle unexpected states via learning engine
+    - Apply recovery strategies in fallback chain
+    - Restart failed stages with fixes applied
+    - Track recovery statistics and success rates
 
     Recovery Strategy Chain:
-    1. JSON parsing fix
-    2. Fallback retry with backoff
-    3. Default values substitution
-    4. Skip non-critical stage
-    5. Manual intervention
+    1. LLM auto-fix: Analyze error, extract file/line, suggest fix
+    2. JSON parsing fix: Extract JSON from markdown, clean formatting
+    3. Fallback retry: Exponential backoff (2^n seconds)
+    4. Default values: Substitute sensible defaults for missing keys
+    5. Skip stage: Skip non-critical stages (ui_ux, docs, etc.)
+    6. Manual intervention: Request human assistance
 
-    Thread-Safety: Not thread-safe (assumes single-threaded recovery)
+    Integration points:
+    - LLM client: For intelligent error analysis and fixes
+    - RAG agent: For querying similar past issues
+    - Learning engine: For storing successful solutions
+    - State machine: For state rollback and restart
+    - Messenger: For manual intervention alerts
+
+    Statistics tracked:
+    - crashes_recovered, hangs_recovered
+    - json_fixes, retries, defaults_used, stages_skipped
+    - llm_fixes, manual_interventions
+    - success_rate
+
+    Thread-safety: Not thread-safe (assumes single-threaded supervisor)
+
+    Design philosophy: Automated recovery with learning
+    - Try automated fixes before human intervention
+    - Learn from successful fixes for future use
+    - Graceful degradation through fallback chain
+    - Preserve context for manual intervention when needed
     """
 
     def __init__(

@@ -43,7 +43,28 @@ class WorkflowHandler(ABC):
     """
     Abstract base class for workflow handlers
 
-    All handlers follow the same interface (Interface Segregation Principle)
+    WHAT:
+    Base interface for all workflow action handlers. Defines contract that every
+    recovery action must implement: a single handle() method that executes the
+    action and returns success/failure.
+
+    WHY:
+    Interface Segregation Principle: All handlers need only one method (handle).
+    This minimal interface makes handlers:
+    - Easy to implement (just one method)
+    - Easy to test (mock the handle method)
+    - Easy to compose (chain handlers in workflows)
+    - Polymorphic (any handler can be used in any workflow)
+
+    PATTERNS:
+    - Template Method: Subclasses implement handle() logic
+    - Strategy Pattern: Different handlers are different recovery strategies
+    - Command Pattern: Each handler encapsulates an action
+
+    INTEGRATION:
+    - Implemented by: 30+ handler classes (KillHangingProcessHandler, etc.)
+    - Used by: Workflow.execute() to run action sequences
+    - Created by: WorkflowHandlerFactory.create()
     """
 
     @abstractmethod
@@ -51,11 +72,25 @@ class WorkflowHandler(ABC):
         """
         Handle the workflow action
 
-        Args:
-            context: Context dictionary with action parameters
+        WHAT:
+        Executes recovery action (e.g., kill process, free memory, retry LLM request).
 
-        Returns:
-            True if action succeeded, False otherwise
+        WHY:
+        Uniform interface enables workflow execution engine to run any action
+        without knowing implementation details. Handlers can be added, removed,
+        or swapped without changing workflow execution logic.
+
+        Args:
+            context: Context dictionary with action parameters (e.g., pid, file_path, timeout)
+
+        RETURNS:
+            bool: True if action succeeded, False if action failed
+
+        EXAMPLE:
+            handler = KillHangingProcessHandler()
+            success = handler.handle({'pid': 12345})
+            if success:
+                print("Process killed successfully")
         """
         pass
 
@@ -598,9 +633,42 @@ class WorkflowHandlerFactory:
     """
     Factory for creating workflow handlers
 
-    Implements Factory Pattern for flexible handler creation
-    Makes it easy to add new handlers without modifying existing code
-    (Open/Closed Principle)
+    WHAT:
+    Creates handler instances by name using registry pattern. Supports dynamic
+    registration of new handlers without modifying factory code.
+
+    WHY:
+    Open/Closed Principle: Can add new handlers by registering them, without
+    modifying this class. Factory provides:
+    - Centralized handler creation
+    - Type safety (validates handler extends WorkflowHandler)
+    - Discovery (get_all_actions lists available handlers)
+    - Extensibility (register custom handlers)
+
+    PATTERNS:
+    - Factory Pattern: Creates objects based on identifier (action_name)
+    - Registry Pattern: Maintains map of name → handler class
+    - Singleton Pattern: Factory is stateless, can be used as singleton
+
+    INTEGRATION:
+    - Used by: artemis_workflows.py WorkflowBuilder
+    - Used by: WorkflowHandlers backward compatibility adapter
+    - Registered handlers: 30+ action handlers
+
+    USAGE:
+        # Create handler
+        handler = WorkflowHandlerFactory.create("kill_hanging_process")
+        success = handler.handle({'pid': 12345})
+
+        # Register custom handler
+        class CustomHandler(WorkflowHandler):
+            def handle(self, context): ...
+
+        WorkflowHandlerFactory.register("custom_action", CustomHandler)
+
+        # List all actions
+        actions = WorkflowHandlerFactory.get_all_actions()
+        # ['kill_hanging_process', 'increase_timeout', ...]
     """
 
     # Handler registry - maps action names to handler classes

@@ -17,6 +17,17 @@ class LLMConfig:
     LLM Provider Configuration
 
     Controls which LLM provider and model to use for code generation.
+
+    Why this exists: Centralizes all LLM-related configuration in one place,
+    making it easy to switch providers or models without code changes.
+
+    Attributes:
+        provider: LLM provider name (openai, anthropic, or mock)
+        model: Specific model to use (e.g., gpt-4o, claude-3-opus). If None, uses provider default
+        api_key: API key for authentication. If None, reads from environment variables
+        max_tokens_per_request: Maximum tokens to request per API call (prevents runaway costs)
+        temperature: Sampling temperature (0.0-1.0). Lower = more deterministic, higher = more creative
+        cost_limit_usd: Optional daily cost limit to prevent overspending
     """
     provider: str = "openai"  # openai, anthropic, or mock
     model: Optional[str] = None  # Specific model (e.g., gpt-4o, claude-3-opus)
@@ -33,6 +44,18 @@ class StorageConfig:
 
     Controls where Artemis stores RAG database, checkpoints, and temporary files.
     Paths are relative to .agents/agile directory unless overridden by env vars.
+
+    Why this exists: Provides flexible storage configuration for different deployment
+    environments (local dev, CI/CD, production) without code changes.
+
+    Attributes:
+        rag_db_type: Type of database for RAG (sqlite for local dev, postgres for production)
+        rag_db_path: File path for SQLite database (relative to .agents/agile)
+        chromadb_host: PostgreSQL host for ChromaDB vector storage (production only)
+        chromadb_port: PostgreSQL port for ChromaDB vector storage
+        temp_dir: Directory for temporary files (cleared periodically)
+        checkpoint_dir: Directory for pipeline checkpoints (enables resume on failure)
+        state_dir: Directory for persistent state (kanban board, metrics)
     """
     rag_db_type: str = "sqlite"  # sqlite or postgres
     rag_db_path: Optional[str] = "db"  # Path for SQLite (relative to .agents/agile)
@@ -115,6 +138,17 @@ def register_configs():
     Register all configs with Hydra ConfigStore
 
     This allows Hydra to provide type-safe config composition.
+
+    Why this exists: Enables Hydra's powerful configuration composition features,
+    allowing users to override specific config groups via CLI or config files.
+
+    What it does:
+    - Registers main ArtemisConfig as default config schema
+    - Registers each config group (llm, storage, pipeline, etc.) separately
+    - Enables CLI overrides like: python app.py llm.provider=anthropic
+    - Provides IDE autocomplete and type checking for config values
+
+    When called: Automatically on module import (see bottom of file)
     """
     cs = ConfigStore.instance()
 

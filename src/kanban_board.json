@@ -16000,6 +16000,21 @@
             "parent_card_id": "card-20251023065355"
           },
           "column": "backlog"
+        },
+        {
+          "card_id": "card-notebook-demo-2025",
+          "title": "Create Jupyter Notebook Demo of Artemis Features",
+          "description": "Create a comprehensive Jupyter notebook that demonstrates Artemis and its features as a slide-based presentation.\n\nRequirements:\n- Use Jupyter notebook with slide capabilities (nbconvert)\n- Create a professional slide deck showcasing Artemis\n- Include sections for:\n  1. Introduction to Artemis\n  2. Core Architecture (Supervisor, Stages, Orchestrator)\n  3. Intelligent Router with Advanced Features\n  4. Thermodynamic Computing (uncertainty quantification)\n  5. Dynamic Pipeline (runtime adaptability)\n  6. Two-Pass Pipeline (fast feedback + refinement)\n  7. Hybrid AI Approach (cost optimization)\n  8. Live demo with code examples\n  9. Real metrics and visualizations\n  10. Conclusion and Q&A\n\n- Use examples from .artemis_data/developer_output/developer-b/notebooks as templates\n- Include Chart.js or matplotlib visualizations\n- Show actual code examples that run\n- Include performance metrics\n- Make it presentation-ready (slides mode)\n- Add speaker notes where appropriate\n- Ensure all code cells execute successfully\n- Include visual diagrams where helpful\n\nOutput:\n- artemis_feature_demo.ipynb in the project root\n- Should be ready to present with: jupyter nbconvert --to slides --post serve artemis_feature_demo.ipynb\n",
+          "column": "backlog",
+          "metadata": {
+            "created_at": "2025-10-26T12:41:38.025742",
+            "complexity": "moderate",
+            "task_type": "demo",
+            "estimated_hours": 16,
+            "has_documentation": true,
+            "requires_visualization": true,
+            "has_code_examples": true
+          }
         }
       ]
     },

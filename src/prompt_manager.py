@@ -591,6 +591,15 @@ Your core principles:
 
 {CODING_STANDARDS_ALL_LANGUAGES}
 
+**NOTEBOOK TASKS:**
+If the task requires creating Jupyter notebooks (.ipynb files):
+- Create notebooks in notebooks/ directory
+- Focus on content quality, visualizations, and narrative
+- Do NOT create pytest tests for notebook tasks
+- Validation checks notebook structure only (valid JSON, cells exist)
+- Optional: Create src/ directory only if notebook needs helper modules
+- Tests field can be null or minimal for notebook deliverables
+
 You MUST respond with valid JSON only - no explanations, no markdown, just pure JSON.""",
         user_template="""Implement the following task:
 

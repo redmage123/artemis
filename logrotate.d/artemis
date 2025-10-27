@@ -1,0 +1,84 @@
+# Artemis logrotate configuration
+# Install to: /etc/logrotate.d/artemis
+#
+# Installation:
+#   sudo cp logrotate.d/artemis /etc/logrotate.d/artemis
+#   sudo chmod 644 /etc/logrotate.d/artemis
+#   sudo chown root:root /etc/logrotate.d/artemis
+
+# Main Artemis logs
+/var/log/artemis/*.log {
+    # Rotate daily
+    daily
+
+    # Keep 30 days of logs
+    rotate 30
+
+    # Compress old logs (saves disk space)
+    compress
+
+    # Delay compression by one rotation (keeps most recent backup uncompressed)
+    delaycompress
+
+    # Don't error if log file is missing
+    missingok
+
+    # Don't rotate empty logs
+    notifempty
+
+    # Create new log file with these permissions after rotation
+    create 0644 bbrelin bbrelin
+
+    # Use date as suffix (creates logs like artemis.log-20251027)
+    dateext
+    dateformat -%Y%m%d
+
+    # If log file size exceeds 100M, rotate immediately regardless of daily schedule
+    size 100M
+
+    # Post-rotation script (optional - uncomment if needed)
+    # postrotate
+    #     # Send HUP signal to Artemis to reopen log files
+    #     systemctl reload artemis.service || true
+    # endscript
+}
+
+# Temporary fallback logs
+/tmp/artemis_logs/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 bbrelin bbrelin
+    dateext
+    dateformat -%Y%m%d
+    size 50M
+
+    # Clean up old temp logs more aggressively
+    maxage 7
+}
+
+# Upload script logs
+/tmp/*_upload*.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+    size 10M
+    maxage 30
+}
+
+# RAG database logs (if any)
+/home/bbrelin/src/repos/artemis/.artemis_data/logs/*.log {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 bbrelin bbrelin
+    size 50M
+}

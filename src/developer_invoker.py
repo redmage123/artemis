@@ -16,6 +16,7 @@ import os
 
 from artemis_stage_interface import LoggerInterface
 from standalone_developer_agent import StandaloneDeveloperAgent
+from validated_developer_mixin import create_validated_developer_agent
 from artemis_constants import get_developer_prompt_path
 from pipeline_observer import PipelineObservable, EventBuilder
 from environment_context import get_environment_context_short
@@ -114,13 +115,22 @@ class DeveloperInvoker(DebugMixin):
         # Parse requirements for validation
         parsed_requirements = self._parse_requirements_for_task(card, adr_content)
 
-        # Create standalone developer agent
-        agent = StandaloneDeveloperAgent(
+        # Create validated developer agent with Layer 3 (Validation Pipeline)
+        # This enables continuous validation during code generation to reduce hallucinations
+        enable_validation = os.getenv("ARTEMIS_ENABLE_VALIDATION", "true").lower() == "true"
+
+        # Enable RAG-enhanced validation (Layer 3.5) - validates against proven code patterns
+        # from RAG database (books, documentation, real codebases)
+        enable_rag_validation = os.getenv("ARTEMIS_ENABLE_RAG_VALIDATION", "true").lower() == "true"
+
+        agent = create_validated_developer_agent(
             developer_name=developer_name,
             developer_type=developer_type,
             llm_provider=llm_provider,
             logger=self.logger,
-            rag_agent=rag_agent  # Pass RAG agent for DEPTH prompts
+            rag_agent=rag_agent,  # Pass RAG agent for DEPTH prompts and RAG validation
+            enable_validation=enable_validation,  # Layer 3: Validation Pipeline
+            enable_rag_validation=enable_rag_validation  # Layer 3.5: RAG-Enhanced Validation
         )
 
         # Execute implementation with parsed requirements
@@ -141,6 +151,20 @@ class DeveloperInvoker(DebugMixin):
                       developer=developer_name,
                       success=result.get('success', False),
                       files_created=len(result.get('files', [])))
+
+        # Collect validation statistics from Layer 3 (Validation Pipeline)
+        if enable_validation and hasattr(agent, 'get_validation_stats'):
+            validation_stats = agent.get_validation_stats()
+            result['validation_stats'] = validation_stats
+
+            # Log validation summary
+            if validation_stats.get('total_validations', 0) > 0:
+                self.logger.log(
+                    f"📊 {developer_name} validation: "
+                    f"{validation_stats.get('passed', 0)}/{validation_stats.get('total_validations', 0)} passed, "
+                    f"{validation_stats.get('regenerations', 0)} regenerations",
+                    "INFO"
+                )
 
         self.logger.log(f"✅ {developer_name} completed", "SUCCESS")
 
