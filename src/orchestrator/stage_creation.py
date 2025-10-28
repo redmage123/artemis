@@ -262,7 +262,6 @@ def create_default_stages(orchestrator: Any) -> List[PipelineStage]:
             orchestrator.board,
             orchestrator.test_runner,
             orchestrator.logger,
-            messenger=orchestrator.messenger,
             observable=orchestrator.observable,
             supervisor=orchestrator.supervisor
         ),
