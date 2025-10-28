@@ -34,6 +34,13 @@ from validated_developer.validation_strategies import (
     ValidationStrategyInitializer
 )
 
+# Import intelligent validation orchestrator
+from validation import (
+    get_validation_integration,
+    get_validation_strategy_for_task,
+    ValidationStrategy
+)
+
 
 class ValidatedDeveloperMixin:
     """
@@ -58,19 +65,22 @@ class ValidatedDeveloperMixin:
         self,
         strict_mode: bool = True,
         enable_rag_validation: bool = True,
-        enable_self_critique: bool = True
+        enable_self_critique: bool = True,
+        use_intelligent_strategy: bool = True
     ):
         """
-        Initialize validation pipeline (Layers 3, 3.5, and 5).
+        Initialize validation pipeline (Layers 3, 3.5, and 5) with intelligent strategy selection.
 
         WHY: Adds continuous validation during code generation to catch
              hallucinations before they propagate through the entire artifact.
+             Now uses intelligent orchestrator to select optimal validation techniques.
 
         Args:
             strict_mode: If True, fail on any validation error.
                         If False, only fail on critical errors.
             enable_rag_validation: If True, enable RAG-enhanced validation (Layer 3.5).
             enable_self_critique: If True, enable self-critique validation (Layer 5).
+            use_intelligent_strategy: If True, use intelligent orchestrator for strategy selection.
         """
         # Guard: Already initialized
         if hasattr(self, 'validation_pipeline'):
@@ -99,26 +109,29 @@ class ValidatedDeveloperMixin:
             'rag_warnings': 0,
             'self_critique_validations': 0,
             'self_critique_failures': 0,
-            'self_critique_regenerations': 0
+            'self_critique_regenerations': 0,
+            'intelligent_strategy_uses': 0,
+            'orchestrator_profile': 'standard'
         }
 
-        # Initialize validation strategies (Layer 3.5 and Layer 5)
-        framework = self._get_framework_from_context()
-
-        self.rag_strategy = ValidationStrategyInitializer.initialize_rag_strategy(
-            enable_rag=enable_rag_validation,
-            rag_agent=rag_agent,
-            framework=framework,
-            logger=logger
-        )
-
-        self.critique_strategy = ValidationStrategyInitializer.initialize_self_critique_strategy(
-            enable_critique=enable_self_critique,
-            strict_mode=strict_mode,
-            llm_client=llm_client,
-            rag_agent=rag_agent,
-            logger=logger
-        )
+        # Get intelligent validation strategy if enabled
+        if use_intelligent_strategy:
+            self._select_intelligent_validation_strategy(
+                enable_rag_validation,
+                enable_self_critique,
+                strict_mode,
+                logger
+            )
+        else:
+            # Fallback to manual strategy initialization
+            self._init_manual_validation_strategies(
+                enable_rag_validation,
+                enable_self_critique,
+                strict_mode,
+                llm_client,
+                rag_agent,
+                logger
+            )
 
         # Initialize event notifier
         observable = getattr(self, 'observable', None)
@@ -126,7 +139,144 @@ class ValidatedDeveloperMixin:
         self.event_notifier = ValidationEventNotifier(observable, developer_name, logger)
 
         if logger:
-            logger.log("Validation Pipeline initialized (Layers 3, 3.5, 5)", "INFO")
+            if use_intelligent_strategy:
+                logger.log(f"Validation Pipeline initialized with intelligent orchestrator ({self.validation_stats['orchestrator_profile']} profile)", "INFO")
+            else:
+                logger.log("Validation Pipeline initialized (Layers 3, 3.5, 5)", "INFO")
+
+    def _select_intelligent_validation_strategy(
+        self,
+        enable_rag: bool,
+        enable_critique: bool,
+        strict_mode: bool,
+        logger: Any
+    ) -> None:
+        """
+        Use intelligent orchestrator to select optimal validation strategy.
+
+        WHY: Automatically selects appropriate validation techniques based on task complexity
+        RESPONSIBILITY: Get strategy from orchestrator, configure validation accordingly
+        """
+        # Extract task context from agent
+        code_size = self._estimate_code_size()
+        is_critical = self._is_critical_task()
+        has_tests = self._has_tests()
+        dependencies = self._count_dependencies()
+
+        # Get intelligent validation strategy
+        try:
+            strategy = get_validation_strategy_for_task(
+                task_type="code_generation",
+                code_size=code_size,
+                is_critical=is_critical,
+                has_tests=has_tests,
+                dependencies=dependencies,
+                logger=logger
+            )
+
+            # Store strategy info
+            self.validation_strategy = strategy
+            self.validation_stats['intelligent_strategy_uses'] += 1
+            self.validation_stats['orchestrator_profile'] = strategy.profile.value
+
+            # Configure validation based on selected techniques
+            llm_client = getattr(self, 'llm_client', None)
+            rag_agent = getattr(self, 'rag', None)
+            framework = self._get_framework_from_context()
+
+            # Enable RAG validation if orchestrator recommends it
+            use_rag = "rag_validation" in strategy.techniques and enable_rag
+            self.rag_strategy = ValidationStrategyInitializer.initialize_rag_strategy(
+                enable_rag=use_rag,
+                rag_agent=rag_agent,
+                framework=framework,
+                logger=logger
+            )
+
+            # Enable self-critique if orchestrator recommends it
+            use_critique = "self_critique" in strategy.techniques and enable_critique
+            self.critique_strategy = ValidationStrategyInitializer.initialize_self_critique_strategy(
+                enable_critique=use_critique,
+                strict_mode=strict_mode,
+                llm_client=llm_client,
+                rag_agent=rag_agent,
+                logger=logger
+            )
+
+            if logger:
+                logger.log(f"Intelligent validation strategy selected: {strategy.profile.value}", "INFO")
+                logger.log(f"  Techniques: {', '.join(strategy.techniques)}", "INFO")
+                logger.log(f"  Expected hallucination reduction: {strategy.expected_reduction:.1%}", "INFO")
+
+        except Exception as e:
+            # Fallback to manual initialization on error
+            if logger:
+                logger.log(f"Error selecting intelligent strategy: {e}, using manual initialization", "WARNING")
+
+            llm_client = getattr(self, 'llm_client', None)
+            rag_agent = getattr(self, 'rag', None)
+            self._init_manual_validation_strategies(
+                enable_rag,
+                enable_critique,
+                strict_mode,
+                llm_client,
+                rag_agent,
+                logger
+            )
+
+    def _init_manual_validation_strategies(
+        self,
+        enable_rag: bool,
+        enable_critique: bool,
+        strict_mode: bool,
+        llm_client: Any,
+        rag_agent: Any,
+        logger: Any
+    ) -> None:
+        """Initialize validation strategies manually (fallback)."""
+        framework = self._get_framework_from_context()
+
+        self.rag_strategy = ValidationStrategyInitializer.initialize_rag_strategy(
+            enable_rag=enable_rag,
+            rag_agent=rag_agent,
+            framework=framework,
+            logger=logger
+        )
+
+        self.critique_strategy = ValidationStrategyInitializer.initialize_self_critique_strategy(
+            enable_critique=enable_critique,
+            strict_mode=strict_mode,
+            llm_client=llm_client,
+            rag_agent=rag_agent,
+            logger=logger
+        )
+
+    def _estimate_code_size(self) -> int:
+        """Estimate code size from task context."""
+        # Try to extract from task description or context
+        task_desc = getattr(self, 'task_description', '')
+
+        # Simple heuristic: longer descriptions suggest larger code
+        if len(task_desc) > 500:
+            return 300
+        if len(task_desc) > 200:
+            return 150
+        return 50
+
+    def _is_critical_task(self) -> bool:
+        """Determine if current task is critical."""
+        task_desc = getattr(self, 'task_description', '').lower()
+        return any(keyword in task_desc for keyword in ['critical', 'security', 'auth', 'payment'])
+
+    def _has_tests(self) -> bool:
+        """Check if tests exist or will be generated."""
+        # Assume TDD workflow includes tests
+        return True
+
+    def _count_dependencies(self) -> int:
+        """Estimate dependency count."""
+        # Default estimate
+        return 5
 
     def _validated_llm_query(
         self,

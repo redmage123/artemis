@@ -11,6 +11,8 @@ Uses AIQueryService for KG-First approach to reduce token usage (~750 tokens/tas
 
 import json
 import re
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from environment_context import get_environment_context_short
@@ -24,6 +26,127 @@ try:
     AI_QUERY_SERVICE_AVAILABLE = True
 except ImportError:
     AI_QUERY_SERVICE_AVAILABLE = False
+
+
+@lru_cache(maxsize=1)
+def _load_project_analysis_system_prompt() -> str:
+    """
+    Load project analysis system prompt from dedicated file.
+
+    WHY: Centralize prompts in files for easy maintenance
+    PATTERNS: Guard clauses, early returns, fallback handling
+
+    Returns:
+        System prompt template for project analysis
+    """
+    prompt_file = Path(__file__).parent.parent.parent / "prompts" / "project_analysis_system_prompt.md"
+
+    # Guard: File doesn't exist
+    if not prompt_file.exists():
+        # Fallback to embedded prompt for backward compatibility
+        return """You are an expert Project Analysis AI specializing in identifying issues before implementation.
+
+**Multiple Expert Perspectives:**
+Apply the viewpoints of:
+- Senior Software Architect (15+ years) - focusing on architectural soundness and scalability
+- Security Engineer - identifying potential vulnerabilities and compliance issues
+- QA Lead - considering testability, edge cases, and quality assurance
+- DevOps Engineer - evaluating deployment, monitoring, and operational concerns
+- UX Designer - assessing user experience and accessibility requirements
+
+**Success Criteria:**
+Your analysis MUST:
+1. Identify CRITICAL issues (security, compliance, data loss risks)
+2. Highlight HIGH-priority improvements (testing, performance, scalability)
+3. Suggest MEDIUM-priority enhancements (code quality, maintainability)
+4. Provide specific, actionable recommendations (not generic advice)
+5. Return valid JSON matching the expected schema
+6. Avoid AI clichés like "robust", "delve", "leverage"
+
+**Self-Validation:**
+Before responding, ask yourself:
+1. Did I identify all security vulnerabilities?
+2. Are my recommendations specific and actionable?
+3. Did I consider all edge cases and failure scenarios?
+4. Is my JSON properly formatted?
+5. Did I avoid generic advice and AI clichés?
+
+If any answer is NO, revise your analysis."""
+
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        return f.read()
+
+
+@lru_cache(maxsize=1)
+def _load_project_analysis_user_prompt() -> str:
+    """
+    Load project analysis user prompt from dedicated file.
+
+    WHY: Centralize prompts in files for easy maintenance
+    PATTERNS: Guard clauses, early returns, fallback handling
+
+    Returns:
+        User prompt template for project analysis
+    """
+    prompt_file = Path(__file__).parent.parent.parent / "prompts" / "project_analysis_user_prompt.md"
+
+    # Guard: File doesn't exist
+    if not prompt_file.exists():
+        # Fallback to embedded prompt for backward compatibility
+        return """Analyze the following task BEFORE implementation across these dimensions:
+
+1. **Scope & Requirements**: Are requirements clear and complete?
+2. **Security**: Any security vulnerabilities or compliance issues?
+3. **Performance & Scalability**: Performance concerns or bottlenecks?
+4. **Testing Strategy**: Is testing approach comprehensive?
+5. **Error Handling**: Are edge cases and failures addressed?
+6. **Architecture**: Architectural concerns or design issues?
+7. **Dependencies**: External dependencies or integration risks?
+8. **Accessibility**: WCAG compliance and UX considerations?
+
+**Task Title:** {title}
+**Description:** {description}
+**Priority:** {priority}
+**Story Points:** {points}
+**Acceptance Criteria:**
+{acceptance_criteria}
+
+{context_summary}
+
+{environment_context}
+
+**Task Breakdown:**
+1. Read the task requirements carefully
+2. Analyze each dimension systematically
+3. Identify issues categorized by severity (CRITICAL/HIGH/MEDIUM)
+4. Provide specific, actionable recommendations
+5. Self-validate your analysis before responding
+
+**Response Format (JSON only):**
+{{
+  "issues": [
+    {{
+      "category": "Security|Performance|Testing|Architecture|Dependencies|Accessibility|Scope|Error Handling",
+      "severity": "CRITICAL|HIGH|MEDIUM",
+      "description": "Brief issue description",
+      "impact": "What happens if not addressed",
+      "suggestion": "Specific actionable fix",
+      "reasoning": "Why this matters",
+      "user_approval_needed": true|false
+    }}
+  ],
+  "recommendations": [
+    "Specific recommendation 1",
+    "Specific recommendation 2"
+  ],
+  "overall_assessment": "Brief 1-2 sentence summary",
+  "recommendation_action": "APPROVE_ALL|APPROVE_CRITICAL|REJECT"
+}}
+
+Return ONLY valid JSON, no markdown, no explanations."""
+
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        return f.read()
 
 
 class LLMPoweredAnalyzer(DimensionAnalyzer):
@@ -219,44 +342,19 @@ class LLMPoweredAnalyzer(DimensionAnalyzer):
         Build system message with DEPTH framework.
 
         Defines multiple expert perspectives and success criteria.
+        Now loads from dedicated prompt file for easy maintenance.
 
         Returns:
             System message for LLM
         """
-        return """You are an expert Project Analysis AI specializing in identifying issues before implementation.
-
-**Multiple Expert Perspectives:**
-Apply the viewpoints of:
-- Senior Software Architect (15+ years) - focusing on architectural soundness and scalability
-- Security Engineer - identifying potential vulnerabilities and compliance issues
-- QA Lead - considering testability, edge cases, and quality assurance
-- DevOps Engineer - evaluating deployment, monitoring, and operational concerns
-- UX Designer - assessing user experience and accessibility requirements
-
-**Success Criteria:**
-Your analysis MUST:
-1. Identify CRITICAL issues (security, compliance, data loss risks)
-2. Highlight HIGH-priority improvements (testing, performance, scalability)
-3. Suggest MEDIUM-priority enhancements (code quality, maintainability)
-4. Provide specific, actionable recommendations (not generic advice)
-5. Return valid JSON matching the expected schema
-6. Avoid AI clichés like "robust", "delve", "leverage"
-
-**Self-Validation:**
-Before responding, ask yourself:
-1. Did I identify all security vulnerabilities?
-2. Are my recommendations specific and actionable?
-3. Did I consider all edge cases and failure scenarios?
-4. Is my JSON properly formatted?
-5. Did I avoid generic advice and AI clichés?
-
-If any answer is NO, revise your analysis."""
+        return _load_project_analysis_system_prompt()
 
     def _build_user_message(self, card: Dict, context: Dict) -> str:
         """
         Build user message with context layers.
 
         Provides comprehensive task context and analysis dimensions.
+        Now loads from dedicated prompt file for easy maintenance.
 
         Args:
             card: Kanban card with task details
@@ -265,61 +363,19 @@ If any answer is NO, revise your analysis."""
         Returns:
             User message for LLM
         """
-        card_summary = f"""
-**Task Title:** {card.get('title', 'Unknown')}
-**Description:** {card.get('description', 'No description provided')}
-**Priority:** {card.get('priority', 'Not set')}
-**Story Points:** {card.get('points', 'Not estimated')}
-**Acceptance Criteria:** {card.get('acceptance_criteria', [])}
-"""
-
         context_summary = self._build_context_summary(context)
 
-        return f"""Analyze the following task BEFORE implementation across these dimensions:
-
-1. **Scope & Requirements**: Are requirements clear and complete?
-2. **Security**: Any security vulnerabilities or compliance issues?
-3. **Performance & Scalability**: Performance concerns or bottlenecks?
-4. **Testing Strategy**: Is testing approach comprehensive?
-5. **Error Handling**: Are edge cases and failures addressed?
-6. **Architecture**: Architectural concerns or design issues?
-7. **Dependencies**: External dependencies or integration risks?
-8. **Accessibility**: WCAG compliance and UX considerations?
-
-{card_summary}
-{context_summary}
-
-{get_environment_context_short()}
-
-**Task Breakdown:**
-1. Read the task requirements carefully
-2. Analyze each dimension systematically
-3. Identify issues categorized by severity (CRITICAL/HIGH/MEDIUM)
-4. Provide specific, actionable recommendations
-5. Self-validate your analysis before responding
-
-**Response Format (JSON only):**
-{{
-  "issues": [
-    {{
-      "category": "Security|Performance|Testing|Architecture|Dependencies|Accessibility|Scope|Error Handling",
-      "severity": "CRITICAL|HIGH|MEDIUM",
-      "description": "Brief issue description",
-      "impact": "What happens if not addressed",
-      "suggestion": "Specific actionable fix",
-      "reasoning": "Why this matters",
-      "user_approval_needed": true|false
-    }}
-  ],
-  "recommendations": [
-    "Specific recommendation 1",
-    "Specific recommendation 2"
-  ],
-  "overall_assessment": "Brief 1-2 sentence summary",
-  "recommendation_action": "APPROVE_ALL|APPROVE_CRITICAL|REJECT"
-}}
-
-Return ONLY valid JSON, no markdown, no explanations."""
+        # Load prompt template and format with variables
+        prompt_template = _load_project_analysis_user_prompt()
+        return prompt_template.format(
+            title=card.get('title', 'Unknown'),
+            description=card.get('description', 'No description provided'),
+            priority=card.get('priority', 'Not set'),
+            points=card.get('points', 'Not estimated'),
+            acceptance_criteria=card.get('acceptance_criteria', []),
+            context_summary=context_summary,
+            environment_context=get_environment_context_short()
+        )
 
     def _parse_llm_response(self, response: str) -> Dict:
         """

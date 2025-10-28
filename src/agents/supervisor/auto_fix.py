@@ -18,6 +18,65 @@ EXTRACTED FROM: supervisor_agent.py (lines 406-2239)
 from typing import Dict, Any, Optional, Tuple
 import re
 import json
+from functools import lru_cache
+from pathlib import Path
+
+
+@lru_cache(maxsize=1)
+def _load_auto_fix_prompt() -> str:
+    """
+    Load auto-fix prompt from dedicated file.
+
+    WHY: Centralize prompts in files for easy maintenance
+    PATTERNS: Guard clauses, early returns
+
+    Returns:
+        Auto-fix prompt template
+    """
+    prompt_file = Path(__file__).parent.parent.parent / "prompts" / "supervisor_auto_fix_prompt.md"
+
+    # Guard: File doesn't exist
+    if not prompt_file.exists():
+        # Fallback to embedded prompt for backward compatibility
+        return """# Supervisor Auto-Fix: Python Code Debugging Expert
+
+You are a Python code debugging expert. Analyze this error and provide a fix.
+
+**Error Details:**
+- Type: {error_type}
+- Message: {error_message}
+- File: {file_path}
+- Line: {line_number}
+
+**Problematic Line:**
+```python
+{problem_line}
+```
+
+**Surrounding Context:**
+```python
+{context_code}
+```
+
+**Task:**
+Provide a fixed version of the problematic line that resolves the {error_type} error. The fix should:
+1. Be defensive (use .get() for dict access, check types, handle None, etc.)
+2. Maintain the same functionality
+3. Include sensible defaults
+4. Be a drop-in replacement (same indentation, same line)
+
+**Response Format (JSON):**
+```json
+{
+    "reasoning": "Brief explanation of the error and fix",
+    "fixed_line": "The complete fixed line of code with proper indentation"
+}
+```
+
+Respond ONLY with valid JSON, no other text."""
+
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        return f.read()
 
 
 class AutoFixEngine:
@@ -305,39 +364,16 @@ class AutoFixEngine:
             # Build context for LLM
             context_code = "".join(context_lines)
 
-            # Create prompt for LLM
-            prompt = f"""You are a Python code debugging expert. Analyze this error and provide a fix.
-
-**Error Details:**
-- Type: {error_type}
-- Message: {error_message}
-- File: {file_path}
-- Line: {line_number}
-
-**Problematic Line:**
-```python
-{problem_line.strip()}
-```
-
-**Surrounding Context:**
-```python
-{context_code}
-```
-
-**Task:**
-Provide a fixed version of the problematic line that resolves the {error_type} error. The fix should:
-1. Be defensive (use .get() for dict access, check types, handle None, etc.)
-2. Maintain the same functionality
-3. Include sensible defaults
-4. Be a drop-in replacement (same indentation, same line)
-
-**Response Format (JSON):**
-{{
-    "reasoning": "Brief explanation of the error and fix",
-    "fixed_line": "The complete fixed line of code with proper indentation"
-}}
-
-Respond ONLY with valid JSON, no other text."""
+            # Load prompt from dedicated file and format with variables
+            prompt_template = _load_auto_fix_prompt()
+            prompt = prompt_template.format(
+                error_type=error_type,
+                error_message=error_message,
+                file_path=file_path,
+                line_number=line_number,
+                problem_line=problem_line.strip(),
+                context_code=context_code
+            )
 
             if self.verbose:
                 print(f"[AutoFix] 💬 Consulting LLM for fix suggestion...")

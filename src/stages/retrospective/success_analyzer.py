@@ -8,12 +8,63 @@ PATTERNS: Single Responsibility, Guard Clauses, List Comprehensions
 """
 
 import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Dict, List, Any
 
 from artemis_stage_interface import LoggerInterface
 from llm_client import LLMClient, LLMMessage
 
 from .retrospective_models import RetrospectiveItem, SprintMetrics
+
+
+@lru_cache(maxsize=1)
+def _load_success_analysis_prompt() -> str:
+    """
+    Load success analysis prompt from dedicated file.
+
+    WHY: Centralize prompts in files for easy maintenance
+    PATTERNS: Guard clauses, early returns, fallback handling
+
+    Returns:
+        Success analysis prompt template
+    """
+    prompt_file = Path(__file__).parent.parent.parent.parent / "prompts" / "retrospective_success_analysis_prompt.md"
+
+    # Guard: File doesn't exist
+    if not prompt_file.exists():
+        # Fallback to embedded prompt for backward compatibility
+        return """# Retrospective: Sprint Success Analysis
+
+**System Role:** You are a Scrum Master conducting a sprint retrospective.
+
+**Task:** Analyze this sprint data and identify what went well:
+
+{sprint_data}
+
+**Focus Areas:**
+- Team collaboration
+- Process improvements
+- Technical achievements
+- Communication effectiveness
+
+**Response Format (JSON only):**
+```json
+{{
+    "successes": [
+        {{
+            "description": "Clear description",
+            "impact": "high | medium | low",
+            "frequency": "recurring | one-time"
+        }}
+    ]
+}}
+```
+
+Return ONLY valid JSON, no markdown, no explanations."""
+
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        return f.read()
 
 
 class SuccessAnalyzer:
@@ -146,27 +197,11 @@ class SuccessAnalyzer:
         RESPONSIBILITY: AI-powered success pattern detection
         PATTERNS: Guard clause, Error handling
         """
-        prompt = f"""Analyze this sprint data and identify what went well:
-
-{json.dumps(sprint_data, indent=2)}
-
-Focus on:
-- Team collaboration
-- Process improvements
-- Technical achievements
-- Communication effectiveness
-
-Respond in JSON format:
-{{
-    "successes": [
-        {{
-            "description": "Clear description",
-            "impact": "high | medium | low",
-            "frequency": "recurring | one-time"
-        }}
-    ]
-}}
-"""
+        # Load prompt template and format with sprint data
+        prompt_template = _load_success_analysis_prompt()
+        prompt = prompt_template.format(
+            sprint_data=json.dumps(sprint_data, indent=2)
+        )
 
         try:
             messages = [

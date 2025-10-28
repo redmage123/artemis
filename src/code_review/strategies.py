@@ -13,25 +13,43 @@ from review_request_builder import ImplementationFile
 from environment_context import get_environment_context_short
 from artemis_exceptions import FileReadError, wrap_exception
 
+# Import validation integration
+try:
+    from validation import (
+        get_code_review_validation_strategy,
+        get_validation_summary_for_llm,
+    )
+    VALIDATION_INTEGRATION_AVAILABLE = True
+except ImportError:
+    VALIDATION_INTEGRATION_AVAILABLE = False
+
 
 def build_base_review_prompt(
     review_prompt: str,
     implementation_files: List[ImplementationFile],
     task_title: str,
-    task_description: str
+    task_description: str,
+    is_critical: bool = False,
+    has_tests: bool = True,
+    enable_validation_awareness: bool = True,
+    logger: Optional[Any] = None
 ) -> str:
     """
     Build base review prompt without KG context (AIQueryService will add it).
 
     WHY: Separate base prompt construction from AI service enhancement.
     RESPONSIBILITY: Assemble all context into prompt format.
-    PATTERN: Template method.
+    PATTERN: Template method, guard clauses.
 
     Args:
         review_prompt: System prompt for code review
         implementation_files: List of ImplementationFile objects
         task_title: Task title
         task_description: Task description
+        is_critical: Whether code is critical (security, payments, etc.)
+        has_tests: Whether tests are expected/present
+        enable_validation_awareness: Include validation pipeline awareness
+        logger: Optional logger
 
     Returns:
         Complete base prompt string
@@ -41,7 +59,7 @@ def build_base_review_prompt(
         for file in implementation_files
     )
 
-    return f"""{review_prompt}
+    base_prompt = f"""{review_prompt}
 
 **Task**: {task_title}
 **Description**: {task_description}
@@ -52,6 +70,44 @@ def build_base_review_prompt(
 {files_content}
 
 Perform a comprehensive code review and return results in JSON format."""
+
+    # Guard: validation awareness not enabled or not available
+    if not enable_validation_awareness or not VALIDATION_INTEGRATION_AVAILABLE:
+        return base_prompt
+
+    # Add validation awareness to prompt
+    try:
+        # Calculate code size from implementation files
+        code_size = sum(len(file.content) for file in implementation_files)
+
+        # Get validation strategy for code review
+        strategy = get_code_review_validation_strategy(
+            code_size=code_size,
+            is_critical=is_critical,
+            has_tests=has_tests,
+            logger=logger
+        )
+
+        # Get concise validation summary
+        validation_context = get_validation_summary_for_llm(strategy)
+
+        # Append validation awareness to prompt
+        enhanced_prompt = f"{base_prompt}\n\n{validation_context}"
+
+        if logger:
+            logger.info(
+                f"✅ Added validation awareness to code review prompt "
+                f"(profile: {strategy.profile.value}, "
+                f"reduction: {strategy.expected_reduction:.0%})"
+            )
+
+        return enhanced_prompt
+
+    except Exception as e:
+        # Guard: validation integration failed - continue without it
+        if logger:
+            logger.warning(f"⚠️ Failed to add validation awareness to review: {e}")
+        return base_prompt
 
 
 def build_review_request_legacy(prompt: str) -> List[LLMMessage]:

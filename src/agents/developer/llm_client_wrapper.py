@@ -21,6 +21,17 @@ from artemis_stage_interface import LoggerInterface
 from llm_client import LLMMessage, LLMResponse
 from artemis_exceptions import LLMResponseParsingError, create_wrapped_exception
 
+# Import validation integration
+try:
+    from validation import (
+        get_validation_strategy_for_task,
+        get_validation_summary_for_llm,
+        ValidationStrategy
+    )
+    VALIDATION_INTEGRATION_AVAILABLE = True
+except ImportError:
+    VALIDATION_INTEGRATION_AVAILABLE = False
+
 # Import StreamingValidator if available
 try:
     from streaming_validator import StreamingValidatorFactory, StreamingValidationResult
@@ -44,7 +55,8 @@ class LLMClientWrapper:
         developer_type: str,
         llm_provider: str,
         llm_model: Optional[str] = None,
-        logger: Optional[LoggerInterface] = None
+        logger: Optional[LoggerInterface] = None,
+        enable_validation_awareness: bool = True
     ):
         """
         Initialize LLM client wrapper
@@ -56,6 +68,7 @@ class LLMClientWrapper:
             llm_provider: Provider name (e.g., "openai", "anthropic")
             llm_model: Model name (optional)
             logger: Optional logger
+            enable_validation_awareness: Include validation pipeline info in prompts
         """
         self.llm_client = llm_client
         self.developer_name = developer_name
@@ -63,18 +76,36 @@ class LLMClientWrapper:
         self.llm_provider = llm_provider
         self.llm_model = llm_model
         self.logger = logger
+        self.enable_validation_awareness = enable_validation_awareness and VALIDATION_INTEGRATION_AVAILABLE
 
-    def call_llm(self, prompt: str) -> LLMResponse:
+    def call_llm(
+        self,
+        prompt: str,
+        task_type: str = "code_generation",
+        code_complexity: Optional[int] = None,
+        is_critical: bool = False,
+        has_tests: bool = True
+    ) -> LLMResponse:
         """
         Call LLM API with prompt
 
         Args:
             prompt: User prompt
+            task_type: Type of task (for validation strategy selection)
+            code_complexity: Estimated code complexity (defaults to prompt length / 10)
+            is_critical: Whether code is critical (security, payments, etc.)
+            has_tests: Whether tests are expected
 
         Returns:
             LLM response
         """
-        messages = self._build_messages(prompt)
+        messages = self._build_messages(
+            prompt,
+            task_type=task_type,
+            code_complexity=code_complexity,
+            is_critical=is_critical,
+            has_tests=has_tests
+        )
         self._log_prompt_debug(prompt)
 
         # Enable JSON mode for OpenAI (Anthropic uses prompt engineering)
@@ -134,12 +165,26 @@ class LLMClientWrapper:
 
     # ========== Private Helper Methods ==========
 
-    def _build_messages(self, prompt: str) -> List[LLMMessage]:
+    def _build_messages(
+        self,
+        prompt: str,
+        task_type: str = "code_generation",
+        code_complexity: Optional[int] = None,
+        is_critical: bool = False,
+        has_tests: bool = True
+    ) -> List[LLMMessage]:
         """
         Build LLM messages with developer-specific system prompt
 
+        WHY: Add validation awareness to improve code quality
+        PATTERNS: Guard clauses, early returns
+
         Args:
             prompt: User prompt
+            task_type: Type of task (code_generation, refactoring, etc.)
+            code_complexity: Estimated code complexity (defaults to prompt length / 10)
+            is_critical: Whether code is critical (security, payments, etc.)
+            has_tests: Whether tests are expected
 
         Returns:
             List of LLM messages
@@ -150,6 +195,52 @@ class LLMClientWrapper:
             f"You write production-quality, complete code. "
             f"You MUST respond with valid JSON only - no explanations, no markdown, just pure JSON."
         )
+
+        # Guard: validation awareness not enabled
+        if not self.enable_validation_awareness:
+            return [
+                LLMMessage(role="system", content=system_prompt),
+                LLMMessage(role="user", content=prompt)
+            ]
+
+        # Add validation awareness to system prompt
+        try:
+            # Estimate code complexity from prompt length if not provided
+            if code_complexity is None:
+                code_complexity = len(prompt) // 10
+
+            # Get validation strategy for this task
+            strategy = get_validation_strategy_for_task(
+                task_type=task_type,
+                code_complexity=code_complexity,
+                is_critical=is_critical,
+                has_tests=has_tests,
+                dependencies_count=0,  # Not available at this level
+                logger=self.logger
+            )
+
+            # Get concise validation summary
+            validation_context = get_validation_summary_for_llm(strategy)
+
+            # Append validation awareness to system prompt
+            system_prompt += f"\n\n{validation_context}"
+
+            if self.logger:
+                self.logger.log(
+                    f"✅ Added validation awareness to system prompt "
+                    f"(profile: {strategy.profile.value}, "
+                    f"reduction: {strategy.expected_reduction:.0%})",
+                    "DEBUG"
+                )
+
+        except Exception as e:
+            # Guard: validation integration failed - continue without it
+            if self.logger:
+                self.logger.log(
+                    f"⚠️ Failed to add validation awareness: {e}",
+                    "WARNING"
+                )
+            # Continue with base system prompt
 
         return [
             LLMMessage(role="system", content=system_prompt),
