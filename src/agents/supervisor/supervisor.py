@@ -169,9 +169,10 @@ class Supervisor:
                 auto_fix=auto_fix_enabled
             )
 
-            # Validate current directory
-            agile_dir = os.path.dirname(os.path.abspath(__file__))
-            preflight_results = preflight.validate_all(agile_dir)
+            # Validate src directory (where main modules are located)
+            supervisor_dir = os.path.dirname(os.path.abspath(__file__))
+            src_dir = os.path.dirname(os.path.dirname(supervisor_dir))  # Go up from agents/supervisor/ to src/
+            preflight_results = preflight.validate_all(src_dir)
 
             # Handle results (may auto-fix and restart)
             self.auto_fix_engine.handle_preflight_results(preflight, preflight_results, auto_fix_enabled)
@@ -227,8 +228,7 @@ class Supervisor:
         from sandbox_executor import SandboxExecutor, SandboxConfig
 
         self.sandbox_executor = SandboxExecutor(
-            config=SandboxConfig(),
-            verbose=self.verbose
+            config=SandboxConfig()
         )
 
         if self.verbose:
@@ -242,7 +242,7 @@ class Supervisor:
             from supervisor_learning import SupervisorLearningEngine
 
             self.learning_engine = SupervisorLearningEngine(
-                rag=self.rag,
+                rag_agent=self.rag,
                 verbose=self.verbose
             )
 

@@ -8,7 +8,7 @@ Ranker improves search results with query/technology matching.
 """
 
 from typing import List
-from research_strategy import ResearchExample
+from research.models import ResearchExample
 
 
 class ExampleRanker:

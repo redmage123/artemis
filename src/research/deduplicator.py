@@ -8,7 +8,7 @@ Deduplicator uses hash-based approach for performance.
 """
 
 from typing import List
-from research_strategy import ResearchExample
+from research.models import ResearchExample
 
 
 class ExampleDeduplicator:

@@ -9,7 +9,7 @@ Storage module provides RAG persistence for research examples.
 
 from typing import List
 from rag_agent import RAGAgent
-from research_strategy import ResearchExample
+from research.models import ResearchExample
 from research_exceptions import ExampleStorageError
 
 

@@ -9,7 +9,7 @@ Repository provides unified interface for research example management.
 
 from typing import List, Dict, Any, Optional
 from rag_agent import RAGAgent
-from research_strategy import ResearchExample
+from research.models import ResearchExample
 from research.storage import ExampleStorage
 from research.query import ExampleQuery
 from research.deduplicator import ExampleDeduplicator

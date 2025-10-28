@@ -28,5 +28,9 @@ Public API:
 """
 
 from kanban.board.board_facade import KanbanBoard
+from artemis_constants import KANBAN_BOARD_PATH
 
-__all__ = ['KanbanBoard']
+# Export BOARD_PATH for backward compatibility
+BOARD_PATH = str(KANBAN_BOARD_PATH)
+
+__all__ = ['KanbanBoard', 'BOARD_PATH']

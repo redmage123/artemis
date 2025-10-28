@@ -45,6 +45,9 @@ from research.local_strategy import LocalExamplesResearchStrategy
 # Factory
 from research.factory import ResearchStrategyFactory
 
+# Repository (for backward compatibility)
+from research.repository import ExampleRepository
+
 # Version
 __version__ = "1.0.0"
 
@@ -61,4 +64,7 @@ __all__ = [
 
     # Factory
     "ResearchStrategyFactory",
+
+    # Repository
+    "ExampleRepository",
 ]
