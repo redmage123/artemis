@@ -330,6 +330,39 @@ class CitationTracker:
         if not self.rag_agent:
             return True  # Can't verify without RAG
 
-        # TODO: Query RAG for similar patterns in cited source
-        # For now, assume valid
-        return True
+        # Query RAG for similar patterns in cited source
+        try:
+            # Build query from citation pattern and source
+            query_text = f"{citation.pattern}\n\nSource: {citation.source}"
+
+            # Search for similar code patterns in RAG database
+            # Use top_k=3 to get a few candidates for verification
+            results = self.rag_agent.query_similar(
+                query_text=query_text,
+                artifact_types=["code_pattern", "code_example", "adr", "research_report"],
+                top_k=3
+            )
+
+            # Citation is verified if we find similar patterns
+            # with reasonable similarity (results are returned in order of similarity)
+            if results:
+                # Update confidence based on similarity of top result
+                # If RAG found similar patterns, increase confidence
+                citation.confidence = min(0.95, citation.confidence + 0.1)
+                self.logger.debug(
+                    f"Citation verified via RAG: found {len(results)} similar patterns for source '{citation.source}'"
+                )
+                return True
+            else:
+                # No similar patterns found - this could indicate hallucination
+                # Decrease confidence slightly but don't fail completely
+                citation.confidence = max(0.5, citation.confidence - 0.1)
+                self.logger.warning(
+                    f"Citation not verified via RAG: no similar patterns found for source '{citation.source}'"
+                )
+                return False
+
+        except Exception as e:
+            # If RAG query fails, log error but don't fail verification
+            self.logger.error(f"RAG query failed during citation verification: {e}")
+            return True  # Assume valid on error to avoid false negatives

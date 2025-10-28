@@ -29,6 +29,7 @@ import psutil
 import shutil
 import time
 import gc
+import requests
 from typing import Dict, Any
 from pathlib import Path
 
@@ -38,6 +39,9 @@ from artemis_constants import (
     RETRY_BACKOFF_FACTOR
 )
 from workflows.handlers.base_handler import WorkflowHandler
+from artemis_logger import get_logger
+
+logger = get_logger("workflow.infrastructure_handlers")
 
 
 class KillHangingProcessHandler(WorkflowHandler):
@@ -186,7 +190,11 @@ class RetryNetworkRequestHandler(WorkflowHandler):
     PATTERNS: Exponential backoff for retry strategy
     """
 
+    def __init__(self):
+        self.context = {}
+
     def handle(self, context: Dict[str, Any]) -> bool:
+        self.context = context
         for attempt in range(MAX_RETRY_ATTEMPTS):
             if self._attempt_network_request(attempt):
                 return True
@@ -198,9 +206,52 @@ class RetryNetworkRequestHandler(WorkflowHandler):
 
     def _attempt_network_request(self, attempt: int) -> bool:
         try:
-            # TODO: Implement actual network retry
-            time.sleep(RETRY_BACKOFF_FACTOR ** attempt)
-            print(f"[Workflow] Network retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
+            # Get network request details from context
+            url = self.context.get("url")
+            method = self.context.get("method", "GET")
+            timeout = self.context.get("timeout", 30)
+
+            if not url:
+                logger.warning("No URL provided for network retry")
+                return False
+
+            # Wait with exponential backoff before retry (skip on first attempt)
+            if attempt > 0:
+                wait_time = DEFAULT_RETRY_INTERVAL_SECONDS * (RETRY_BACKOFF_FACTOR ** attempt)
+                logger.info(f"Waiting {wait_time}s before retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
+                time.sleep(wait_time)
+
+            logger.info(f"Network retry {attempt + 1}/{MAX_RETRY_ATTEMPTS} for {method} {url}")
+
+            # Perform the actual network request
+            response = requests.request(
+                method=method,
+                url=url,
+                timeout=timeout,
+                headers=self.context.get("headers", {}),
+                data=self.context.get("data"),
+                json=self.context.get("json")
+            )
+
+            # Check if request was successful
+            response.raise_for_status()
+
+            # Store response in context for caller to use
+            self.context["response"] = response
+            self.context["response_status"] = response.status_code
+
+            logger.info(f"Network request succeeded on attempt {attempt + 1}")
             return True
-        except Exception:
+
+        except requests.exceptions.Timeout as e:
+            logger.warning(f"Network request timeout on attempt {attempt + 1}: {e}")
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"Network connection error on attempt {attempt + 1}: {e}")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Network request failed on attempt {attempt + 1}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error during network retry: {e}")
             return False

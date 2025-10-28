@@ -330,7 +330,7 @@ class Developer(DebugMixin):
         # Query RAG for refactoring instructions
         refactoring_instructions = None
         if rag_agent:
-            language = "python"  # TODO: Detect from task
+            language = self._detect_language_from_task(task_description)
             refactoring_instructions = self.rag_integration.query_refactoring_instructions(
                 rag_agent, task_title, language
             )
@@ -392,6 +392,38 @@ class Developer(DebugMixin):
 
         # Default: code
         return TaskType.CODE
+
+    def _detect_language_from_task(self, task_description: str) -> str:
+        """
+        Detect programming language from task description
+
+        Args:
+            task_description: Task description text
+
+        Returns:
+            Detected language string (python, java, javascript, go, rust)
+            Defaults to "python" if not detected
+        """
+        # Normalize to lowercase for case-insensitive matching
+        description_lower = task_description.lower()
+
+        # Language detection keywords with priority order
+        language_keywords = {
+            'java': ['java', 'spring', 'maven', 'gradle', 'springboot', 'spring boot'],
+            'javascript': ['javascript', 'typescript', 'node', 'react', 'nodejs', 'node.js',
+                          'angular', 'vue', 'npm', 'yarn', 'jest', 'webpack'],
+            'go': ['golang', 'go '],  # 'go ' with space to avoid matching 'django', etc.
+            'rust': ['rust', 'cargo'],
+            'python': ['python', 'django', 'flask', 'fastapi', 'pytest', 'pip']
+        }
+
+        # Check for language keywords
+        for language, keywords in language_keywords.items():
+            if any(keyword in description_lower for keyword in keywords):
+                return language
+
+        # Default to python if no language detected
+        return "python"
 
     # ========== Helper Methods (Delegation) ==========
 

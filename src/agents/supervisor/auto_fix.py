@@ -474,11 +474,311 @@ Respond ONLY with valid JSON, no other text."""
         Returns:
             Fix result dict or None
         """
-        # TODO: Implement regex-based fallback fixes for common patterns
-        # Examples: KeyError → .get(), TypeError → type checks, etc.
+        error_type = type(error).__name__
+
         if self.verbose:
-            print(f"[AutoFix] ⚠️  Regex-based fallback not yet implemented")
-        return None
+            print(f"[AutoFix] 🔧 Attempting regex-based fallback fix for {error_type}")
+
+        # Extract file location from traceback
+        file_info = self._extract_file_location(traceback_info)
+        if not file_info:
+            if self.verbose:
+                print(f"[AutoFix] ⚠️  Could not extract file location for regex fix")
+            return None
+
+        file_path, line_number = file_info
+
+        # Read source file with context
+        file_context = self._read_file_context(file_path, line_number)
+        if not file_context:
+            return None
+
+        all_lines, context_lines, problem_line = file_context
+
+        # Apply regex-based fixes
+        fixed_line = self._apply_regex_fallback_fixes(error, problem_line, error_type)
+
+        if not fixed_line:
+            if self.verbose:
+                print(f"[AutoFix] ⚠️  No regex pattern matched for {error_type}")
+            return None
+
+        # Apply the fix to the file
+        return self._apply_fix_to_file(
+            file_path=file_path,
+            line_number=line_number,
+            all_lines=all_lines,
+            problem_line=problem_line,
+            fixed_line=fixed_line,
+            error_type=error_type,
+            error_message=str(error),
+            llm_reasoning=f"Regex-based automatic fix for {error_type}"
+        )
+
+    def _apply_regex_fallback_fixes(
+        self,
+        error: Exception,
+        problem_line: str,
+        error_type: str
+    ) -> Optional[str]:
+        """
+        Apply regex-based fixes for common Python error patterns
+
+        Args:
+            error: Exception that occurred
+            problem_line: The problematic line of code
+            error_type: Type of error (KeyError, AttributeError, TypeError)
+
+        Returns:
+            Fixed line of code or None if no pattern matches
+        """
+        # Dispatch table: error type → fix method
+        fix_methods = {
+            "KeyError": self._fix_key_error,
+            "AttributeError": self._fix_attribute_error,
+            "TypeError": self._fix_type_error,
+        }
+
+        # Guard: Unknown error type
+        fix_method = fix_methods.get(error_type)
+        if not fix_method:
+            return None
+
+        return fix_method(error, problem_line)
+
+    def _fix_key_error(self, error: Exception, problem_line: str) -> Optional[str]:
+        """
+        Fix KeyError by replacing dict[key] with dict.get(key, default)
+
+        Args:
+            error: KeyError exception
+            problem_line: Line with the error
+
+        Returns:
+            Fixed line or None
+        """
+        # Extract the missing key from error message
+        error_msg = str(error).strip("'\"")
+
+        # Try Pattern 1: Simple dict[key] access
+        fixed_line = self._try_simple_dict_access_fix(error_msg, problem_line)
+        if fixed_line:
+            return fixed_line
+
+        # Try Pattern 2: dict[variable] access
+        return self._try_variable_dict_access_fix(problem_line)
+
+    def _try_simple_dict_access_fix(self, error_msg: str, problem_line: str) -> Optional[str]:
+        """Try to fix simple dict[key] access."""
+        pattern = r'(\w+)\[(["\']?)' + re.escape(error_msg) + r'\2\]'
+        match = re.search(pattern, problem_line)
+
+        # Guard: No match
+        if not match:
+            return None
+
+        dict_name = match.group(1)
+        quote = match.group(2) or "'"
+        replacement = f'{dict_name}.get({quote}{error_msg}{quote}, None)'
+        fixed_line = re.sub(pattern, replacement, problem_line, count=1)
+
+        if self.verbose:
+            print(f"[AutoFix] 🔧 KeyError fix: {dict_name}[{quote}{error_msg}{quote}] → {replacement}")
+
+        return fixed_line
+
+    def _try_variable_dict_access_fix(self, problem_line: str) -> Optional[str]:
+        """Try to fix dict[variable] access."""
+        pattern = r'(\w+)\[([^\]]+)\](?!\s*=)'
+        match = re.search(pattern, problem_line)
+
+        # Guard: No match
+        if not match:
+            return None
+
+        dict_name = match.group(1)
+        key_expr = match.group(2)
+        replacement = f'{dict_name}.get({key_expr}, None)'
+        fixed_line = re.sub(pattern, replacement, problem_line, count=1)
+
+        if self.verbose:
+            print(f"[AutoFix] 🔧 KeyError fix: {dict_name}[{key_expr}] → {replacement}")
+
+        return fixed_line
+
+    def _fix_attribute_error(self, error: Exception, problem_line: str) -> Optional[str]:
+        """
+        Fix AttributeError by adding hasattr() checks
+
+        Args:
+            error: AttributeError exception
+            problem_line: Line with the error
+
+        Returns:
+            Fixed line or None
+        """
+        # Guard: Extract attribute name
+        attr_match = re.search(r"has no attribute '(\w+)'", str(error))
+        if not attr_match:
+            return None
+
+        attr_name = attr_match.group(1)
+
+        # Guard: Find object.attribute pattern
+        pattern = r'(\w+)\.' + re.escape(attr_name) + r'\b'
+        match = re.search(pattern, problem_line)
+        if not match:
+            return None
+
+        obj_name = match.group(1)
+        fixed_line = self._create_attribute_fix(problem_line, obj_name, attr_name)
+
+        if self.verbose and fixed_line:
+            print(f"[AutoFix] 🔧 AttributeError fix: Added safety check for {obj_name}.{attr_name}")
+
+        return fixed_line
+
+    @staticmethod
+    def _create_attribute_fix(problem_line: str, obj_name: str, attr_name: str) -> str:
+        """Create appropriate fix for attribute access."""
+        indent = len(problem_line) - len(problem_line.lstrip())
+        indent_str = problem_line[:indent]
+        stripped_line = problem_line.strip()
+
+        # Check for assignment or return statement
+        is_assignment = '=' in stripped_line and not stripped_line.startswith('return')
+        is_return = stripped_line.startswith('return')
+
+        if is_assignment or is_return:
+            # Add hasattr check
+            return f"{indent_str}{stripped_line.rstrip()} if hasattr({obj_name}, '{attr_name}') else None\n"
+
+        # Use getattr for other cases
+        original_access = f'{obj_name}.{attr_name}'
+        replacement = f"getattr({obj_name}, '{attr_name}', None)"
+        return problem_line.replace(original_access, replacement, 1)
+
+    def _fix_type_error(self, error: Exception, problem_line: str) -> Optional[str]:
+        """
+        Fix TypeError by adding type checking
+
+        Args:
+            error: TypeError exception
+            problem_line: Line with the error
+
+        Returns:
+            Fixed line or None
+        """
+        error_msg = str(error).lower()
+
+        # Try Pattern 1: NoneType is not iterable
+        fixed_line = self._fix_nonetype_iterable(error_msg, problem_line)
+        if fixed_line:
+            return fixed_line
+
+        # Try Pattern 2: unsupported operand type
+        fixed_line = self._fix_unsupported_operand(error_msg, problem_line)
+        if fixed_line:
+            return fixed_line
+
+        # Try Pattern 3: object is not callable
+        return self._fix_not_callable(error_msg, problem_line)
+
+    def _fix_nonetype_iterable(self, error_msg: str, problem_line: str) -> Optional[str]:
+        """Fix 'NoneType' object is not iterable errors."""
+        # Guard: Not a NoneType iterable error
+        if "'nonetype' object is not iterable" not in error_msg and "cannot unpack non-iterable" not in error_msg:
+            return None
+
+        # Guard: No for loop pattern
+        for_match = re.search(r'for\s+\w+\s+in\s+(\w+)', problem_line)
+        if not for_match:
+            return None
+
+        iterable_name = for_match.group(1)
+        fixed_line = problem_line.replace(
+            f'in {iterable_name}',
+            f'in ({iterable_name} or [])',
+            1
+        )
+
+        if self.verbose:
+            print(f"[AutoFix] 🔧 TypeError fix: Added None check for iteration over {iterable_name}")
+
+        return fixed_line
+
+    def _fix_unsupported_operand(self, error_msg: str, problem_line: str) -> Optional[str]:
+        """Fix unsupported operand type errors."""
+        # Guard: Not an unsupported operand error
+        if "unsupported operand type" not in error_msg or "nonetype" not in error_msg:
+            return None
+
+        stripped_line = problem_line.strip()
+
+        # Guard: No operation pattern
+        op_match = re.search(r'(\w+)\s*([+\-*/])\s*(\w+)', stripped_line)
+        if not op_match:
+            return None
+
+        left_operand = op_match.group(1)
+        operator = op_match.group(2)
+        right_operand = op_match.group(3)
+
+        # Determine defaults based on error message
+        if "str" in error_msg:
+            default_left = f"({left_operand} or '')"
+            default_right = f"({right_operand} or '')"
+        else:
+            default_left = f"({left_operand} or 0)"
+            default_right = f"({right_operand} or 0)"
+
+        original_expr = f'{left_operand} {operator} {right_operand}'
+        fixed_expr = f'{default_left} {operator} {default_right}'
+        fixed_line = problem_line.replace(original_expr, fixed_expr, 1)
+
+        if self.verbose:
+            print(f"[AutoFix] 🔧 TypeError fix: Added None protection for {operator} operation")
+
+        return fixed_line
+
+    def _fix_not_callable(self, error_msg: str, problem_line: str) -> Optional[str]:
+        """Fix 'object is not callable' errors."""
+        # Guard: Not a callable error
+        if "object is not callable" not in error_msg:
+            return None
+
+        stripped_line = problem_line.strip()
+
+        # Guard: No function call pattern
+        call_match = re.search(r'(\w+)\(', stripped_line)
+        if not call_match:
+            return None
+
+        func_name = call_match.group(1)
+        indent = len(problem_line) - len(problem_line.lstrip())
+        indent_str = problem_line[:indent]
+
+        if self.verbose:
+            print(f"[AutoFix] ⚠️  TypeError 'not callable': {func_name} may be shadowed or not a function")
+            print(f"[AutoFix]    This requires manual inspection - attempting type check")
+
+        # Handle return statements
+        if stripped_line.startswith('return'):
+            return f"{indent_str}{stripped_line.rstrip()} if callable({func_name}) else None\n"
+
+        # Handle other cases
+        original_call = re.search(r'(\w+\([^)]*\))', stripped_line)
+        if not original_call:
+            return None
+
+        call_expr = original_call.group(1)
+        replacement = f"({call_expr} if callable({func_name}) else None)"
+        fixed_line = problem_line.replace(call_expr, replacement, 1)
+
+        if self.verbose:
+            print(f"[AutoFix] 🔧 TypeError fix: Added callable check for {func_name}")
+
+        return fixed_line
 
     def print_fix_success(self, fix_result: Dict[str, Any]) -> None:
         """

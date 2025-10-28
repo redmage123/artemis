@@ -18,7 +18,10 @@ from requirements_models import (
     Constraint,
     Assumption,
     Priority,
-    RequirementType
+    RequirementType,
+    UseCase,
+    DataRequirement,
+    IntegrationRequirement
 )
 
 
@@ -76,6 +79,11 @@ class RequirementsConverter:
         # Extract assumptions
         assumptions = self._convert_assumptions(llm_output)
 
+        # Convert use cases, data requirements, and integration requirements if present
+        use_cases = self._convert_use_cases(llm_output)
+        data_requirements = self._convert_data_requirements(llm_output)
+        integration_requirements = self._convert_integration_requirements(llm_output)
+
         # Build structured requirements
         return StructuredRequirements(
             project_name=project_name,
@@ -89,9 +97,9 @@ class RequirementsConverter:
             assumptions=assumptions,
             functional_requirements=functional_reqs,
             non_functional_requirements=non_functional_reqs,
-            use_cases=[],  # TODO: Convert from LLM output if needed
-            data_requirements=[],  # TODO: Convert from data_entities
-            integration_requirements=[]  # TODO: Convert from integrations
+            use_cases=use_cases,
+            data_requirements=data_requirements,
+            integration_requirements=integration_requirements
         )
 
     def _convert_functional_requirements(
@@ -231,6 +239,104 @@ class RequirementsConverter:
             target=f"< {perf_data['p95_latency_ms']}ms"
         ))
         return nfr_idx + 1
+
+    def _convert_use_cases(
+        self,
+        llm_output: Dict[str, Any]
+    ) -> List[UseCase]:
+        """
+        Convert use cases from LLM output if present
+
+        WHY: Use cases may be included in LLM output or extracted separately
+        RESPONSIBILITY: Convert use case data if available, otherwise return empty list
+
+        Note: Use cases are typically extracted via extraction_engine in multi-step mode.
+              This method handles the case where LLM output includes them directly.
+        """
+        use_cases = []
+        use_case_data = llm_output.get("use_cases", [])
+
+        for idx, uc in enumerate(use_case_data, 1):
+            if isinstance(uc, dict):
+                use_cases.append(UseCase(
+                    id=uc.get("id", f"UC-{idx:03d}"),
+                    title=uc.get("title", f"Use Case {idx}"),
+                    actor=uc.get("actor", "User"),
+                    preconditions=uc.get("preconditions", []),
+                    main_flow=uc.get("main_flow", []),
+                    alternate_flows=uc.get("alternate_flows", {}),
+                    postconditions=uc.get("postconditions", []),
+                    related_requirements=uc.get("related_requirements", [])
+                ))
+
+        return use_cases
+
+    def _convert_data_requirements(
+        self,
+        llm_output: Dict[str, Any]
+    ) -> List[DataRequirement]:
+        """
+        Convert data requirements from LLM output if present
+
+        WHY: Data entities may be included in LLM output or extracted separately
+        RESPONSIBILITY: Convert data entity information if available
+
+        Note: Data requirements are typically extracted via extraction_engine in multi-step mode.
+              This method handles the case where LLM output includes data entities directly.
+        """
+        data_requirements = []
+
+        # Check for data_entities or data_requirements key
+        data_entities = llm_output.get("data_entities", llm_output.get("data_requirements", []))
+
+        for idx, entity in enumerate(data_entities, 1):
+            if isinstance(entity, dict):
+                data_requirements.append(DataRequirement(
+                    id=entity.get("id", f"REQ-D-{idx:03d}"),
+                    entity_name=entity.get("entity_name", entity.get("name", f"Entity{idx}")),
+                    description=entity.get("description", ""),
+                    attributes=entity.get("attributes", []),
+                    relationships=entity.get("relationships", []),
+                    volume=entity.get("volume"),
+                    retention=entity.get("retention"),
+                    compliance=entity.get("compliance", [])
+                ))
+
+        return data_requirements
+
+    def _convert_integration_requirements(
+        self,
+        llm_output: Dict[str, Any]
+    ) -> List[IntegrationRequirement]:
+        """
+        Convert integration requirements from LLM output if present
+
+        WHY: Integrations may be included in LLM output or extracted separately
+        RESPONSIBILITY: Convert integration information if available
+
+        Note: Integration requirements are typically extracted via extraction_engine in multi-step mode.
+              This method handles the case where LLM output includes integrations directly.
+        """
+        integration_requirements = []
+
+        # Check for integrations or integration_requirements key
+        integrations = llm_output.get("integrations", llm_output.get("integration_requirements", []))
+
+        for idx, integration in enumerate(integrations, 1):
+            if isinstance(integration, dict):
+                integration_requirements.append(IntegrationRequirement(
+                    id=integration.get("id", f"REQ-I-{idx:03d}"),
+                    system_name=integration.get("system_name", integration.get("name", f"System{idx}")),
+                    description=integration.get("description", ""),
+                    direction=integration.get("direction", "bidirectional"),
+                    protocol=integration.get("protocol"),
+                    data_format=integration.get("data_format"),
+                    frequency=integration.get("frequency"),
+                    authentication=integration.get("authentication"),
+                    sla=integration.get("sla")
+                ))
+
+        return integration_requirements
 
     def log(self, message: str):
         """Log message if verbose"""

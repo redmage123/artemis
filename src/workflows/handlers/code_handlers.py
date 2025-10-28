@@ -27,6 +27,9 @@ import subprocess
 from typing import Dict, Any
 
 from workflows.handlers.base_handler import WorkflowHandler
+from artemis_logger import get_logger
+
+logger = get_logger("workflow.code_handlers")
 
 
 class RunLinterFixHandler(WorkflowHandler):
@@ -111,9 +114,20 @@ class FixSecurityVulnerabilityHandler(WorkflowHandler):
 
     def handle(self, context: Dict[str, Any]) -> bool:
         vulnerability_type = context.get("vulnerability_type")
-        print(f"[Workflow] Applying security patch for {vulnerability_type}")
-        # TODO: Implement security patch logic
-        return True
+        file_path = context.get("file_path")
+
+        logger.warning(
+            f"Security patch handler invoked for {vulnerability_type} in {file_path}. "
+            "Automated security patching not yet implemented - requires integration with "
+            "vulnerability databases (e.g., CVE, Snyk, npm audit) and language-specific "
+            "patch application tools. Manual review recommended."
+        )
+
+        # Log security event for tracking
+        logger.info(f"Security vulnerability detected: {vulnerability_type}")
+
+        # For now, return False to indicate manual intervention needed
+        return False
 
 
 class RetryCompilationHandler(WorkflowHandler):

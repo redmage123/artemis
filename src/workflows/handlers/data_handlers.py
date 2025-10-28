@@ -23,10 +23,14 @@ INTEGRATION:
 - Coordinates with: State management and RAG systems
 """
 
+import json
 from typing import Dict, Any, List
 from pathlib import Path
 
 from workflows.handlers.base_handler import WorkflowHandler
+from artemis_logger import get_logger
+
+logger = get_logger("workflow.data_handlers")
 
 
 class ValidateCardDataHandler(WorkflowHandler):
@@ -64,12 +68,30 @@ class RestoreStateFromBackupHandler(WorkflowHandler):
         backup_file = context.get("backup_file")
 
         if not backup_file or not Path(backup_file).exists():
-            print("[Workflow] No backup file found")
+            logger.error(f"No backup file found at: {backup_file}")
             return False
 
-        print(f"[Workflow] Restoring state from {backup_file}")
-        # TODO: Implement state restoration
-        return True
+        try:
+            logger.info(f"Restoring state from {backup_file}")
+
+            # Load backup data
+            backup_path = Path(backup_file)
+            with open(backup_path, 'r') as f:
+                backup_data = json.load(f)
+
+            # Store restored state in context for caller to use
+            context["restored_state"] = backup_data
+            context["restoration_timestamp"] = backup_data.get("timestamp", "unknown")
+
+            logger.info(f"Successfully restored state from {backup_file}")
+            return True
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse backup file {backup_file}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to restore state from {backup_file}: {e}")
+            return False
 
 
 class RebuildRAGIndexHandler(WorkflowHandler):
@@ -81,6 +103,32 @@ class RebuildRAGIndexHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        print("[Workflow] Rebuilding RAG index...")
-        # TODO: Trigger RAG rebuild
-        return True
+        logger.info("Rebuilding RAG index...")
+
+        try:
+            # Note: RAG rebuild implementation depends on which RAG system is in use
+            # The actual rebuild would require importing and calling the appropriate
+            # RAG service (e.g., rag_agent, rag_engine, etc.)
+
+            logger.warning(
+                "RAG index rebuild triggered, but requires integration with specific "
+                "RAG implementation. Current implementation is a placeholder that "
+                "logs the rebuild request. To fully implement, inject RAG service "
+                "instance via context['rag_service'] and call its rebuild method."
+            )
+
+            # Check if RAG service was provided in context
+            rag_service = context.get("rag_service")
+            if rag_service and hasattr(rag_service, "rebuild_index"):
+                logger.info("RAG service found, triggering rebuild...")
+                rag_service.rebuild_index()
+                logger.info("RAG index rebuild completed")
+                return True
+
+            # If no RAG service, log and return False to indicate manual intervention needed
+            logger.warning("No RAG service provided in context - manual rebuild required")
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to rebuild RAG index: {e}")
+            return False

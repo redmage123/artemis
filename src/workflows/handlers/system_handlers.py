@@ -25,10 +25,14 @@ INTEGRATION:
 
 import os
 import psutil
+import fcntl
 from typing import Dict, Any
 from pathlib import Path
 
 from workflows.handlers.base_handler import WorkflowHandler
+from artemis_logger import get_logger
+
+logger = get_logger("workflow.system_handlers")
 
 
 class CleanupZombieProcessesHandler(WorkflowHandler):
@@ -74,9 +78,56 @@ class ReleaseFileLocksHandler(WorkflowHandler):
 
     def handle(self, context: Dict[str, Any]) -> bool:
         file_path = context.get("file_path")
-        # TODO: Implement file lock release
-        print(f"[Workflow] Released file lock: {file_path}")
-        return True
+
+        if not file_path:
+            logger.warning("No file path provided for lock release")
+            return False
+
+        try:
+            path = Path(file_path)
+
+            if not path.exists():
+                logger.warning(f"File does not exist, no lock to release: {file_path}")
+                return True
+
+            # On Unix-like systems, file locks are typically advisory and automatically
+            # released when the file descriptor is closed or process terminates.
+            # However, we can attempt to release any locks held by this process.
+
+            # Try to open and unlock the file if it's locked
+            try:
+                with open(file_path, 'r+') as f:
+                    # Try to unlock the file (POSIX systems)
+                    try:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                        logger.info(f"Released flock lock on: {file_path}")
+                    except (OSError, IOError) as e:
+                        # File might not have been locked with flock
+                        logger.debug(f"No flock lock to release on {file_path}: {e}")
+
+                    # Try to unlock fcntl locks (POSIX systems)
+                    try:
+                        fcntl.lockf(f.fileno(), fcntl.LOCK_UN)
+                        logger.info(f"Released lockf lock on: {file_path}")
+                    except (OSError, IOError) as e:
+                        # File might not have been locked with lockf
+                        logger.debug(f"No lockf lock to release on {file_path}: {e}")
+
+                logger.info(f"File lock release completed for: {file_path}")
+                return True
+
+            except PermissionError as e:
+                logger.error(f"Permission denied accessing file {file_path}: {e}")
+                return False
+
+            except IOError as e:
+                logger.warning(f"Unable to open file for lock release {file_path}: {e}")
+                # File might be locked by another process, log and continue
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to release file lock on {file_path}: {e}")
+            return False
 
 
 class FixPermissionsHandler(WorkflowHandler):
