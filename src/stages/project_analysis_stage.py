@@ -126,7 +126,23 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self.approval_handler = UserApprovalHandler()
 
     def execute(self, card: Dict, context: Dict) -> Dict:
-        """Run project analysis and get user approval with supervisor monitoring"""
+        """
+        Run project analysis and get user approval with supervisor monitoring.
+
+        WHY: Analyzes tasks before implementation to identify potential issues,
+        reducing costly fixes later in the pipeline.
+        PERFORMANCE: O(n) where n is complexity of task analysis.
+
+        Args:
+            card: Task card with card_id, title, and task details
+            context: Execution context with rag_recommendations, workflow_plan
+
+        Returns:
+            Dict with stage results: analysis, decision, status
+
+        Raises:
+            ADRGenerationError: If analysis fails
+        """
         # Use supervised execution context manager for automatic monitoring
         metadata = {
             "task_id": card.get('card_id'),
@@ -137,7 +153,20 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             return self._do_analysis(card, context)
 
     def _do_analysis(self, card: Dict, context: Dict) -> Dict:
-        """Internal method that performs the actual analysis work"""
+        """
+        Internal method that performs the actual analysis work.
+
+        WHY: Separated from execute() to enable supervised execution wrapper
+        without mixing supervision logic with core analysis logic (SRP).
+        PERFORMANCE: O(n) for analysis, O(1) for RAG storage.
+
+        Args:
+            card: Task card to analyze
+            context: Analysis context with RAG recommendations
+
+        Returns:
+            Dict with analysis results, decision, and status
+        """
         self.logger.log("Starting Project Analysis Stage", "STAGE")
 
         card_id = card['card_id']
@@ -146,9 +175,11 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self.debug_log("Starting project analysis", card_id=card_id, title=card.get('title'))
 
         # Get RAG recommendations from context
+        # WHY: RAG provides learned patterns from past projects to inform analysis
         rag_recommendations = context.get('rag_recommendations', {})
 
         # Build analysis context
+        # WHY: Provides rich context for multi-dimensional analysis
         analysis_context = {
             'rag_recommendations': rag_recommendations,
             'workflow_plan': context.get('workflow_plan', {}),
@@ -184,6 +215,7 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self.update_progress({"step": "presenting_findings", "progress_percent": 50})
 
         # Check auto-approve config first (before presenting to user)
+        # WHY: Enables headless operation for CI/CD while allowing interactive mode for development
         auto_approve = self.config.get('ARTEMIS_AUTO_APPROVE_PROJECT_ANALYSIS', True) if self.config else True
 
         if not auto_approve:
@@ -192,10 +224,18 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             print("\n" + presentation)
         else:
             # Auto-approve mode - log summary instead of full presentation
+            # WHY: Reduces log verbosity in automated pipelines
             self.logger.log(f"📊 Analysis Summary: {analysis['total_issues']} issues (Critical: {analysis['critical_count']}, High: {analysis['high_count']}, Medium: {analysis['medium_count']})", "INFO")
 
         # Update progress: waiting for approval
         self.update_progress({"step": "waiting_for_approval", "progress_percent": 60})
+
+        # Strategy pattern for recommendation mapping (avoid elif chains)
+        RECOMMENDATION_TO_DECISION = {
+            "REJECT": "4",
+            "APPROVE_CRITICAL": "2",
+            "APPROVE_ALL": "1"
+        }
 
         if auto_approve:
             # Use agent's recommendation
@@ -204,13 +244,8 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             self.logger.log(f"✅ Auto-approving based on agent recommendation: {recommendation}", "INFO")
             self.logger.log(f"   Reason: {reason}", "INFO")
 
-            # Map recommendation to approval decision
-            if recommendation == "REJECT":
-                decision_choice = "4"  # REJECT
-            elif recommendation == "APPROVE_CRITICAL":
-                decision_choice = "2"  # APPROVE_CRITICAL
-            else:
-                decision_choice = "1"  # APPROVE ALL
+            # Map recommendation to approval decision using strategy pattern
+            decision_choice = RECOMMENDATION_TO_DECISION.get(recommendation, "1")
         else:
             # Interactive mode - would prompt user (not implemented in background mode)
             self.logger.log("⚠️  Interactive approval required but running in non-interactive mode", "WARNING")
@@ -224,7 +259,8 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         # Update progress: processing decision
         self.update_progress({"step": "processing_decision", "progress_percent": 70})
 
-        # Send approved changes to Architecture Agent
+        # Send approved changes to Architecture Agent (early return pattern)
+        # Guard clause: Skip if not approved or no issues
         if decision['approved'] and len(decision['approved_issues']) > 0:
             self._send_approved_changes_to_architecture(card_id, decision['approved_issues'])
 
@@ -245,6 +281,7 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self._store_analysis_in_rag(card_id, card, analysis, decision)
 
         # Convert to JSON-serializable format
+        # WHY: Issue objects aren't JSON-serializable, need primitive types for downstream stages
         serializable_decision = {
             "approved": decision['approved'],
             "approved_count": decision['approved_count'],
@@ -270,12 +307,29 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         }
 
     def get_stage_name(self) -> str:
+        """
+        Return stage name for pipeline integration.
+
+        WHY: Required by PipelineStage interface for stage identification.
+        """
         return "project_analysis"
 
     def _send_approved_changes_to_architecture(self, card_id: str, approved_issues: List):
-        """Send approved changes to Architecture Agent via AgentMessenger"""
+        """
+        Send approved changes to Architecture Agent via AgentMessenger.
+
+        WHY: Enables downstream stages to act on approved recommendations
+        without re-analyzing (DRY, performance optimization).
+        PERFORMANCE: O(n) where n is number of approved issues.
+        PATTERNS: Observer pattern via AgentMessenger for loose coupling.
+
+        Args:
+            card_id: Task card identifier
+            approved_issues: List of approved Issue objects from analysis
+        """
 
         # Format approved changes for Architecture Agent using list comprehension
+        # WHY: List comprehension is faster than loop with append (performance)
         changes_summary = [
             {
                 "category": issue.category,
@@ -308,7 +362,12 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self.logger.log(f"Sent {len(changes_summary)} approved changes to Architecture Agent", "SUCCESS")
 
     def _store_analysis_in_rag(self, card_id: str, card: Dict, analysis: Dict, decision: Dict):
-        """Store analysis results in RAG for future learning"""
+        """
+        Store analysis results in RAG for future learning.
+
+        WHY: Enables learning from past analyses to improve future recommendations.
+        PERFORMANCE: O(n) where n is number of critical issues.
+        """
 
         # Create content summary
         content_parts = [
@@ -319,7 +378,8 @@ class ProjectAnalysisStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             f"Approved Changes: {decision['approved_count']}"
         ]
 
-        # Add critical issues to content using list comprehension
+        # Early return pattern: Add critical issues if present
+        # Guard clause: Skip if no critical issues
         if analysis['critical_issues']:
             content_parts.append("\nCritical Issues:")
             content_parts.extend([

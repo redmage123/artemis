@@ -191,69 +191,11 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
 
             # Track LLM costs for each developer
             self.update_progress({"step": "tracking_llm_costs", "progress_percent": 50})
-            if self.supervisor:
-                for result in developer_results:
-                    if result.get('success', False) and result.get('tokens_used'):
-                        try:
-                            tokens_used = result['tokens_used']
-                            self.supervisor.track_llm_call(
-                                model=result.get('llm_model', 'gpt-4o'),
-                                provider=result.get('llm_provider', 'openai'),
-                                tokens_input=getattr(tokens_used, 'prompt_tokens', 0),
-                                tokens_output=getattr(tokens_used, 'completion_tokens', 0),
-                                stage=stage_name,
-                                purpose=result.get('developer', 'unknown')
-                            )
-                            self.logger.log(
-                                f"Tracked LLM cost for {result.get('developer')}",
-                                "INFO"
-                            )
-                        except Exception as e:
-                            # Budget exceeded or other cost tracking error
-                            self.logger.log(f"Cost tracking error: {e}", "ERROR")
-                            if "Budget" in str(e):
-                                raise
+            self._track_developer_llm_costs(developer_results, stage_name)
 
             # Execute developer code in sandbox (if supervisor has sandboxing enabled)
             self.update_progress({"step": "sandboxing_code", "progress_percent": 65})
-            if self.supervisor and hasattr(self.supervisor, 'sandbox') and self.supervisor.sandbox:
-                # Executable extensions only (skip HTML, notebooks, markdown, etc.)
-                executable_exts = {'.py', '.js', '.ts', '.java', '.go', '.rs', '.c', '.cpp'}
-
-                for result in developer_results:
-                    if not result.get('success', False):
-                        continue
-
-                    dev_name = result.get('developer', 'unknown')
-
-                    # Get implementation files
-                    impl_files = result.get('implementation_files', [])
-                    for impl_file in impl_files:
-                        file_path = Path(impl_file)
-
-                        # Skip non-executable artifacts
-                        if not file_path.exists() or file_path.suffix not in executable_exts:
-                            continue
-
-                        self.logger.log(f"Executing {dev_name} code in sandbox: {file_path.name}...", "INFO")
-                        code = file_path.read_text()
-
-                        # Execute in sandbox
-                        exec_result = self.supervisor.execute_code_safely(
-                            code=code,
-                            scan_security=True
-                        )
-
-                        if not exec_result["success"]:
-                            error_msg = (
-                                f"{dev_name} code execution failed: "
-                                f"{exec_result.get('kill_reason', 'unknown')}"
-                            )
-                            self.logger.log(error_msg, "ERROR")
-
-                            # Mark this developer solution as failed
-                            result["success"] = False
-                            result["error"] = error_msg
+            self._execute_in_sandbox_if_enabled(developer_results)
 
             # Store each developer's solution in RAG
             self.update_progress({"step": "storing_in_rag", "progress_percent": 80})
@@ -269,30 +211,32 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
 
             if not successful_devs:
                 # All developers failed - report unexpected state
-                if self.supervisor and hasattr(self.supervisor, 'handle_unexpected_state'):
-                    recovery = self.supervisor.handle_unexpected_state(
-                        current_state="STAGE_FAILED_ALL_DEVELOPERS",
-                        expected_states=["STAGE_COMPLETED"],
-                        context={
-                            "stage_name": stage_name,
-                            "error_message": "All developers failed",
-                            "card_id": card_id,
-                            "developer_count": len(developer_results),
-                            "developer_errors": [r.get("error") for r in developer_results]
-                        },
-                        auto_learn=True  # Let supervisor learn how to fix this
-                    )
-
-                    if recovery and recovery.get("success"):
-                        self.logger.log(
-                            "Supervisor recovered from all-developers-failed state!",
-                            "INFO"
-                        )
-                        # In production, would retry or apply learned solution here
-                    else:
-                        raise Exception("All developers failed and recovery unsuccessful")
-                else:
+                # Early return: raise immediately if no supervisor
+                if not self.supervisor or not hasattr(self.supervisor, 'handle_unexpected_state'):
                     raise Exception("All developers failed")
+
+                recovery = self.supervisor.handle_unexpected_state(
+                    current_state="STAGE_FAILED_ALL_DEVELOPERS",
+                    expected_states=["STAGE_COMPLETED"],
+                    context={
+                        "stage_name": stage_name,
+                        "error_message": "All developers failed",
+                        "card_id": card_id,
+                        "developer_count": len(developer_results),
+                        "developer_errors": [r.get("error") for r in developer_results]
+                    },
+                    auto_learn=True  # Let supervisor learn how to fix this
+                )
+
+                # Early return: raise immediately if recovery failed
+                if not recovery or not recovery.get("success"):
+                    raise Exception("All developers failed and recovery unsuccessful")
+
+                self.logger.log(
+                    "Supervisor recovered from all-developers-failed state!",
+                    "INFO"
+                )
+                # In production, would retry or apply learned solution here
 
             # Update progress: complete
             self.update_progress({"step": "complete", "progress_percent": 100})
@@ -334,34 +278,72 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
 
         except Exception as e:
             # Let supervisor learn from this failure
-            if self.supervisor and hasattr(self.supervisor, 'handle_unexpected_state'):
-                import traceback
-                self.logger.log(f"Development stage failed, consulting supervisor...", "WARNING")
-
-                recovery = self.supervisor.handle_unexpected_state(
-                    current_state="STAGE_FAILED",
-                    expected_states=["STAGE_COMPLETED"],
-                    context={
-                        "stage_name": stage_name,
-                        "error_message": str(e),
-                        "stack_trace": traceback.format_exc(),
-                        "card_id": card_id
-                    },
-                    auto_learn=True
-                )
-
-                if recovery and recovery.get("success"):
-                    self.logger.log("Supervisor recovered from failure!", "INFO")
-                    # The supervisor's learned workflow already executed
-                    # In production, we might want to retry the stage here
-                else:
-                    self.logger.log("Supervisor could not recover", "ERROR")
-
+            self._handle_stage_failure(e, stage_name, card_id)
             # Re-raise after supervisor has learned
             raise
 
     def get_stage_name(self) -> str:
         return "development"
+
+    def _track_developer_llm_costs(self, developer_results: list, stage_name: str):
+        """Track LLM costs for each developer's work"""
+        # Early return: no supervisor available
+        if not self.supervisor:
+            return
+
+        for result in developer_results:
+            # Early return: skip if not successful or no tokens
+            if not result.get('success', False) or not result.get('tokens_used'):
+                continue
+
+            try:
+                tokens_used = result['tokens_used']
+                self.supervisor.track_llm_call(
+                    model=result.get('llm_model', 'gpt-4o'),
+                    provider=result.get('llm_provider', 'openai'),
+                    tokens_input=getattr(tokens_used, 'prompt_tokens', 0),
+                    tokens_output=getattr(tokens_used, 'completion_tokens', 0),
+                    stage=stage_name,
+                    purpose=result.get('developer', 'unknown')
+                )
+                self.logger.log(
+                    f"Tracked LLM cost for {result.get('developer')}",
+                    "INFO"
+                )
+            except Exception as e:
+                # Budget exceeded or other cost tracking error
+                self.logger.log(f"Cost tracking error: {e}", "ERROR")
+                # Early return: re-raise budget errors immediately
+                if "Budget" in str(e):
+                    raise
+
+    def _handle_stage_failure(self, exception: Exception, stage_name: str, card_id: str):
+        """Handle stage failure with supervisor recovery if available"""
+        # Early return: no supervisor available
+        if not self.supervisor or not hasattr(self.supervisor, 'handle_unexpected_state'):
+            return
+
+        import traceback
+        self.logger.log(f"Development stage failed, consulting supervisor...", "WARNING")
+
+        recovery = self.supervisor.handle_unexpected_state(
+            current_state="STAGE_FAILED",
+            expected_states=["STAGE_COMPLETED"],
+            context={
+                "stage_name": stage_name,
+                "error_message": str(exception),
+                "stack_trace": traceback.format_exc(),
+                "card_id": card_id
+            },
+            auto_learn=True
+        )
+
+        if recovery and recovery.get("success"):
+            self.logger.log("Supervisor recovered from failure!", "INFO")
+            # The supervisor's learned workflow already executed
+            # In production, we might want to retry the stage here
+        else:
+            self.logger.log("Supervisor could not recover", "ERROR")
 
     def _read_adr(self, adr_file: str) -> str:
         """Read ADR content"""
@@ -414,60 +396,88 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             }
         )
 
+    def _execute_in_sandbox_if_enabled(self, developer_results: list):
+        """Execute developer code in sandbox if supervisor has sandboxing enabled"""
+        # Early return: skip if no sandbox configured
+        if not self.supervisor or not hasattr(self.supervisor, 'sandbox') or not self.supervisor.sandbox:
+            return
+
+        # Executable extensions only (skip HTML, notebooks, markdown, etc.)
+        executable_exts = {'.py', '.js', '.ts', '.java', '.go', '.rs', '.c', '.cpp'}
+
+        for result in developer_results:
+            # Early return: skip failed results
+            if not result.get('success', False):
+                continue
+
+            dev_name = result.get('developer', 'unknown')
+            impl_files = result.get('implementation_files', [])
+
+            for impl_file in impl_files:
+                file_path = Path(impl_file)
+
+                # Early return: skip non-executable artifacts
+                if not file_path.exists() or file_path.suffix not in executable_exts:
+                    continue
+
+                self.logger.log(f"Executing {dev_name} code in sandbox: {file_path.name}...", "INFO")
+                code = file_path.read_text()
+
+                # Execute in sandbox
+                exec_result = self.supervisor.execute_code_safely(
+                    code=code,
+                    scan_security=True
+                )
+
+                if not exec_result["success"]:
+                    error_msg = (
+                        f"{dev_name} code execution failed: "
+                        f"{exec_result.get('kill_reason', 'unknown')}"
+                    )
+                    self.logger.log(error_msg, "ERROR")
+
+                    # Mark this developer solution as failed
+                    result["success"] = False
+                    result["error"] = error_msg
+
+    def _add_files_to_knowledge_graph(self, kg, card_id: str, file_paths: list) -> int:
+        """Helper to add a list of files to knowledge graph. Returns count of files added."""
+        files_added = 0
+        for file_path in file_paths:
+            try:
+                file_type = self._detect_file_type(str(file_path))
+                kg.add_file(str(file_path), file_type)
+                kg.link_task_to_file(card_id, str(file_path))
+                files_added += 1
+            except Exception as e:
+                self.logger.log(f"   Could not add file {file_path}: {e}", "DEBUG")
+        return files_added
+
     def _store_development_in_knowledge_graph(self, card_id: str, developer_results: list):
         """Store development artifacts in Knowledge Graph for traceability"""
         kg = get_knowledge_graph()
+        # Early return: no knowledge graph available
         if not kg:
             self.logger.log("Knowledge Graph not available - skipping KG storage", "DEBUG")
             return
 
         try:
             self.logger.log("Storing development artifacts in Knowledge Graph...", "DEBUG")
-
             total_files = 0
 
             # Process each developer's implementation
             for dev_result in developer_results:
+                # Early return: skip failed implementations
                 if not dev_result.get('success', False):
-                    continue  # Skip failed implementations
+                    continue
 
-                developer_name = dev_result.get('developer', 'unknown')
-
-                # Add implementation files to knowledge graph
+                # Add implementation files
                 impl_files = dev_result.get('implementation_files', [])
-                for file_path in impl_files:
-                    try:
-                        # Detect file type
-                        file_type = self._detect_file_type(str(file_path))
+                total_files += self._add_files_to_knowledge_graph(kg, card_id, impl_files)
 
-                        # Add file node
-                        kg.add_file(str(file_path), file_type)
-
-                        # Link task to file
-                        kg.link_task_to_file(card_id, str(file_path))
-
-                        total_files += 1
-
-                    except Exception as e:
-                        self.logger.log(f"   Could not add file {file_path}: {e}", "DEBUG")
-
-                # Add test files to knowledge graph
+                # Add test files
                 test_files = dev_result.get('test_files', [])
-                for file_path in test_files:
-                    try:
-                        # Detect file type
-                        file_type = self._detect_file_type(str(file_path))
-
-                        # Add file node
-                        kg.add_file(str(file_path), file_type)
-
-                        # Link task to file
-                        kg.link_task_to_file(card_id, str(file_path))
-
-                        total_files += 1
-
-                    except Exception as e:
-                        self.logger.log(f"   Could not add test file {file_path}: {e}", "DEBUG")
+                total_files += self._add_files_to_knowledge_graph(kg, card_id, test_files)
 
             if total_files > 0:
                 self.logger.log(f"✅ Stored {total_files} implementation files in Knowledge Graph", "INFO")
@@ -479,27 +489,36 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             self.logger.log(f"   Exception details: {type(e).__name__}", "DEBUG")
 
     def _detect_file_type(self, file_path: str) -> str:
-        """Detect file type from path"""
+        """Detect file type from path using early returns"""
+        # Early returns: check each type and return immediately
         if file_path.endswith('.py'):
             return 'python'
-        elif file_path.endswith(('.js', '.jsx', '.ts', '.tsx')):
+
+        if file_path.endswith(('.js', '.jsx', '.ts', '.tsx')):
             return 'javascript'
-        elif file_path.endswith('.java'):
+
+        if file_path.endswith('.java'):
             return 'java'
-        elif file_path.endswith('.go'):
+
+        if file_path.endswith('.go'):
             return 'go'
-        elif file_path.endswith('.rs'):
+
+        if file_path.endswith('.rs'):
             return 'rust'
-        elif file_path.endswith(('.c', '.cpp', '.h', '.hpp')):
+
+        if file_path.endswith(('.c', '.cpp', '.h', '.hpp')):
             return 'c++'
-        elif file_path.endswith('.md'):
+
+        if file_path.endswith('.md'):
             return 'markdown'
-        elif file_path.endswith(('.yaml', '.yml')):
+
+        if file_path.endswith(('.yaml', '.yml')):
             return 'yaml'
-        elif file_path.endswith('.json'):
+
+        if file_path.endswith('.json'):
             return 'json'
-        else:
-            return 'unknown'
+
+        return 'unknown'
 
 
 # ============================================================================

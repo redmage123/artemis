@@ -1,0 +1,176 @@
+================================================================================
+ARTEMIS CLI - MODULE DEPENDENCY DIAGRAM
+================================================================================
+
+                         artemis_cli.py (41 lines)
+                         [Backward Compatibility Wrapper]
+                                    |
+                                    | delegates to
+                                    v
+                              cli/__init__.py (45 lines)
+                              [Package Exports]
+                                    |
+                                    | exports
+                                    v
+                              cli/cli_core.py (98 lines)
+                              [Main Orchestration]
+                                    |
+                    +---------------+---------------+
+                    |                               |
+                    v                               v
+            cli/parser.py                   cli/commands.py
+            (208 lines)                     (562 lines)
+            [Argument Parsing]              [Command Handlers]
+                    |                               |
+                    |                               +--- InitPromptsCommand
+                    |                               +--- TestConfigCommand
+                    |                               +--- RunCommand
+                    |                               +--- CleanupCommand
+                    |                               +--- StatusCommand
+                    |                               +--- PromptsCommand
+                    |                               +--- CommandDispatcher
+                    |                               |
+                    v                               v
+              cli/models.py                  cli/formatters.py
+              (129 lines)                    (289 lines)
+              [Data Models]                  [Output Formatting]
+                    |                               |
+                    +--- CommandType                +--- OutputFormatter
+                    +--- PromptAction               +--- StatusFormatter
+                    +--- CLIArguments               +--- PromptFormatter
+                    +--- CommandResult
+                    +--- SystemStatus
+                    +--- LLMConfig
+                    +--- StoragePaths
+
+================================================================================
+DEPENDENCY FLOW
+================================================================================
+
+User Input
+    |
+    v
+artemis_cli.py (Entry Point)
+    |
+    v
+cli/__init__.py (Package API)
+    |
+    v
+cli_core.py (Orchestrator)
+    |
+    +---> parser.py ---> models.py (Parse CLI args)
+    |
+    +---> commands.py ---> models.py (Dispatch command)
+              |
+              +---> formatters.py (Format output)
+              |
+              v
+          CommandResult
+              |
+              v
+          Exit Code
+
+================================================================================
+MODULE RESPONSIBILITIES
+================================================================================
+
+models.py
+├─ Purpose: Define all data structures
+├─ Pattern: Dataclass + Enum
+├─ Imports: typing, dataclasses, enum
+└─ Exported: 7 classes (CommandType, PromptAction, CLIArguments, etc.)
+
+parser.py
+├─ Purpose: Parse command-line arguments
+├─ Pattern: Builder + Type Conversion
+├─ Imports: argparse, models
+└─ Exported: ArgumentParser
+
+commands.py
+├─ Purpose: Implement command handlers
+├─ Pattern: Command + Dispatch Table
+├─ Imports: subprocess, shutil, json, models, formatters
+└─ Exported: 7 handler classes + CommandDispatcher
+
+formatters.py
+├─ Purpose: Format CLI output
+├─ Pattern: Strategy + Static Methods
+├─ Imports: typing, pathlib, models
+└─ Exported: 3 formatter classes
+
+cli_core.py
+├─ Purpose: Orchestrate CLI execution
+├─ Pattern: Facade + Error Handling
+├─ Imports: parser, commands, models
+└─ Exported: ArtemisCLI, main()
+
+__init__.py
+├─ Purpose: Package public API
+├─ Pattern: Facade + Explicit Exports
+├─ Imports: All module components
+└─ Exported: __all__ with 15 symbols
+
+artemis_cli.py
+├─ Purpose: Backward compatibility
+├─ Pattern: Facade + Delegation
+├─ Imports: cli.main
+└─ Exported: Delegates to cli package
+
+================================================================================
+IMPORT GRAPH
+================================================================================
+
+artemis_cli.py
+    └─> cli
+
+cli/__init__.py
+    ├─> cli.cli_core
+    ├─> cli.models
+    ├─> cli.parser
+    ├─> cli.commands
+    └─> cli.formatters
+
+cli_core.py
+    ├─> cli.parser
+    ├─> cli.commands
+    └─> cli.models
+
+parser.py
+    └─> cli.models
+
+commands.py
+    ├─> cli.models
+    └─> cli.formatters
+
+formatters.py
+    └─> cli.models
+
+models.py
+    └─> (no internal dependencies)
+
+================================================================================
+DESIGN PATTERN MAPPING
+================================================================================
+
+Command Pattern
+    └─> commands.py (CommandHandler base + concrete commands)
+
+Dispatch Table
+    └─> commands.py (CommandDispatcher routing)
+    └─> commands.py (PromptsCommand action routing)
+
+Strategy Pattern
+    └─> formatters.py (OutputFormatter, StatusFormatter, PromptFormatter)
+
+Facade Pattern
+    └─> artemis_cli.py (backward compatibility)
+    └─> cli_core.py (subsystem coordination)
+    └─> __init__.py (package interface)
+
+Builder Pattern
+    └─> parser.py (ArgumentParser configuration)
+
+Factory Pattern
+    └─> models.py (CommandResult factory methods)
+
+================================================================================

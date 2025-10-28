@@ -154,43 +154,52 @@ class WorkflowStatusTracker:
     def complete_stage(self, stage_id: str):
         """Mark a stage as completed"""
         stage = self._find_stage(stage_id)
-        if stage:
-            stage['status'] = 'completed'
-            stage['end_time'] = datetime.now().isoformat()
-            stage['duration_seconds'] = self._calculate_stage_duration(stage)
-            self._save()
+        if not stage:
+            return
+
+        stage['status'] = 'completed'
+        stage['end_time'] = datetime.now().isoformat()
+        stage['duration_seconds'] = self._calculate_stage_duration(stage)
+        self._save()
 
     def fail_stage(self, stage_id: str, error_message: str):
         """Mark a stage as failed"""
         stage = self._find_stage(stage_id)
-        if stage:
-            stage['status'] = 'failed'
-            stage['end_time'] = datetime.now().isoformat()
-            stage['error'] = error_message
-            stage['duration_seconds'] = self._calculate_stage_duration(stage)
-            self._save()
+        if not stage:
+            return
+
+        stage['status'] = 'failed'
+        stage['end_time'] = datetime.now().isoformat()
+        stage['error'] = error_message
+        stage['duration_seconds'] = self._calculate_stage_duration(stage)
+        self._save()
 
     def skip_stage(self, stage_id: str, reason: str = None):
         """Mark a stage as skipped"""
         stage = self._find_stage(stage_id)
-        if stage:
-            stage['status'] = 'skipped'
-            stage['end_time'] = datetime.now().isoformat()
-            if reason:
-                stage['error'] = f"Skipped: {reason}"
-            self._save()
+        if not stage:
+            return
+
+        stage['status'] = 'skipped'
+        stage['end_time'] = datetime.now().isoformat()
+        if reason:
+            stage['error'] = f"Skipped: {reason}"
+        self._save()
 
     def update_stage_progress(self, stage_id: str, message: str):
         """Update stage progress message"""
         stage = self._find_stage(stage_id)
-        if stage:
-            if 'progress' not in stage:
-                stage['progress'] = []
-            stage['progress'].append({
-                'timestamp': datetime.now().isoformat(),
-                'message': message
-            })
-            self._save()
+        if not stage:
+            return
+
+        if 'progress' not in stage:
+            stage['progress'] = []
+
+        stage['progress'].append({
+            'timestamp': datetime.now().isoformat(),
+            'message': message
+        })
+        self._save()
 
     @contextmanager
     def track_workflow(self):
@@ -244,18 +253,21 @@ class WorkflowStatusTracker:
 
     def _calculate_duration(self):
         """Calculate total workflow duration"""
-        if self.status_data['start_time'] and self.status_data['end_time']:
-            start = datetime.fromisoformat(self.status_data['start_time'])
-            end = datetime.fromisoformat(self.status_data['end_time'])
-            self.status_data['total_duration_seconds'] = (end - start).total_seconds()
+        if not self.status_data['start_time'] or not self.status_data['end_time']:
+            return
+
+        start = datetime.fromisoformat(self.status_data['start_time'])
+        end = datetime.fromisoformat(self.status_data['end_time'])
+        self.status_data['total_duration_seconds'] = (end - start).total_seconds()
 
     def _calculate_stage_duration(self, stage: Dict) -> Optional[float]:
         """Calculate stage duration"""
-        if stage['start_time'] and stage['end_time']:
-            start = datetime.fromisoformat(stage['start_time'])
-            end = datetime.fromisoformat(stage['end_time'])
-            return (end - start).total_seconds()
-        return None
+        if not stage['start_time'] or not stage['end_time']:
+            return None
+
+        start = datetime.fromisoformat(stage['start_time'])
+        end = datetime.fromisoformat(stage['end_time'])
+        return (end - start).total_seconds()
 
     def _save(self):
         """Save status to disk"""

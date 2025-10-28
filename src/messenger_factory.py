@@ -166,35 +166,87 @@ class MessengerFactory:
         """
         Get messenger-specific configuration from environment variables
 
+        WHY: Centralizes environment variable configuration for each messenger type.
+        PATTERNS: Strategy pattern using dictionary dispatch to avoid if/elif chains.
+
         Args:
             messenger_type: Type of messenger
 
         Returns:
             Configuration dictionary
         """
+        # Strategy pattern: Dictionary dispatch for config extraction (avoid if/elif)
+        config_extractors = {
+            "file": cls._extract_file_config,
+            "rabbitmq": cls._extract_rabbitmq_config,
+            "redis": cls._extract_redis_config,
+        }
+
+        extractor = config_extractors.get(messenger_type)
+        if not extractor:
+            return {}
+
+        return extractor()
+
+    @classmethod
+    def _extract_file_config(cls) -> Dict[str, Any]:
+        """
+        Extract file-based messenger configuration from environment.
+
+        WHY: Extracted to avoid nested ifs and follow DRY principle.
+        PERFORMANCE: O(1) environment variable lookup.
+
+        Returns:
+            Configuration dictionary for file messenger
+        """
+        config = {}
+        message_dir = os.getenv("ARTEMIS_MESSAGE_DIR")
+        if message_dir:
+            config["message_dir"] = message_dir
+        return config
+
+    @classmethod
+    def _extract_rabbitmq_config(cls) -> Dict[str, Any]:
+        """
+        Extract RabbitMQ messenger configuration from environment.
+
+        WHY: Extracted to avoid nested ifs and follow DRY principle.
+        PERFORMANCE: O(1) environment variable lookups.
+
+        Returns:
+            Configuration dictionary for RabbitMQ messenger
+        """
         config = {}
 
-        if messenger_type == "file":
-            # File-based messenger config
-            if os.getenv("ARTEMIS_MESSAGE_DIR"):
-                config["message_dir"] = os.getenv("ARTEMIS_MESSAGE_DIR")
+        rabbitmq_url = os.getenv("ARTEMIS_RABBITMQ_URL")
+        if rabbitmq_url:
+            config["rabbitmq_url"] = rabbitmq_url
 
-        elif messenger_type == "rabbitmq":
-            # RabbitMQ messenger config
-            if os.getenv("ARTEMIS_RABBITMQ_URL"):
-                config["rabbitmq_url"] = os.getenv("ARTEMIS_RABBITMQ_URL")
+        rabbitmq_durable = os.getenv("ARTEMIS_RABBITMQ_DURABLE")
+        if rabbitmq_durable:
+            config["durable"] = rabbitmq_durable.lower() == "true"
 
-            if os.getenv("ARTEMIS_RABBITMQ_DURABLE"):
-                config["durable"] = os.getenv("ARTEMIS_RABBITMQ_DURABLE").lower() == "true"
+        rabbitmq_prefetch = os.getenv("ARTEMIS_RABBITMQ_PREFETCH")
+        if rabbitmq_prefetch:
+            config["prefetch_count"] = int(rabbitmq_prefetch)
 
-            if os.getenv("ARTEMIS_RABBITMQ_PREFETCH"):
-                config["prefetch_count"] = int(os.getenv("ARTEMIS_RABBITMQ_PREFETCH"))
+        return config
 
-        elif messenger_type == "redis":
-            # Redis messenger config (future implementation)
-            if os.getenv("ARTEMIS_REDIS_URL"):
-                config["redis_url"] = os.getenv("ARTEMIS_REDIS_URL")
+    @classmethod
+    def _extract_redis_config(cls) -> Dict[str, Any]:
+        """
+        Extract Redis messenger configuration from environment.
 
+        WHY: Extracted to avoid nested ifs and follow DRY principle.
+        PERFORMANCE: O(1) environment variable lookup.
+
+        Returns:
+            Configuration dictionary for Redis messenger
+        """
+        config = {}
+        redis_url = os.getenv("ARTEMIS_REDIS_URL")
+        if redis_url:
+            config["redis_url"] = redis_url
         return config
 
     @classmethod

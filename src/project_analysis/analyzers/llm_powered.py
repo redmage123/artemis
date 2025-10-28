@@ -1,0 +1,401 @@
+#!/usr/bin/env python3
+"""
+WHY: LLM-powered comprehensive analysis using DEPTH framework
+RESPONSIBILITY: Provide intelligent, context-aware analysis beyond rule-based detection
+PATTERNS: DEPTH framework, KG-First approach for token savings, guard clauses
+
+This module implements LLM-powered analysis that complements rule-based analyzers
+with deeper insights, using the DEPTH framework (Define, Establish, Provide, Task, Human).
+Uses AIQueryService for KG-First approach to reduce token usage (~750 tokens/task).
+"""
+
+import json
+import re
+from typing import Any, Dict, List, Optional
+
+from environment_context import get_environment_context_short
+
+from project_analysis.interfaces import DimensionAnalyzer
+from project_analysis.models import AnalysisResult, Issue, Severity
+
+# Import AIQueryService for centralized KG→RAG→LLM pipeline
+try:
+    from ai_query_service import AIQueryResult, QueryType
+    AI_QUERY_SERVICE_AVAILABLE = True
+except ImportError:
+    AI_QUERY_SERVICE_AVAILABLE = False
+
+
+class LLMPoweredAnalyzer(DimensionAnalyzer):
+    """
+    WHY: Provide intelligent analysis beyond deterministic rules
+    RESPONSIBILITY: Use LLM to identify subtle issues and provide expert insights
+    PATTERNS: DEPTH framework, KG-First approach, fallback handling
+
+    LLM-Powered Comprehensive Analyzer using DEPTH Framework:
+    - D: Define Multiple Perspectives (security, architecture, QA, DevOps, UX)
+    - E: Establish Clear Success Metrics (severity levels, approval criteria)
+    - P: Provide Context Layers (card details, RAG context, historical data)
+    - T: Task Breakdown (dimension-by-dimension analysis)
+    - H: Human Feedback Loop (self-critique and validation)
+
+    Now uses AIQueryService for KG-First approach (token savings ~750 tokens/task).
+    Complements rule-based analyzers with deeper, context-aware insights.
+    """
+
+    def __init__(
+        self,
+        llm_client: Optional[Any] = None,
+        config: Optional[Any] = None,
+        ai_service: Optional[Any] = None
+    ):
+        """
+        Initialize with LLM client and optional AI service.
+
+        Args:
+            llm_client: LLM client instance (LLMClientInterface)
+            config: Configuration agent for settings
+            ai_service: AI Query Service for KG-First queries (optional)
+        """
+        self.llm_client = llm_client
+        self.config = config
+        self.ai_service = ai_service
+
+    def analyze(self, card: Dict, context: Dict) -> AnalysisResult:
+        """
+        Analyze task using LLM with DEPTH framework.
+
+        Guard clause: Return empty result if no LLM available.
+        Uses AIQueryService for KG-First approach to reduce token usage.
+
+        Args:
+            card: Kanban card with task details
+            context: Pipeline context (RAG recommendations, etc.)
+
+        Returns:
+            AnalysisResult with LLM-generated insights
+        """
+        # Guard clause: No LLM available
+        if not self.ai_service and not self.llm_client:
+            return AnalysisResult(
+                dimension="LLM-Powered Analysis",
+                issues=[],
+                recommendations=["LLM client not available - using rule-based analysis only"]
+            )
+
+        # Build DEPTH-conforming prompt
+        system_message = self._build_system_message()
+        user_message = self._build_user_message(card, context)
+        full_prompt = f"{system_message}\n\n{user_message}"
+
+        try:
+            response = self._get_llm_response(card, full_prompt, system_message, user_message)
+
+            # Parse LLM response (expecting JSON)
+            analysis_data = self._parse_llm_response(response)
+
+            # Convert to AnalysisResult
+            issues = self._extract_issues(analysis_data)
+            recommendations = analysis_data.get("recommendations", [])
+
+            return AnalysisResult(
+                dimension="LLM-Powered Comprehensive Analysis",
+                issues=issues,
+                recommendations=recommendations
+            )
+
+        except Exception as e:
+            # Fallback on error
+            return AnalysisResult(
+                dimension="LLM-Powered Analysis",
+                issues=[],
+                recommendations=[f"LLM analysis failed: {str(e)}"]
+            )
+
+    def _get_llm_response(
+        self,
+        card: Dict,
+        full_prompt: str,
+        system_message: str,
+        user_message: str
+    ) -> str:
+        """
+        Get LLM response using AIQueryService or fallback to direct LLM call.
+
+        Guard clause: Use direct LLM call if AIQueryService unavailable.
+
+        Args:
+            card: Kanban card with task details
+            full_prompt: Full prompt for AIQueryService
+            system_message: System message for direct LLM call
+            user_message: User message for direct LLM call
+
+        Returns:
+            LLM response text
+        """
+        # Guard clause: No AI service, use direct LLM
+        if not self.ai_service:
+            return self.llm_client.generate_text(
+                system_message=system_message,
+                user_message=user_message,
+                temperature=0.3,
+                max_tokens=2000
+            )
+
+        # Use AIQueryService (KG-First approach)
+        keywords = card.get('title', '').lower().split()[:3]
+        result = self.ai_service.query(
+            query_type=QueryType.PROJECT_ANALYSIS,
+            prompt=full_prompt,
+            kg_query_params={
+                'task_title': card.get('title', ''),
+                'keywords': keywords
+            },
+            temperature=0.3,  # Lower temperature for analytical consistency
+            max_tokens=2000
+        )
+
+        # Guard clause: Query failed
+        if not result.success:
+            raise Exception(f"AI query failed: {result.error}")
+
+        return result.llm_response.content
+
+    def _build_context_summary(self, context: Dict) -> str:
+        """
+        Build context summary from RAG recommendations.
+
+        Guard clause: Return empty string if no context.
+
+        Args:
+            context: Pipeline context containing RAG recommendations
+
+        Returns:
+            Formatted context summary string
+        """
+        # Guard clause: No context
+        if not context:
+            return ""
+
+        rag_recommendations = context.get('rag_recommendations', [])
+        rag_list = self._normalize_rag_recommendations(rag_recommendations)
+
+        # Guard clause: No RAG recommendations
+        if not rag_list:
+            return ""
+
+        context_summary = "\n**Historical Context (RAG):**\n"
+        for rec in rag_list[:3]:  # Top 3 recommendations
+            context_summary += f"- {rec}\n"
+
+        return context_summary
+
+    def _normalize_rag_recommendations(self, rag_recommendations: Any) -> List:
+        """
+        Normalize RAG recommendations to list format.
+
+        Handles both dict and list formats for flexibility.
+
+        Args:
+            rag_recommendations: RAG recommendations in dict or list format
+
+        Returns:
+            List of recommendations
+        """
+        if isinstance(rag_recommendations, dict):
+            return list(rag_recommendations.values()) if rag_recommendations else []
+
+        if isinstance(rag_recommendations, list):
+            return rag_recommendations
+
+        return []
+
+    def get_dimension_name(self) -> str:
+        """Get the name of this analysis dimension."""
+        return "llm_powered"
+
+    def _build_system_message(self) -> str:
+        """
+        Build system message with DEPTH framework.
+
+        Defines multiple expert perspectives and success criteria.
+
+        Returns:
+            System message for LLM
+        """
+        return """You are an expert Project Analysis AI specializing in identifying issues before implementation.
+
+**Multiple Expert Perspectives:**
+Apply the viewpoints of:
+- Senior Software Architect (15+ years) - focusing on architectural soundness and scalability
+- Security Engineer - identifying potential vulnerabilities and compliance issues
+- QA Lead - considering testability, edge cases, and quality assurance
+- DevOps Engineer - evaluating deployment, monitoring, and operational concerns
+- UX Designer - assessing user experience and accessibility requirements
+
+**Success Criteria:**
+Your analysis MUST:
+1. Identify CRITICAL issues (security, compliance, data loss risks)
+2. Highlight HIGH-priority improvements (testing, performance, scalability)
+3. Suggest MEDIUM-priority enhancements (code quality, maintainability)
+4. Provide specific, actionable recommendations (not generic advice)
+5. Return valid JSON matching the expected schema
+6. Avoid AI clichés like "robust", "delve", "leverage"
+
+**Self-Validation:**
+Before responding, ask yourself:
+1. Did I identify all security vulnerabilities?
+2. Are my recommendations specific and actionable?
+3. Did I consider all edge cases and failure scenarios?
+4. Is my JSON properly formatted?
+5. Did I avoid generic advice and AI clichés?
+
+If any answer is NO, revise your analysis."""
+
+    def _build_user_message(self, card: Dict, context: Dict) -> str:
+        """
+        Build user message with context layers.
+
+        Provides comprehensive task context and analysis dimensions.
+
+        Args:
+            card: Kanban card with task details
+            context: Pipeline context
+
+        Returns:
+            User message for LLM
+        """
+        card_summary = f"""
+**Task Title:** {card.get('title', 'Unknown')}
+**Description:** {card.get('description', 'No description provided')}
+**Priority:** {card.get('priority', 'Not set')}
+**Story Points:** {card.get('points', 'Not estimated')}
+**Acceptance Criteria:** {card.get('acceptance_criteria', [])}
+"""
+
+        context_summary = self._build_context_summary(context)
+
+        return f"""Analyze the following task BEFORE implementation across these dimensions:
+
+1. **Scope & Requirements**: Are requirements clear and complete?
+2. **Security**: Any security vulnerabilities or compliance issues?
+3. **Performance & Scalability**: Performance concerns or bottlenecks?
+4. **Testing Strategy**: Is testing approach comprehensive?
+5. **Error Handling**: Are edge cases and failures addressed?
+6. **Architecture**: Architectural concerns or design issues?
+7. **Dependencies**: External dependencies or integration risks?
+8. **Accessibility**: WCAG compliance and UX considerations?
+
+{card_summary}
+{context_summary}
+
+{get_environment_context_short()}
+
+**Task Breakdown:**
+1. Read the task requirements carefully
+2. Analyze each dimension systematically
+3. Identify issues categorized by severity (CRITICAL/HIGH/MEDIUM)
+4. Provide specific, actionable recommendations
+5. Self-validate your analysis before responding
+
+**Response Format (JSON only):**
+{{
+  "issues": [
+    {{
+      "category": "Security|Performance|Testing|Architecture|Dependencies|Accessibility|Scope|Error Handling",
+      "severity": "CRITICAL|HIGH|MEDIUM",
+      "description": "Brief issue description",
+      "impact": "What happens if not addressed",
+      "suggestion": "Specific actionable fix",
+      "reasoning": "Why this matters",
+      "user_approval_needed": true|false
+    }}
+  ],
+  "recommendations": [
+    "Specific recommendation 1",
+    "Specific recommendation 2"
+  ],
+  "overall_assessment": "Brief 1-2 sentence summary",
+  "recommendation_action": "APPROVE_ALL|APPROVE_CRITICAL|REJECT"
+}}
+
+Return ONLY valid JSON, no markdown, no explanations."""
+
+    def _parse_llm_response(self, response: str) -> Dict:
+        """
+        Parse LLM response JSON, handling markdown code blocks.
+
+        Args:
+            response: LLM response text
+
+        Returns:
+            Parsed JSON dict
+
+        Raises:
+            ValueError: If JSON parsing fails
+        """
+        # Strip markdown code blocks if present
+        response = response.strip()
+        if response.startswith("```json"):
+            response = response[7:]
+        if response.startswith("```"):
+            response = response[3:]
+        if response.endswith("```"):
+            response = response[:-3]
+        response = response.strip()
+
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError as e:
+            # Fallback: try to extract JSON from response
+            return self._extract_json_from_response(response, e)
+
+    def _extract_json_from_response(self, response: str, error: json.JSONDecodeError) -> Dict:
+        """
+        Extract JSON from response using regex fallback.
+
+        Args:
+            response: Response string to parse
+            error: Original JSONDecodeError
+
+        Returns:
+            Parsed JSON dict
+
+        Raises:
+            ValueError: If JSON extraction fails
+        """
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        # Guard clause: No JSON found
+        if not json_match:
+            raise ValueError(f"Failed to parse LLM response as JSON: {error}")
+
+        return json.loads(json_match.group(0))
+
+    def _extract_issues(self, analysis_data: Dict) -> List[Issue]:
+        """
+        Extract issues from LLM analysis data.
+
+        Converts LLM response format to Issue objects.
+
+        Args:
+            analysis_data: Parsed LLM response
+
+        Returns:
+            List of Issue objects
+        """
+        issues = []
+        for issue_data in analysis_data.get("issues", []):
+            severity_str = issue_data.get("severity", "MEDIUM").upper()
+            severity = Severity[severity_str] if severity_str in Severity.__members__ else Severity.MEDIUM
+
+            issues.append(Issue(
+                category=issue_data.get("category", "General"),
+                severity=severity,
+                description=issue_data.get("description", ""),
+                impact=issue_data.get("impact", ""),
+                suggestion=issue_data.get("suggestion", ""),
+                reasoning=issue_data.get("reasoning", ""),
+                user_approval_needed=issue_data.get("user_approval_needed", False)
+            ))
+
+        return issues

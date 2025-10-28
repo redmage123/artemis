@@ -139,23 +139,30 @@ class PreflightValidator:
         ]
 
         for filename in critical_files:
-            file_path = Path(base_path) / filename
-            if not file_path.exists():
-                self.issues.append(ValidationIssue(
-                    file_path=str(file_path),
-                    issue_type="missing_file",
-                    severity="critical",
-                    message=f"Critical file not found: {filename}",
-                    suggestion=f"Ensure {filename} exists in the agile directory"
-                ))
-            elif not os.access(file_path, os.R_OK):
-                self.issues.append(ValidationIssue(
-                    file_path=str(file_path),
-                    issue_type="permission_error",
-                    severity="high",
-                    message=f"Critical file not readable: {filename}",
-                    suggestion=f"Check file permissions for {filename}"
-                ))
+            self._validate_critical_file(base_path, filename)
+
+    def _validate_critical_file(self, base_path: str, filename: str):
+        """Validate a single critical file exists and is readable"""
+        file_path = Path(base_path) / filename
+
+        if not file_path.exists():
+            self.issues.append(ValidationIssue(
+                file_path=str(file_path),
+                issue_type="missing_file",
+                severity="critical",
+                message=f"Critical file not found: {filename}",
+                suggestion=f"Ensure {filename} exists in the agile directory"
+            ))
+            return
+
+        if not os.access(file_path, os.R_OK):
+            self.issues.append(ValidationIssue(
+                file_path=str(file_path),
+                issue_type="permission_error",
+                severity="high",
+                message=f"Critical file not readable: {filename}",
+                suggestion=f"Check file permissions for {filename}"
+            ))
 
     def auto_fix_syntax_errors(self) -> bool:
         """
@@ -180,26 +187,41 @@ class PreflightValidator:
 
         all_fixed = True
         for issue in critical_syntax_errors:
-            try:
-                fixed = self._fix_syntax_error_with_llm(issue)
-                if fixed:
-                    self.fixes_applied.append({
-                        "file": issue.file_path,
-                        "issue": issue.message,
-                        "fixed": True
-                    })
-                    if self.verbose:
-                        print(f"  ✅ Fixed: {Path(issue.file_path).name}")
-                else:
-                    all_fixed = False
-                    if self.verbose:
-                        print(f"  ❌ Could not fix: {Path(issue.file_path).name}")
-            except Exception as e:
+            fixed = self._attempt_fix_with_error_handling(issue)
+            if not fixed:
                 all_fixed = False
-                if self.verbose:
-                    print(f"  ❌ Error fixing {Path(issue.file_path).name}: {e}")
 
         return all_fixed
+
+    def _attempt_fix_with_error_handling(self, issue: ValidationIssue) -> bool:
+        """Attempt to fix an issue and handle errors"""
+        try:
+            fixed = self._fix_syntax_error_with_llm(issue)
+            self._record_fix_result(issue, fixed)
+            return fixed
+        except Exception as e:
+            self._handle_fix_error(issue, e)
+            return False
+
+    def _record_fix_result(self, issue: ValidationIssue, fixed: bool):
+        """Record the result of a fix attempt"""
+        if fixed:
+            self.fixes_applied.append({
+                "file": issue.file_path,
+                "issue": issue.message,
+                "fixed": True
+            })
+            if self.verbose:
+                print(f"  ✅ Fixed: {Path(issue.file_path).name}")
+            return
+
+        if self.verbose:
+            print(f"  ❌ Could not fix: {Path(issue.file_path).name}")
+
+    def _handle_fix_error(self, issue: ValidationIssue, error: Exception):
+        """Handle errors during fix attempts"""
+        if self.verbose:
+            print(f"  ❌ Error fixing {Path(issue.file_path).name}: {error}")
 
     def _fix_syntax_error_with_llm(self, issue: ValidationIssue) -> bool:
         """Use LLM to fix a specific syntax error"""
@@ -233,20 +255,10 @@ The code must be syntactically valid Python that fixes the error while preservin
             fixed_code = response.strip()
 
             # Remove markdown code blocks if present
-            if fixed_code.startswith("```python"):
-                fixed_code = fixed_code[9:]
-            if fixed_code.startswith("```"):
-                fixed_code = fixed_code[3:]
-            if fixed_code.endswith("```"):
-                fixed_code = fixed_code[:-3]
-            fixed_code = fixed_code.strip()
+            fixed_code = self._strip_markdown_formatting(fixed_code)
 
             # Validate the fix compiles
-            try:
-                compile(fixed_code, issue.file_path, 'exec')
-            except SyntaxError:
-                if self.verbose:
-                    print(f"    LLM fix still has syntax errors, skipping")
+            if not self._validate_fixed_code(fixed_code, issue.file_path):
                 return False
 
             # Write the fix
@@ -258,6 +270,26 @@ The code must be syntactically valid Python that fixes the error while preservin
         except Exception as e:
             if self.verbose:
                 print(f"    LLM fix failed: {e}")
+            return False
+
+    def _strip_markdown_formatting(self, code: str) -> str:
+        """Remove markdown code block formatting from code"""
+        if code.startswith("```python"):
+            code = code[9:]
+        if code.startswith("```"):
+            code = code[3:]
+        if code.endswith("```"):
+            code = code[:-3]
+        return code.strip()
+
+    def _validate_fixed_code(self, fixed_code: str, file_path: str) -> bool:
+        """Validate that fixed code compiles without syntax errors"""
+        try:
+            compile(fixed_code, file_path, 'exec')
+            return True
+        except SyntaxError:
+            if self.verbose:
+                print(f"    LLM fix still has syntax errors, skipping")
             return False
 
     def print_report(self):
@@ -292,31 +324,40 @@ The code must be syntactically valid Python that fixes the error while preservin
         if critical:
             print(f"\n🔴 CRITICAL ISSUES (must fix before running):")
             for i, issue in enumerate(critical, 1):
-                print(f"\n{i}. [{issue.issue_type}] {Path(issue.file_path).name}")
-                print(f"   {issue.message}")
-                if issue.line_number:
-                    print(f"   Line: {issue.line_number}")
-                if issue.suggestion:
-                    print(f"   💡 {issue.suggestion}")
+                self._print_issue_details(i, issue, include_line_number=True)
 
         # Show high priority issues
         if high:
             print(f"\n🟠 HIGH PRIORITY ISSUES:")
             for i, issue in enumerate(high, 1):
-                print(f"\n{i}. [{issue.issue_type}] {Path(issue.file_path).name}")
-                print(f"   {issue.message}")
-                if issue.suggestion:
-                    print(f"   💡 {issue.suggestion}")
+                self._print_issue_details(i, issue, include_line_number=False)
 
         # Show fixes applied
-        if self.fixes_applied:
-            print(f"\n🔧 AUTOMATIC FIXES APPLIED:")
-            for i, fix in enumerate(self.fixes_applied, 1):
-                print(f"\n{i}. {Path(fix['file']).name}")
-                print(f"   Issue: {fix['issue']}")
-                print(f"   Status: {'✅ Fixed' if fix['fixed'] else '❌ Failed'}")
+        self._print_fixes_applied()
 
         print("\n" + "=" * 70)
+
+    def _print_issue_details(self, index: int, issue: ValidationIssue, include_line_number: bool = True):
+        """Print details for a single issue"""
+        print(f"\n{index}. [{issue.issue_type}] {Path(issue.file_path).name}")
+        print(f"   {issue.message}")
+
+        if include_line_number and issue.line_number:
+            print(f"   Line: {issue.line_number}")
+
+        if issue.suggestion:
+            print(f"   💡 {issue.suggestion}")
+
+    def _print_fixes_applied(self):
+        """Print details of automatic fixes that were applied"""
+        if not self.fixes_applied:
+            return
+
+        print(f"\n🔧 AUTOMATIC FIXES APPLIED:")
+        for i, fix in enumerate(self.fixes_applied, 1):
+            print(f"\n{i}. {Path(fix['file']).name}")
+            print(f"   Issue: {fix['issue']}")
+            print(f"   Status: {'✅ Fixed' if fix['fixed'] else '❌ Failed'}")
 
 
 def run_preflight_validation(base_path: str = ".agents/agile", verbose: bool = True) -> Dict:

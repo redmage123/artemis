@@ -125,22 +125,35 @@ class WCAGEvaluator:
 
         for match in matches:
             input_tag = match.group(0)
-            # Check if input has id and corresponding label exists
-            id_match = re.search(r'id=["\']([^"\']+)["\']', input_tag)
-            if id_match:
-                input_id = id_match.group(1)
-                label_pattern = f'<label[^>]*for=["\']{ input_id}["\']'
-                if not re.search(label_pattern, content, re.IGNORECASE):
-                    # Check for aria-label or aria-labelledby
-                    if 'aria-label' not in input_tag.lower() and 'aria-labelledby' not in input_tag.lower():
-                        self.issues.append(AccessibilityIssue(
-                            rule="3.3.2",
-                            severity="serious",
-                            element=input_tag[:50] + "...",
-                            description="Form input missing associated label",
-                            suggestion="Add <label for='id'> or aria-label attribute",
-                            wcag_criterion="Labels or Instructions (Level A)"
-                        ))
+            self._check_single_input_label(input_tag, content)
+
+    def _check_single_input_label(self, input_tag: str, content: str):
+        """Check if a single input has proper label"""
+        # Check if input has id
+        id_match = re.search(r'id=["\']([^"\']+)["\']', input_tag)
+        if not id_match:
+            return
+
+        input_id = id_match.group(1)
+        label_pattern = f'<label[^>]*for=["\']{ input_id}["\']'
+
+        # Early return if label exists
+        if re.search(label_pattern, content, re.IGNORECASE):
+            return
+
+        # Early return if aria attributes exist
+        if 'aria-label' in input_tag.lower() or 'aria-labelledby' in input_tag.lower():
+            return
+
+        # Report issue
+        self.issues.append(AccessibilityIssue(
+            rule="3.3.2",
+            severity="serious",
+            element=input_tag[:50] + "...",
+            description="Form input missing associated label",
+            suggestion="Add <label for='id'> or aria-label attribute",
+            wcag_criterion="Labels or Instructions (Level A)"
+        ))
 
     def _check_button_text(self, content: str, file_path: str):
         """
@@ -173,29 +186,42 @@ class WCAGEvaluator:
 
         heading_levels = [int(m.group(1)) for m in matches]
 
-        if heading_levels:
-            # Check if h1 exists
-            if 1 not in heading_levels:
-                self.issues.append(AccessibilityIssue(
-                    rule="1.3.1",
-                    severity="moderate",
-                    element="Page structure",
-                    description="Page missing h1 heading",
-                    suggestion="Add h1 as main page heading",
-                    wcag_criterion="Info and Relationships (Level A)"
-                ))
+        # Early return if no headings
+        if not heading_levels:
+            return
 
-            # Check for skipped levels
-            for i in range(len(heading_levels) - 1):
-                if heading_levels[i + 1] - heading_levels[i] > 1:
-                    self.issues.append(AccessibilityIssue(
-                        rule="1.3.1",
-                        severity="moderate",
-                        element=f"h{heading_levels[i]} to h{heading_levels[i+1]}",
-                        description=f"Heading level skipped from h{heading_levels[i]} to h{heading_levels[i+1]}",
-                        suggestion="Use sequential heading levels (h1, h2, h3...)",
-                        wcag_criterion="Info and Relationships (Level A)"
-                    ))
+        self._check_h1_exists(heading_levels)
+        self._check_heading_level_skips(heading_levels)
+
+    def _check_h1_exists(self, heading_levels: List[int]):
+        """Check if h1 heading exists"""
+        if 1 in heading_levels:
+            return
+
+        self.issues.append(AccessibilityIssue(
+            rule="1.3.1",
+            severity="moderate",
+            element="Page structure",
+            description="Page missing h1 heading",
+            suggestion="Add h1 as main page heading",
+            wcag_criterion="Info and Relationships (Level A)"
+        ))
+
+    def _check_heading_level_skips(self, heading_levels: List[int]):
+        """Check for skipped heading levels"""
+        for i in range(len(heading_levels) - 1):
+            level_jump = heading_levels[i + 1] - heading_levels[i]
+            if level_jump <= 1:
+                continue
+
+            self.issues.append(AccessibilityIssue(
+                rule="1.3.1",
+                severity="moderate",
+                element=f"h{heading_levels[i]} to h{heading_levels[i+1]}",
+                description=f"Heading level skipped from h{heading_levels[i]} to h{heading_levels[i+1]}",
+                suggestion="Use sequential heading levels (h1, h2, h3...)",
+                wcag_criterion="Info and Relationships (Level A)"
+            ))
 
     def _check_color_contrast(self, content: str, file_path: str):
         """
@@ -228,17 +254,23 @@ class WCAGEvaluator:
         """
         # Check for onClick without keyboard handlers
         onclick_pattern = r'onClick(?!=).*(?!onKeyDown|onKeyPress|onKeyUp)'
-        if re.search(onclick_pattern, content):
-            # Check if there's any keyboard handler nearby
-            if 'onKeyDown' not in content and 'onKeyPress' not in content:
-                self.issues.append(AccessibilityIssue(
-                    rule="2.1.1",
-                    severity="serious",
-                    element="Interactive element",
-                    description="onClick handler without keyboard equivalent",
-                    suggestion="Add onKeyDown or onKeyPress handler for keyboard users",
-                    wcag_criterion="Keyboard (Level A)"
-                ))
+
+        # Early return if no onClick found
+        if not re.search(onclick_pattern, content):
+            return
+
+        # Early return if keyboard handlers exist
+        if 'onKeyDown' in content or 'onKeyPress' in content:
+            return
+
+        self.issues.append(AccessibilityIssue(
+            rule="2.1.1",
+            severity="serious",
+            element="Interactive element",
+            description="onClick handler without keyboard equivalent",
+            suggestion="Add onKeyDown or onKeyPress handler for keyboard users",
+            wcag_criterion="Keyboard (Level A)"
+        ))
 
     def _check_aria_labels(self, content: str, file_path: str):
         """
@@ -251,16 +283,24 @@ class WCAGEvaluator:
 
         for match in matches:
             label_id = match.group(1)
-            id_pattern = f'id=["\']{ label_id}["\']'
-            if not re.search(id_pattern, content):
-                self.issues.append(AccessibilityIssue(
-                    rule="4.1.2",
-                    severity="serious",
-                    element=f"aria-labelledby='{label_id}'",
-                    description=f"aria-labelledby references non-existent id '{label_id}'",
-                    suggestion=f"Add element with id='{label_id}' or fix aria-labelledby",
-                    wcag_criterion="Name, Role, Value (Level A)"
-                ))
+            self._check_aria_labelledby_target(label_id, content)
+
+    def _check_aria_labelledby_target(self, label_id: str, content: str):
+        """Check if aria-labelledby target ID exists"""
+        id_pattern = f'id=["\']{ label_id}["\']'
+
+        # Early return if target ID exists
+        if re.search(id_pattern, content):
+            return
+
+        self.issues.append(AccessibilityIssue(
+            rule="4.1.2",
+            severity="serious",
+            element=f"aria-labelledby='{label_id}'",
+            description=f"aria-labelledby references non-existent id '{label_id}'",
+            suggestion=f"Add element with id='{label_id}' or fix aria-labelledby",
+            wcag_criterion="Name, Role, Value (Level A)"
+        ))
 
     def _check_lang_attribute(self, content: str, file_path: str):
         """
@@ -270,17 +310,24 @@ class WCAGEvaluator:
         html_pattern = r'<html[^>]*>'
         match = re.search(html_pattern, content, re.IGNORECASE)
 
-        if match:
-            html_tag = match.group(0)
-            if 'lang=' not in html_tag.lower():
-                self.issues.append(AccessibilityIssue(
-                    rule="3.1.1",
-                    severity="serious",
-                    element="<html>",
-                    description="HTML element missing lang attribute",
-                    suggestion="Add lang='en' (or appropriate language code) to <html>",
-                    wcag_criterion="Language of Page (Level A)"
-                ))
+        # Early return if no html tag found
+        if not match:
+            return
+
+        html_tag = match.group(0)
+
+        # Early return if lang attribute exists
+        if 'lang=' in html_tag.lower():
+            return
+
+        self.issues.append(AccessibilityIssue(
+            rule="3.1.1",
+            severity="serious",
+            element="<html>",
+            description="HTML element missing lang attribute",
+            suggestion="Add lang='en' (or appropriate language code) to <html>",
+            wcag_criterion="Language of Page (Level A)"
+        ))
 
     def _check_focus_indicators(self, content: str, file_path: str):
         """
@@ -290,18 +337,23 @@ class WCAGEvaluator:
         # Look for outline:none or outline:0 without custom focus styles
         outline_none_pattern = r'(outline\s*:\s*(none|0))|(:focus.*outline\s*:\s*(none|0))'
 
-        if re.search(outline_none_pattern, content, re.IGNORECASE):
-            # Check if there's a custom focus style
-            custom_focus_pattern = r':focus.*{[^}]*(border|box-shadow|background)[^}]*}'
-            if not re.search(custom_focus_pattern, content, re.IGNORECASE):
-                self.issues.append(AccessibilityIssue(
-                    rule="2.4.7",
-                    severity="serious",
-                    element="Focus styles",
-                    description="Focus outline removed without alternative focus indicator",
-                    suggestion="Provide visible focus indicator (border, box-shadow, etc.)",
-                    wcag_criterion="Focus Visible (Level AA)"
-                ))
+        # Early return if no outline removal found
+        if not re.search(outline_none_pattern, content, re.IGNORECASE):
+            return
+
+        # Early return if custom focus style exists
+        custom_focus_pattern = r':focus.*{[^}]*(border|box-shadow|background)[^}]*}'
+        if re.search(custom_focus_pattern, content, re.IGNORECASE):
+            return
+
+        self.issues.append(AccessibilityIssue(
+            rule="2.4.7",
+            severity="serious",
+            element="Focus styles",
+            description="Focus outline removed without alternative focus indicator",
+            suggestion="Provide visible focus indicator (border, box-shadow, etc.)",
+            wcag_criterion="Focus Visible (Level AA)"
+        ))
 
     def _check_link_text(self, content: str, file_path: str):
         """

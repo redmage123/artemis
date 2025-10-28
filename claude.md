@@ -2,6 +2,96 @@
 
 **MANDATORY**: All code generation MUST follow these standards. No exceptions.
 
+## 0. Core Programming Paradigm
+
+**ALWAYS use functional programming patterns wherever possible:**
+
+### 0.1 Prefer Pure Functions
+
+```python
+# ❌ BAD: Impure function with side effects
+results = []
+def process_item(item):
+    results.append(item.value)  # Mutates global state
+    return item.value
+
+# ✅ GOOD: Pure function (no side effects, same input = same output)
+def process_item(item) -> int:
+    """
+    Pure function - no side effects.
+    WHY: Easier to test, reason about, and parallelize.
+    """
+    return item.value
+
+# Use map to apply pure function
+results = list(map(process_item, items))
+```
+
+### 0.2 Immutability Over Mutation
+
+```python
+# ❌ BAD: Mutating data structures
+def add_item(items_list, item):
+    items_list.append(item)  # Mutates input
+    return items_list
+
+# ✅ GOOD: Return new data structure
+def add_item(items: List, item) -> List:
+    """
+    Immutable operation - returns new list.
+    WHY: Prevents bugs from unexpected mutations.
+    """
+    return [*items, item]
+```
+
+### 0.3 Declarative Over Imperative
+
+```python
+# ❌ BAD: Imperative style (HOW to do it)
+def get_active_users(users):
+    active = []
+    for user in users:
+        if user.is_active:
+            active.append(user)
+    return active
+
+# ✅ GOOD: Declarative style (WHAT you want)
+def get_active_users(users: List[User]) -> List[User]:
+    """
+    Declarative filtering.
+    WHY: More readable, expresses intent clearly.
+    """
+    return [user for user in users if user.is_active]
+
+# ✅ EVEN BETTER: Functional composition
+from functools import partial
+
+is_active = lambda user: user.is_active
+get_active_users = partial(filter, is_active)
+```
+
+### 0.4 Function Composition
+
+```python
+# ✅ GOOD: Compose small functions
+from functools import reduce
+
+def compose(*functions):
+    """
+    Compose functions right-to-left.
+    WHY: Build complex behavior from simple, testable parts.
+    """
+    return reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
+
+# Example usage
+normalize = str.lower
+remove_spaces = lambda s: s.replace(' ', '')
+validate = lambda s: len(s) > 0
+
+process_input = compose(validate, remove_spaces, normalize)
+result = process_input("  Hello World  ")
+```
+
 ---
 
 ## 1. Design Patterns (REQUIRED)
@@ -76,28 +166,104 @@ class ValidatorFactory:
 
 ---
 
-### 1.3 Observer Pattern - For event notifications
+### 1.3 Observer Pattern - For event notifications (MANDATORY for Artemis Integration)
 
 **REQUIRED** when multiple components need to react to events.
+**MANDATORY** for all Artemis pipeline stages and agents.
 
 ```python
 from pipeline_observer import PipelineObservable, EventBuilder
 
 class MyComponent:
+    """
+    Component with Observer pattern integration.
+
+    WHY: Observer pattern enables loose coupling - other components can
+    subscribe to events without MyComponent knowing about them.
+
+    PATTERNS: Observer pattern for event notifications
+    ARTEMIS INTEGRATION: All stages MUST support PipelineObservable
+    """
+
     def __init__(self, observable: Optional[PipelineObservable] = None):
+        """
+        Initialize component with optional observable.
+
+        Args:
+            observable: Optional PipelineObservable for event notifications
+                       (REQUIRED for Artemis integration)
+        """
         self.observable = observable
 
     def do_something(self):
+        """
+        Perform action and notify observers.
+
+        WHY: Notify observers enables monitoring, logging, error tracking,
+        and real-time updates without tight coupling.
+        """
         # Perform action
         result = self._perform_action()
 
-        # Notify observers (if available)
+        # Notify observers (if available) - REQUIRED for Artemis stages
         if self.observable:
             event = EventBuilder.my_event(
                 data=result,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
+                context={'component': self.__class__.__name__}
             )
             self.observable.notify(event)
+
+        return result
+
+# Example: Artemis Stage with Observer Pattern
+class MyArtemisStage:
+    """
+    Artemis pipeline stage with Observer pattern.
+
+    WHY: Enables monitoring, logging, and error tracking across pipeline.
+    ARTEMIS INTEGRATION: MANDATORY for all pipeline stages.
+    """
+
+    def __init__(self, observable: Optional[PipelineObservable] = None):
+        self.observable = observable
+
+    def execute(self, context: Dict) -> StageResult:
+        """Execute stage with observer notifications"""
+        # Notify stage start
+        if self.observable:
+            self.observable.notify(
+                EventBuilder.stage_started(
+                    stage_name=self.__class__.__name__,
+                    context=context
+                )
+            )
+
+        try:
+            result = self._do_work(context)
+
+            # Notify success
+            if self.observable:
+                self.observable.notify(
+                    EventBuilder.stage_completed(
+                        stage_name=self.__class__.__name__,
+                        result=result
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            # Notify failure
+            if self.observable:
+                self.observable.notify(
+                    EventBuilder.stage_failed(
+                        stage_name=self.__class__.__name__,
+                        error=str(e),
+                        traceback=traceback.format_exc()
+                    )
+                )
+            raise
 ```
 
 ---
@@ -148,7 +314,7 @@ def handle_condition(condition):
 
 ---
 
-### 2.2 NO Nested For Loops or Ifs
+### 2.2 NO Nested For Loops (MANDATORY)
 
 **NEVER:**
 ```python
@@ -157,7 +323,47 @@ for item in items:
     for sub_item in item.sub_items:
         if sub_item.condition:
             process(sub_item)
+```
 
+**ALWAYS:**
+```python
+# ✅ REQUIRED: List comprehension (PREFERRED)
+matching_items = [
+    sub_item
+    for item in items
+    for sub_item in item.sub_items
+    if sub_item.condition
+]
+for sub_item in matching_items:
+    process(sub_item)
+
+# ✅ ALTERNATIVE: Extract to helper method with generator
+def _get_matching_sub_items(items):
+    """
+    Generator to flatten nested structure.
+    WHY: Avoids nested loops, memory efficient.
+    PERFORMANCE: Generator yields items one at a time (memory efficient).
+    """
+    for item in items:
+        yield from (s for s in item.sub_items if s.condition)
+
+for sub_item in _get_matching_sub_items(items):
+    process(sub_item)
+
+# ✅ ALTERNATIVE: Map/filter/reduce pattern
+from itertools import chain
+matching_items = filter(
+    lambda s: s.condition,
+    chain.from_iterable(item.sub_items for item in items)
+)
+for sub_item in matching_items:
+    process(sub_item)
+```
+
+### 2.2b NO Nested Ifs (MANDATORY)
+
+**NEVER:**
+```python
 # ❌ FORBIDDEN: Nested ifs
 if condition1:
     if condition2:
@@ -167,21 +373,6 @@ if condition1:
 
 **ALWAYS:**
 ```python
-# ✅ REQUIRED: Extract to helper method
-def process_matching_sub_items(items):
-    """
-    Process sub-items that match condition.
-    WHY: Avoids nested loops by extracting inner logic.
-    """
-    for item in items:
-        matching = self._find_matching_sub_items(item)
-        for sub_item in matching:
-            process(sub_item)
-
-def _find_matching_sub_items(self, item) -> List:
-    """Helper method to avoid nested loop"""
-    return [s for s in item.sub_items if s.condition]
-
 # ✅ REQUIRED: Early returns instead of nested ifs
 def process():
     if not condition1:
@@ -437,7 +628,9 @@ class MyValidator:
         return expensive_computation(code)
 ```
 
-### 5.4 List Comprehensions Over Loops
+### 5.4 List Comprehensions Over Loops (MANDATORY)
+
+**ALWAYS prefer comprehensions, map(), filter(), reduce() over explicit loops:**
 
 ```python
 # ❌ SLOWER: Loop with append
@@ -448,6 +641,71 @@ for item in items:
 
 # ✅ FASTER: List comprehension
 results = [item.value for item in items if item.condition]
+
+# ✅ GOOD: Generator comprehension for large datasets (memory efficient)
+results = (item.value for item in items if item.condition)
+
+# ✅ GOOD: Dict comprehension
+mapping = {item.key: item.value for item in items if item.active}
+
+# ✅ GOOD: Set comprehension
+unique_values = {item.value for item in items}
+
+# ✅ GOOD: Map/filter pattern
+from functools import reduce
+values = list(map(lambda x: x.value, filter(lambda x: x.condition, items)))
+
+# ✅ GOOD: Reduce pattern for aggregation
+total = reduce(lambda acc, item: acc + item.value, items, 0)
+```
+
+### 5.5 Performance-First Mindset (MANDATORY)
+
+**ALWAYS optimize for performance when writing code:**
+
+```python
+# ❌ BAD: Inefficient nested lookup
+for item in items:
+    for user in users:  # O(n*m) - quadratic time
+        if item.user_id == user.id:
+            process(item, user)
+
+# ✅ GOOD: Pre-build lookup dictionary
+user_lookup = {u.id: u for u in users}  # O(m) to build
+for item in items:  # O(n) to iterate
+    user = user_lookup.get(item.user_id)  # O(1) lookup
+    if user:
+        process(item, user)
+# Total: O(n + m) - linear time
+
+# ❌ BAD: Recompute in loop
+for text in texts:
+    if re.match(r'pattern', text):  # Recompiles regex each iteration
+        process(text)
+
+# ✅ GOOD: Compile once, reuse
+pattern = re.compile(r'pattern')
+for text in texts:
+    if pattern.match(text):
+        process(text)
+
+# ❌ BAD: String concatenation in loop
+result = ""
+for item in items:
+    result += str(item)  # O(n²) - creates new string each iteration
+
+# ✅ GOOD: Use join()
+result = ''.join(str(item) for item in items)  # O(n)
+
+# ❌ BAD: Repeated database queries
+for user_id in user_ids:
+    user = db.get_user(user_id)  # N queries
+    process(user)
+
+# ✅ GOOD: Batch query
+users = db.get_users_by_ids(user_ids)  # 1 query
+for user in users:
+    process(user)
 ```
 
 ---
@@ -745,7 +1003,138 @@ VALIDATION_MODE = os.getenv("ARTEMIS_VALIDATION_MODE", "standard")
 
 ---
 
-## 13. Logging Standards
+## 13. DRY Principle - Don't Repeat Yourself (MANDATORY)
+
+**NEVER** duplicate code logic. Extract to reusable functions/methods.
+
+### 13.1 Extract Common Logic
+
+**❌ BAD: Duplicated validation logic**
+```python
+def validate_django_code(code):
+    if not code:
+        return False
+    if len(code) == 0:
+        return False
+    if 'django' not in code:
+        return False
+    return True
+
+def validate_flask_code(code):
+    if not code:
+        return False
+    if len(code) == 0:
+        return False
+    if 'flask' not in code:
+        return False
+    return True
+```
+
+**✅ GOOD: Extract common validation**
+```python
+def _validate_code_base(code: str) -> bool:
+    """
+    Base validation for all code.
+    WHY: DRY - avoid duplicating basic validation across validators.
+    """
+    if not code:
+        return False
+    if len(code) == 0:
+        return False
+    return True
+
+def validate_django_code(code: str) -> bool:
+    """Validate Django code using DRY base validation"""
+    if not _validate_code_base(code):
+        return False
+    return 'django' in code
+
+def validate_flask_code(code: str) -> bool:
+    """Validate Flask code using DRY base validation"""
+    if not _validate_code_base(code):
+        return False
+    return 'flask' in code
+```
+
+### 13.2 Use Helper Functions
+
+**❌ BAD: Repeated formatting logic**
+```python
+result1 = f"Validation failed: {error1}. Context: {context1}"
+result2 = f"Validation failed: {error2}. Context: {context2}"
+result3 = f"Validation failed: {error3}. Context: {context3}"
+```
+
+**✅ GOOD: DRY helper function**
+```python
+def format_validation_error(error: str, context: str) -> str:
+    """
+    Format validation error message.
+    WHY: DRY - single source of truth for error formatting.
+    """
+    return f"Validation failed: {error}. Context: {context}"
+
+result1 = format_validation_error(error1, context1)
+result2 = format_validation_error(error2, context2)
+result3 = format_validation_error(error3, context3)
+```
+
+### 13.3 Constants for Magic Values
+
+**❌ BAD: Magic values repeated**
+```python
+if timeout > 30:
+    logger.log("Timeout exceeded 30 seconds")
+if duration > 30:
+    raise TimeoutError("Operation exceeded 30 seconds")
+```
+
+**✅ GOOD: DRY constant**
+```python
+DEFAULT_TIMEOUT_SECONDS = 30  # DRY: Single source of truth
+
+if timeout > DEFAULT_TIMEOUT_SECONDS:
+    logger.log(f"Timeout exceeded {DEFAULT_TIMEOUT_SECONDS} seconds")
+if duration > DEFAULT_TIMEOUT_SECONDS:
+    raise TimeoutError(f"Operation exceeded {DEFAULT_TIMEOUT_SECONDS} seconds")
+```
+
+### 13.4 Template Methods
+
+**❌ BAD: Duplicated workflow logic**
+```python
+def process_django_request():
+    setup()
+    validate_django()
+    process_django()
+    cleanup()
+
+def process_flask_request():
+    setup()
+    validate_flask()
+    process_flask()
+    cleanup()
+```
+
+**✅ GOOD: DRY template method**
+```python
+def process_request(validator, processor):
+    """
+    Template method for request processing.
+    WHY: DRY - extract common workflow, parameterize differences.
+    """
+    setup()
+    validator()
+    processor()
+    cleanup()
+
+process_request(validate_django, process_django)
+process_request(validate_flask, process_flask)
+```
+
+---
+
+## 14. Logging Standards
 
 ```python
 # ✅ GOOD: Structured logging with context
@@ -769,16 +1158,26 @@ logger.log(f"Validation took {duration:.2f}s (threshold: 1.0s)", "DEBUG")
 
 Before committing code, verify:
 
+- [ ] **Functional programming patterns** - pure functions, immutability, declarative style
 - [ ] No `elif` chains (use dictionary mapping)
-- [ ] No nested `for` loops or `if` statements (extract to helper methods)
+- [ ] **NO nested `for` loops** (use comprehensions, map/filter/reduce, or generators)
+- [ ] No nested `if` statements (use early returns with guard clauses)
 - [ ] No sequential `if` statements (use Strategy pattern)
+- [ ] **Prefer comprehensions** (list/dict/set/generator) over explicit loops
+- [ ] **Map/filter/reduce patterns** used where appropriate
+- [ ] **Declarative over imperative** - express WHAT not HOW
+- [ ] **Pure functions** where possible - no side effects, same input = same output
+- [ ] **Immutability** - return new data structures instead of mutating inputs
+- [ ] **Performance optimized** - O(n) not O(n²), batch queries, compile regex once, use join() not +=
+- [ ] **DRY principle applied** - no duplicated logic, extract to helpers
+- [ ] **No magic values** - use constants for repeated values
 - [ ] All exceptions are wrapped (use `artemis_exceptions`)
 - [ ] Module-level docstring with WHY and PATTERNS
 - [ ] Class-level docstring with RESPONSIBILITY
 - [ ] Method-level docstring with WHY and PERFORMANCE
 - [ ] Type hints on all functions/methods
 - [ ] Design pattern used (Strategy, Factory, Observer)
-- [ ] Observer pattern used if multiple components need notifications
+- [ ] **Observer pattern used for Artemis integration** (MANDATORY for stages/agents)
 - [ ] Performance optimizations applied (caching, early returns, list comprehensions)
 - [ ] SOLID principles followed
 - [ ] Tests created for module

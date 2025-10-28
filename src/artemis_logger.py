@@ -303,16 +303,26 @@ class ArtemisLogger:
 
         if standard_level == "DEBUG":
             self.debug(message)
-        elif standard_level == "INFO":
+            return
+
+        if standard_level == "INFO":
             self.info(message)
-        elif standard_level == "WARNING":
+            return
+
+        if standard_level == "WARNING":
             self.warning(message)
-        elif standard_level == "ERROR":
+            return
+
+        if standard_level == "ERROR":
             self.error(message)
-        elif standard_level == "CRITICAL":
+            return
+
+        if standard_level == "CRITICAL":
             self.critical(message)
-        else:
-            self.info(message)
+            return
+
+        # Default case
+        self.info(message)
 
     def get_log_path(self) -> Path:
         """

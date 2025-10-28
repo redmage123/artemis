@@ -201,6 +201,8 @@ class GDPREvaluator:
         ]
 
         has_user_data_storage = any(re.search(pattern, content, re.IGNORECASE) for pattern in user_data_patterns)
+        if not has_user_data_storage:
+            return
 
         # Look for deletion functionality
         deletion_patterns = [
@@ -211,18 +213,21 @@ class GDPREvaluator:
         ]
 
         has_deletion_feature = any(re.search(pattern, content, re.IGNORECASE) for pattern in deletion_patterns)
+        if has_deletion_feature:
+            return
 
-        if has_user_data_storage and not has_deletion_feature:
-            # Only warn if this looks like a backend/API file
-            if '.py' in file_path or 'api' in file_path.lower() or 'server' in file_path.lower():
-                self.issues.append(GDPRIssue(
-                    article="Article 17",
-                    severity="high",
-                    category="right_to_erasure",
-                    description="User data storage without deletion functionality",
-                    suggestion="Implement user account deletion feature (right to be forgotten)",
-                    gdpr_principle="Right to erasure"
-                ))
+        # Only warn if this looks like a backend/API file
+        if not self._is_backend_file(file_path):
+            return
+
+        self.issues.append(GDPRIssue(
+            article="Article 17",
+            severity="high",
+            category="right_to_erasure",
+            description="User data storage without deletion functionality",
+            suggestion="Implement user account deletion feature (right to be forgotten)",
+            gdpr_principle="Right to erasure"
+        ))
 
     def _check_data_portability(self, content: str, file_path: str):
         """
@@ -231,6 +236,8 @@ class GDPREvaluator:
         """
         # Look for user data storage
         has_user_data = bool(re.search(r'(users?|accounts?|profiles?)', content, re.IGNORECASE))
+        if not has_user_data:
+            return
 
         # Look for export functionality
         export_patterns = [
@@ -241,18 +248,21 @@ class GDPREvaluator:
         ]
 
         has_export_feature = any(re.search(pattern, content, re.IGNORECASE) for pattern in export_patterns)
+        if has_export_feature:
+            return
 
-        if has_user_data and not has_export_feature:
-            # Only check in backend/API files
-            if '.py' in file_path or 'api' in file_path.lower() or 'server' in file_path.lower():
-                self.issues.append(GDPRIssue(
-                    article="Article 20",
-                    severity="medium",
-                    category="data_portability",
-                    description="User data storage without export functionality",
-                    suggestion="Implement data export feature (right to data portability)",
-                    gdpr_principle="Right to data portability"
-                ))
+        # Only check in backend/API files
+        if not self._is_backend_file(file_path):
+            return
+
+        self.issues.append(GDPRIssue(
+            article="Article 20",
+            severity="medium",
+            category="data_portability",
+            description="User data storage without export functionality",
+            suggestion="Implement data export feature (right to data portability)",
+            gdpr_principle="Right to data portability"
+        ))
 
     def _check_privacy_by_design(self, content: str, file_path: str):
         """
@@ -293,18 +303,22 @@ class GDPREvaluator:
         ]
 
         for pattern, service in tracking_services:
-            if re.search(pattern, content, re.IGNORECASE):
-                # Check if there's consent handling
-                consent_check = r'(consent|gdpr|cookie.*accept)'
-                if not re.search(consent_check, content, re.IGNORECASE):
-                    self.issues.append(GDPRIssue(
-                        article="Article 7",
-                        severity="critical",
-                        category="consent",
-                        description=f"{service} tracking detected without consent check",
-                        suggestion=f"Only load {service} after user consent",
-                        gdpr_principle="Lawful basis for processing"
-                    ))
+            if not re.search(pattern, content, re.IGNORECASE):
+                continue
+
+            # Check if there's consent handling
+            consent_check = r'(consent|gdpr|cookie.*accept)'
+            if re.search(consent_check, content, re.IGNORECASE):
+                continue
+
+            self.issues.append(GDPRIssue(
+                article="Article 7",
+                severity="critical",
+                category="consent",
+                description=f"{service} tracking detected without consent check",
+                suggestion=f"Only load {service} after user consent",
+                gdpr_principle="Lawful basis for processing"
+            ))
 
     def _check_personal_data_storage(self, content: str, file_path: str):
         """
@@ -393,3 +407,7 @@ class GDPREvaluator:
     def _has_category(self, category: str) -> bool:
         """Check if any issue matches the given category"""
         return any(issue.category == category for issue in self.issues)
+
+    def _is_backend_file(self, file_path: str) -> bool:
+        """Check if file is a backend/API file"""
+        return '.py' in file_path or 'api' in file_path.lower() or 'server' in file_path.lower()

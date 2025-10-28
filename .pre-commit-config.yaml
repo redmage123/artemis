@@ -1,0 +1,53 @@
+# Pre-commit hooks for Artemis code quality
+# Install: pip install pre-commit
+# Setup: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Python code formatting with black
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--line-length=100']
+
+  # Import sorting with isort
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black', '--line-length', '100']
+
+  # Flake8 linting
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        args: ['--max-line-length=100', '--ignore=E501,W503,E203']
+        exclude: '^(\.venv|\.artemis_data|__pycache__|build|dist)/.*$'
+
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+
+  # Local Artemis code standards check
+  - repo: local
+    hooks:
+      - id: artemis-code-standards
+        name: Artemis Code Standards (claude.md)
+        entry: python3 src/code_standards_scanner.py --root src --critical-only --exit-code
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true

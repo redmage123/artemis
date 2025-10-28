@@ -55,16 +55,33 @@ class BuildResult:
         status = "✓ SUCCESS" if self.success else "✗ FAILED"
         result = f"{status} [{self.build_system}] in {self.duration:.2f}s\n"
 
-        if self.tests_run > 0:
-            result += f"Tests: {self.tests_passed}/{self.tests_run} passed"
-            if self.tests_failed > 0:
-                result += f", {self.tests_failed} failed"
-            if self.tests_skipped > 0:
-                result += f", {self.tests_skipped} skipped"
-            result += "\n"
+        result += self._format_test_results()
+        result += self._format_errors_warnings()
+
+        return result
+
+    def _format_test_results(self) -> str:
+        """Format test results section"""
+        if self.tests_run == 0:
+            return ""
+
+        parts = [f"Tests: {self.tests_passed}/{self.tests_run} passed"]
+
+        if self.tests_failed > 0:
+            parts.append(f"{self.tests_failed} failed")
+
+        if self.tests_skipped > 0:
+            parts.append(f"{self.tests_skipped} skipped")
+
+        return ", ".join(parts) + "\n"
+
+    def _format_errors_warnings(self) -> str:
+        """Format errors and warnings section"""
+        result = ""
 
         if self.errors:
             result += f"Errors: {len(self.errors)}\n"
+
         if self.warnings:
             result += f"Warnings: {len(self.warnings)}\n"
 

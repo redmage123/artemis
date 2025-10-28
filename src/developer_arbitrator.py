@@ -221,12 +221,14 @@ class DeveloperArbitrator:
         """
         if lines_of_code < 100:
             return 100.0
-        elif lines_of_code < 300:
+
+        if lines_of_code < 300:
             return 100 - ((lines_of_code - 100) / 200 * 30)
-        elif lines_of_code < 500:
+
+        if lines_of_code < 500:
             return 70 - ((lines_of_code - 300) / 200 * 20)
-        else:
-            return max(0, 50 - ((lines_of_code - 500) / 500 * 50))
+
+        return max(0, 50 - ((lines_of_code - 500) / 500 * 50))
 
     def _calculate_maintainability_score(self, complexity: float, solid_score: float) -> float:
         """
@@ -253,10 +255,11 @@ class DeveloperArbitrator:
         """
         if margin > 20:
             return "high"
-        elif margin > 10:
+
+        if margin > 10:
             return "medium"
-        else:
-            return "low"
+
+        return "low"
 
     def _generate_reasoning(self, winner_score: DeveloperScore, loser_score: DeveloperScore) -> str:
         """Generate human-readable reasoning for decision"""

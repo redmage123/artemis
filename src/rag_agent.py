@@ -1,66 +1,34 @@
 #!/usr/bin/env python3
 """
-RAG Agent - Pipeline Memory & Continuous Learning
+WHY: Maintain backward compatibility with existing code using rag_agent.py.
+     Delegates to modular rag package while preserving original interface.
 
-Stores all pipeline artifacts in vector database for semantic retrieval.
-Enables pipeline to learn from history and continuously improve.
+RESPONSIBILITY:
+- Provide drop-in replacement for original RAGAgent class
+- Delegate all operations to rag.RAGEngine
+- Support DebugMixin integration for existing code
+
+PATTERNS:
+- Adapter Pattern: Adapt new RAGEngine to old RAGAgent interface
+- Proxy Pattern: Proxy calls to underlying engine
+- Facade Pattern: Simplify access to refactored package
 """
 
-import json
-import hashlib
-from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
 from debug_mixin import DebugMixin
-
-try:
-    import chromadb
-    from chromadb.config import Settings
-    CHROMADB_AVAILABLE = True
-except ImportError:
-    CHROMADB_AVAILABLE = False
-    print("⚠️  ChromaDB not installed. RAG Agent will run in mock mode.")
-    print("   Install with: pip install chromadb sentence-transformers")
-
-
-@dataclass
-class Artifact:
-    """Pipeline artifact for storage"""
-    artifact_id: str
-    artifact_type: str  # research_report, adr, solution, validation, etc.
-    card_id: str
-    task_title: str
-    content: str
-    metadata: Dict[str, Any]
-    timestamp: str
+from rag import RAGEngine, ARTIFACT_TYPES, create_rag_agent
 
 
 class RAGAgent(DebugMixin):
     """
-    RAG Agent - Pipeline Memory & Learning System
+    Backward-compatible RAG Agent wrapper.
 
-    Stores and retrieves pipeline artifacts using vector embeddings
-    for semantic search and continuous learning.
+    Delegates to rag.RAGEngine while maintaining original interface.
+    This allows existing code to work without modifications.
     """
 
-    ARTIFACT_TYPES = [
-        "research_report",
-        "project_analysis",
-        "project_review",        # Project review stage quality gate
-        "architecture_decision",
-        "developer_solution",
-        "validation_result",
-        "arbitration_score",
-        "integration_result",
-        "testing_result",
-        "issue_and_fix",
-        "issue_resolution",      # Supervisor issue resolution tracking
-        "supervisor_recovery",   # Supervisor recovery workflow outcomes
-        "sprint_plan",           # Sprint planning with story point estimates
-        "notebook_example",      # Jupyter notebook examples for demonstrations
-        "code_example"           # Code examples from research stage (GitHub, HuggingFace, local)
-    ]
+    # Export artifact types for backward compatibility
+    ARTIFACT_TYPES = ARTIFACT_TYPES
 
     def __init__(self, db_path: str = "db", verbose: bool = True):
         """
@@ -71,63 +39,23 @@ class RAGAgent(DebugMixin):
             verbose: Enable verbose logging
         """
         DebugMixin.__init__(self, component_name="rag")
-        # Convert to absolute path if relative
-        self.db_path = Path(db_path)
-        if not self.db_path.is_absolute():
-            # Make it relative to the script's directory
-            script_dir = Path(__file__).parent
-            self.db_path = script_dir / self.db_path
+        self.engine = RAGEngine(db_path=db_path, verbose=verbose)
 
-        self.db_path.mkdir(exist_ok=True, parents=True)
-        self.verbose = verbose
+        # Expose engine attributes for compatibility
+        self.db_path = self.engine.db_path
+        self.verbose = self.engine.verbose
+        self.collections = getattr(self.engine.vector_store, 'collections', {})
+        self.client = getattr(self.engine.vector_store, 'client', None)
 
-        if CHROMADB_AVAILABLE:
-            # Initialize ChromaDB
-            self.client = chromadb.PersistentClient(
-                path=str(self.db_path),
-                settings=Settings(anonymized_telemetry=False)
-            )
-            self._initialize_collections()
-        else:
-            self.client = None
-            self.collections = {}
-            self._mock_storage = {}
-
-        self.log("RAG Agent initialized")
-        self.log(f"Database path: {self.db_path}")
-        self.debug_log("RAGAgent initialized", db_path=str(self.db_path), chromadb_available=CHROMADB_AVAILABLE)
+        self.debug_log(
+            "RAGAgent initialized (delegating to RAGEngine)",
+            db_path=str(self.db_path),
+            chromadb_available=self.engine.vector_store.chromadb_available
+        )
 
     def log(self, message: str):
-        """Log message if verbose"""
-        if self.verbose:
-            timestamp = datetime.utcnow().strftime("%H:%M:%S")
-            print(f"[{timestamp}] [RAG] {message}")
-
-    def _deserialize_metadata(self, metadata: Dict) -> Dict:
-        """Convert JSON strings back to Python objects in metadata"""
-        deserialized = {}
-        for key, value in metadata.items():
-            if isinstance(value, str) and value.startswith(('[', '{')):
-                try:
-                    deserialized[key] = json.loads(value)
-                except (json.JSONDecodeError, ValueError):
-                    deserialized[key] = value
-            else:
-                deserialized[key] = value
-        return deserialized
-
-    def _initialize_collections(self):
-        """Initialize ChromaDB collections for each artifact type"""
-        self.collections = {}
-
-        for artifact_type in self.ARTIFACT_TYPES:
-            collection_name = artifact_type
-            self.collections[artifact_type] = self.client.get_or_create_collection(
-                name=collection_name,
-                metadata={"description": f"Storage for {artifact_type} artifacts"}
-            )
-
-        self.log(f"Initialized {len(self.collections)} collections")
+        """Log message if verbose."""
+        self.engine.log(message)
 
     def store_artifact(
         self,
@@ -138,7 +66,7 @@ class RAGAgent(DebugMixin):
         metadata: Optional[Dict] = None
     ) -> str:
         """
-        Store artifact in RAG database
+        Store artifact in RAG database.
 
         Args:
             artifact_type: Type of artifact (research_report, adr, etc.)
@@ -151,57 +79,13 @@ class RAGAgent(DebugMixin):
             Artifact ID
         """
         self.debug_trace("store_artifact", artifact_type=artifact_type, card_id=card_id)
-        if artifact_type not in self.ARTIFACT_TYPES:
-            self.log(f"⚠️  Unknown artifact type: {artifact_type}")
-            return None
-
-        # Generate artifact ID
-        artifact_id = self._generate_artifact_id(artifact_type, card_id)
-
-        # Create artifact
-        artifact = Artifact(
-            artifact_id=artifact_id,
+        return self.engine.store_artifact(
             artifact_type=artifact_type,
             card_id=card_id,
             task_title=task_title,
             content=content,
-            metadata=metadata or {},
-            timestamp=datetime.utcnow().isoformat() + 'Z'
+            metadata=metadata
         )
-
-        # Store in ChromaDB or mock storage
-        if CHROMADB_AVAILABLE and self.client:
-            collection = self.collections[artifact_type]
-
-            # Prepare metadata for ChromaDB (convert lists to JSON strings)
-            chromadb_metadata = {
-                "card_id": card_id,
-                "task_title": task_title,
-                "timestamp": artifact.timestamp
-            }
-
-            # Convert lists and dicts to JSON strings for ChromaDB compatibility
-            for key, value in metadata.items():
-                if isinstance(value, (list, dict)):
-                    chromadb_metadata[key] = json.dumps(value)
-                elif value is None:
-                    chromadb_metadata[key] = ""
-                else:
-                    chromadb_metadata[key] = value
-
-            collection.add(
-                ids=[artifact_id],
-                documents=[content],
-                metadatas=[chromadb_metadata]
-            )
-        else:
-            # Mock storage
-            if artifact_type not in self._mock_storage:
-                self._mock_storage[artifact_type] = []
-            self._mock_storage[artifact_type].append(asdict(artifact))
-
-        self.log(f"✅ Stored {artifact_type}: {artifact_id}")
-        return artifact_id
 
     def query_similar(
         self,
@@ -211,7 +95,7 @@ class RAGAgent(DebugMixin):
         filters: Optional[Dict] = None
     ) -> List[Dict]:
         """
-        Query for similar artifacts using semantic search
+        Query for similar artifacts using semantic search.
 
         Args:
             query_text: Query text for semantic search
@@ -223,61 +107,12 @@ class RAGAgent(DebugMixin):
             List of similar artifacts
         """
         self.debug_if_enabled("rag_queries", "Querying RAG", query=query_text[:50], top_k=top_k)
-        if artifact_types is None:
-            artifact_types = self.ARTIFACT_TYPES
-
-        results = []
-
-        if CHROMADB_AVAILABLE and self.client:
-            # Query each collection
-            for artifact_type in artifact_types:
-                if artifact_type not in self.collections:
-                    continue
-
-                collection = self.collections[artifact_type]
-
-                # Build where clause from filters
-                where = filters if filters else None
-
-                # Query
-                query_results = collection.query(
-                    query_texts=[query_text],
-                    n_results=min(top_k, 10),
-                    where=where
-                )
-
-                # Process results
-                if query_results and query_results['ids']:
-                    for i, artifact_id in enumerate(query_results['ids'][0]):
-                        # Deserialize metadata (convert JSON strings back to lists/dicts)
-                        metadata = self._deserialize_metadata(query_results['metadatas'][0][i])
-
-                        results.append({
-                            "artifact_id": artifact_id,
-                            "artifact_type": artifact_type,
-                            "content": query_results['documents'][0][i],
-                            "metadata": metadata,
-                            "distance": query_results['distances'][0][i] if 'distances' in query_results else None,
-                            "similarity": 1.0 - query_results['distances'][0][i] if 'distances' in query_results else 1.0
-                        })
-        else:
-            # Mock search - simple keyword matching
-            query_lower = query_text.lower()
-            for artifact_type in artifact_types:
-                if artifact_type in self._mock_storage:
-                    for artifact in self._mock_storage[artifact_type]:
-                        if query_lower in artifact['content'].lower():
-                            results.append({
-                                **artifact,
-                                "similarity": 0.85  # Mock similarity
-                            })
-
-        # Sort by similarity and limit
-        results.sort(key=lambda x: x.get('similarity', 0), reverse=True)
-        results = results[:top_k]
-
-        self.log(f"🔍 Found {len(results)} similar artifacts for: {query_text[:50]}...")
-        return results
+        return self.engine.query_similar(
+            query_text=query_text,
+            artifact_types=artifact_types,
+            top_k=top_k,
+            filters=filters
+        )
 
     def get_recommendations(
         self,
@@ -285,7 +120,7 @@ class RAGAgent(DebugMixin):
         context: Optional[Dict] = None
     ) -> Dict:
         """
-        Get RAG-informed recommendations based on past experience
+        Get RAG-informed recommendations based on past experience.
 
         Args:
             task_description: Description of new task
@@ -294,88 +129,10 @@ class RAGAgent(DebugMixin):
         Returns:
             Dict with recommendations based on history
         """
-        context = context or {}
-
-        # Query for similar tasks
-        similar_tasks = self.query_similar(
-            query_text=task_description,
-            artifact_types=["research_report", "architecture_decision", "developer_solution"],
-            top_k=10
+        return self.engine.get_recommendations(
+            task_description=task_description,
+            context=context
         )
-
-        if not similar_tasks:
-            return {
-                "based_on_history": [],
-                "recommendations": ["No similar tasks found in history"],
-                "avoid": [],
-                "confidence": "LOW",
-                "similar_tasks_count": 0
-            }
-
-        # Extract patterns from similar tasks using comprehensions
-        from collections import defaultdict
-
-        # Track technologies using defaultdict
-        technologies = defaultdict(lambda: {"count": 0, "avg_score": 0, "scores": []})
-        for task in similar_tasks:
-            metadata = task.get('metadata', {})
-            for tech in metadata.get('technologies', []):
-                technologies[tech]["count"] += 1
-
-        # Extract success patterns using list comprehension
-        success_patterns = [
-            {
-                "approach": task['metadata'].get('approach', 'unknown'),
-                "score": task['metadata'].get('arbitration_score', 0),
-                "technologies": task['metadata'].get('technologies', [])
-            }
-            for task in similar_tasks
-            if task.get('artifact_type') == 'developer_solution'
-            and task.get('metadata', {}).get('winner')
-        ]
-
-        # Extract issues using list comprehension with chain
-        from itertools import chain
-        issues = list(chain.from_iterable(
-            task.get('metadata', {}).get('issues', [])
-            for task in similar_tasks
-            if task.get('artifact_type') == 'validation_result'
-        ))
-
-        # Generate recommendations using comprehensions
-        # Technology recommendations
-        top_techs = sorted(technologies.items(), key=lambda x: x[1]['count'], reverse=True)[:3]
-        based_on = [f"Used {tech} in {data['count']} past similar tasks" for tech, data in top_techs]
-        recommendations = [
-            f"Consider {tech} (proven in {data['count']} similar tasks)"
-            for tech, data in top_techs
-            if data['count'] >= 2
-        ]
-
-        # Success pattern recommendations
-        based_on.extend([
-            f"{pattern['approach']} approach scored {pattern['score']}/100"
-            for pattern in success_patterns[:3]
-        ])
-
-        # Issue-based avoidance using Counter
-        from collections import Counter
-        common_issues = Counter(issue.get('type', 'unknown') for issue in issues)
-        avoid = [
-            f"Watch for {issue_type} issues (found in {count} similar tasks)"
-            for issue_type, count in common_issues.items()
-            if count >= 2
-        ]
-
-        confidence = "HIGH" if len(similar_tasks) >= 5 else "MEDIUM" if len(similar_tasks) >= 2 else "LOW"
-
-        return {
-            "based_on_history": based_on,
-            "recommendations": recommendations if recommendations else ["Insufficient history for recommendations"],
-            "avoid": avoid,
-            "confidence": confidence,
-            "similar_tasks_count": len(similar_tasks)
-        }
 
     def extract_patterns(
         self,
@@ -383,7 +140,7 @@ class RAGAgent(DebugMixin):
         time_window_days: int = 90
     ) -> Dict:
         """
-        Extract learning patterns from stored artifacts
+        Extract learning patterns from stored artifacts.
 
         Args:
             pattern_type: Type of pattern to extract
@@ -392,91 +149,14 @@ class RAGAgent(DebugMixin):
         Returns:
             Dict with extracted patterns
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=time_window_days)
-        cutoff_str = cutoff_date.isoformat()
-
-        patterns = {}
-
-        if pattern_type == "technology_success_rates":
-            # Get all developer solutions
-            solutions = self.query_similar(
-                query_text="",  # Empty query to get all
-                artifact_types=["developer_solution"],
-                top_k=1000
-            )
-
-            # Calculate success rates per technology
-            tech_stats = {}
-            for solution in solutions:
-                metadata = solution.get('metadata', {})
-
-                # Check if within time window
-                if metadata.get('timestamp', '') < cutoff_str:
-                    continue
-
-                technologies = metadata.get('technologies', [])
-                score = metadata.get('arbitration_score', 0)
-                success = metadata.get('winner', False)
-
-                for tech in technologies:
-                    if tech not in tech_stats:
-                        tech_stats[tech] = {
-                            "tasks_count": 0,
-                            "total_score": 0,
-                            "successes": 0
-                        }
-
-                    tech_stats[tech]["tasks_count"] += 1
-                    tech_stats[tech]["total_score"] += score
-                    if success:
-                        tech_stats[tech]["successes"] += 1
-
-            # Calculate averages and recommendations
-            for tech, stats in tech_stats.items():
-                if stats["tasks_count"] > 0:
-                    avg_score = stats["total_score"] / stats["tasks_count"]
-                    success_rate = stats["successes"] / stats["tasks_count"]
-
-                    recommendation = "HIGHLY_RECOMMENDED" if avg_score >= 90 and success_rate >= 0.8 else \
-                                     "RECOMMENDED" if avg_score >= 80 and success_rate >= 0.6 else \
-                                     "CONSIDER_ALTERNATIVES"
-
-                    patterns[tech] = {
-                        "tasks_count": stats["tasks_count"],
-                        "avg_score": round(avg_score, 1),
-                        "success_rate": round(success_rate, 2),
-                        "recommendation": recommendation
-                    }
-
-        return patterns
-
-    def _generate_artifact_id(self, artifact_type: str, card_id: str) -> str:
-        """Generate unique artifact ID"""
-        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
-        unique = hashlib.md5(f"{artifact_type}{card_id}{timestamp}".encode()).hexdigest()[:8]
-        return f"{artifact_type}-{card_id}-{unique}"
+        return self.engine.extract_patterns(
+            pattern_type=pattern_type,
+            time_window_days=time_window_days
+        )
 
     def get_stats(self) -> Dict:
-        """Get RAG database statistics"""
-        stats = {
-            "total_artifacts": 0,
-            "by_type": {},
-            "database_path": str(self.db_path),
-            "chromadb_available": CHROMADB_AVAILABLE
-        }
-
-        if CHROMADB_AVAILABLE and self.client:
-            for artifact_type, collection in self.collections.items():
-                count = collection.count()
-                stats["by_type"][artifact_type] = count
-                stats["total_artifacts"] += count
-        else:
-            for artifact_type, artifacts in self._mock_storage.items():
-                count = len(artifacts)
-                stats["by_type"][artifact_type] = count
-                stats["total_artifacts"] += count
-
-        return stats
+        """Get RAG database statistics."""
+        return self.engine.get_stats()
 
     def search_code_examples(
         self,
@@ -488,11 +168,6 @@ class RAGAgent(DebugMixin):
         """
         Search for code examples in RAG database.
 
-        WHY: Provides code examples for RAG-enhanced validation.
-             Queries code_example artifacts stored from books, repos, documentation.
-
-        WHAT: Searches code examples with optional language/framework filtering.
-
         Args:
             query: Code snippet or description to search for
             language: Filter by programming language (python, ruby, etc.)
@@ -502,40 +177,15 @@ class RAGAgent(DebugMixin):
         Returns:
             List of code examples with metadata
         """
-        # Build filters
-        filters = {}
-
-        if language:
-            filters['language'] = language
-
-        if framework:
-            filters['framework'] = framework
-
-        # Query code_example artifacts
-        results = self.query_similar(
-            query_text=query,
-            artifact_types=['code_example'],
-            top_k=top_k,
-            filters=filters if filters else None
+        return self.engine.search_code_examples(
+            query=query,
+            language=language,
+            framework=framework,
+            top_k=top_k
         )
 
-        # Format results for validation
-        formatted_results = []
 
-        for result in results:
-            formatted_results.append({
-                'code': result.get('content', ''),
-                'source': result.get('metadata', {}).get('source', 'unknown'),
-                'language': result.get('metadata', {}).get('language', language or 'python'),
-                'framework': result.get('metadata', {}).get('framework'),
-                'metadata': result.get('metadata', {}),
-                'score': result.get('similarity', 0.0)
-            })
-
-        return formatted_results
-
-
-# Convenience functions
+# Convenience functions for backward compatibility
 def create_rag_agent(db_path: str = "db") -> RAGAgent:
     """
     Create RAG agent instance.

@@ -92,6 +92,13 @@ class RequirementsDrivenValidator:
             ArtifactType.VISUALIZATION: 'VisualizationValidator',
         }
 
+        # Criteria extraction strategy map (replaces if/elif chain)
+        self.criteria_extractors = {
+            ArtifactType.NOTEBOOK: self._extract_notebook_criteria,
+            ArtifactType.UI: self._extract_ui_criteria,
+            ArtifactType.CODE: self._extract_code_criteria,
+        }
+
     def analyze_requirements(self,
                            task_title: str,
                            task_description: str,
@@ -137,11 +144,25 @@ class RequirementsDrivenValidator:
         """Detect artifact type from requirements"""
         combined = f"{title} {description}".lower()
 
-        # Check parsed requirements first
-        if requirements and 'artifact_type' in requirements:
+        # Check parsed requirements first (early return)
+        if self._has_artifact_type_in_requirements(requirements):
             return ArtifactType(requirements['artifact_type'])
 
         # Keyword matching (priority order)
+        detected_type = self._match_artifact_by_keywords(combined)
+        if detected_type:
+            return detected_type
+
+        return ArtifactType.CODE  # Default
+
+    def _has_artifact_type_in_requirements(self, requirements: Optional[Dict]) -> bool:
+        """Check if requirements contain artifact_type"""
+        if not requirements:
+            return False
+        return 'artifact_type' in requirements
+
+    def _match_artifact_by_keywords(self, combined_text: str) -> Optional[ArtifactType]:
+        """Match artifact type by keywords"""
         for artifact_type in [
             ArtifactType.NOTEBOOK,
             ArtifactType.UI,
@@ -149,11 +170,14 @@ class RequirementsDrivenValidator:
             ArtifactType.DEMO,
             ArtifactType.DOCUMENTATION,
         ]:
-            keywords = self.keywords.get(artifact_type, [])
-            if any(kw in combined for kw in keywords):
+            if self._has_matching_keywords(artifact_type, combined_text):
                 return artifact_type
+        return None
 
-        return ArtifactType.CODE  # Default
+    def _has_matching_keywords(self, artifact_type: ArtifactType, text: str) -> bool:
+        """Check if text contains keywords for artifact type"""
+        keywords = self.keywords.get(artifact_type, [])
+        return any(kw in text for kw in keywords)
 
     def _extract_quality_criteria(self,
                                   artifact_type: ArtifactType,
@@ -161,46 +185,78 @@ class RequirementsDrivenValidator:
                                   description: str,
                                   requirements: Optional[Dict]) -> Dict:
         """Extract quality criteria based on artifact type"""
-        import re
         combined = f"{title} {description}".lower()
-        criteria = {}
 
-        # Notebook criteria
-        if artifact_type == ArtifactType.NOTEBOOK:
-            # Cell count
-            match = re.search(r'(\d+)\+?\s*cells?', combined)
-            criteria['min_cells'] = int(match.group(1)) if match else 8
-
-            # Visualizations
-            criteria['requires_visualizations'] = any(
-                w in combined for w in ['chart', 'graph', 'plot', 'viz']
-            )
-
-            # Visualization library
-            for lib in ['plotly', 'matplotlib', 'chart.js']:
-                if lib in combined:
-                    criteria['visualization_library'] = lib
-                    break
-
-            # Data source
-            match = re.search(r'([\w_]+\.(?:json|csv|xlsx))', combined)
-            if match:
-                criteria['data_source'] = match.group(1)
-
-        # UI criteria
-        elif artifact_type == ArtifactType.UI:
-            criteria['accessibility_required'] = any(
-                w in combined for w in ['accessibility', 'wcag', 'a11y']
-            )
-            criteria['responsive_required'] = 'responsive' in combined
-
-        # Code criteria
-        elif artifact_type == ArtifactType.CODE:
-            criteria['min_test_coverage'] = 0.8
-            criteria['requires_unit_tests'] = True
+        # Use strategy pattern: lookup extractor in map
+        extractor = self.criteria_extractors.get(artifact_type, lambda x: {})
+        criteria = extractor(combined)
 
         # Merge with parsed requirements if available
-        if requirements and 'quality_criteria' in requirements:
-            criteria.update(requirements['quality_criteria'])
+        self._merge_parsed_quality_criteria(criteria, requirements)
 
         return criteria
+
+    def _extract_notebook_criteria(self, combined: str) -> Dict:
+        """Extract quality criteria for notebook artifacts"""
+        import re
+        criteria = {}
+
+        # Cell count
+        match = re.search(r'(\d+)\+?\s*cells?', combined)
+        criteria['min_cells'] = int(match.group(1)) if match else 8
+
+        # Visualizations
+        criteria['requires_visualizations'] = any(
+            w in combined for w in ['chart', 'graph', 'plot', 'viz']
+        )
+
+        # Visualization library
+        viz_lib = self._detect_visualization_library(combined)
+        if viz_lib:
+            criteria['visualization_library'] = viz_lib
+
+        # Data source
+        data_source = self._detect_data_source(combined)
+        if data_source:
+            criteria['data_source'] = data_source
+
+        return criteria
+
+    def _detect_visualization_library(self, combined: str) -> Optional[str]:
+        """Detect visualization library from text"""
+        for lib in ['plotly', 'matplotlib', 'chart.js']:
+            if lib in combined:
+                return lib
+        return None
+
+    def _detect_data_source(self, combined: str) -> Optional[str]:
+        """Detect data source file from text"""
+        import re
+        match = re.search(r'([\w_]+\.(?:json|csv|xlsx))', combined)
+        if not match:
+            return None
+        return match.group(1)
+
+    def _extract_ui_criteria(self, combined: str) -> Dict:
+        """Extract quality criteria for UI artifacts"""
+        return {
+            'accessibility_required': any(
+                w in combined for w in ['accessibility', 'wcag', 'a11y']
+            ),
+            'responsive_required': 'responsive' in combined
+        }
+
+    def _extract_code_criteria(self, combined: str) -> Dict:
+        """Extract quality criteria for code artifacts"""
+        return {
+            'min_test_coverage': 0.8,
+            'requires_unit_tests': True
+        }
+
+    def _merge_parsed_quality_criteria(self, criteria: Dict, requirements: Optional[Dict]) -> None:
+        """Merge parsed quality criteria into existing criteria dict"""
+        if not requirements:
+            return
+        if 'quality_criteria' not in requirements:
+            return
+        criteria.update(requirements['quality_criteria'])

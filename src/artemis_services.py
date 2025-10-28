@@ -1,283 +1,171 @@
 #!/usr/bin/env python3
 """
-Artemis Services (SOLID: Single Responsibility Principle)
+Module: artemis_services.py (DEPRECATED - Use services.core instead)
 
-Each service class has ONE clear responsibility:
-- TestRunner: Running tests
-- HTMLValidator: Validating HTML
-- PipelineLogger: Logging messages
-- FileManager: File operations
+BACKWARD COMPATIBILITY WRAPPER
+
+Purpose: Maintains backward compatibility for existing imports while code migrates
+         to the new modular services.core package structure.
+
+Why: Allows gradual migration to new modular structure without breaking existing code.
+     Preserves the SOLID principles mentioned in the original docstring while
+     pointing to the new, more maintainable implementation.
+
+DEPRECATION NOTICE:
+This module is deprecated and will be removed in a future version.
+Please update your imports to use:
+    from services.core import TestRunner, HTMLValidator, PipelineLogger, FileManager
+
+Migration Status: Phase 1 - Core services moved to src/services/core/
+Next Steps: Update all imports across codebase to use new location.
+
+REFACTORING SUMMARY:
+- Original file: 283 lines (4 classes in one file)
+- New structure: 4 modules + 1 package init (modular, focused)
+- Line reduction per module: ~70-100 lines each (better maintainability)
+- Patterns applied:
+  * Service Layer pattern
+  * Factory Method pattern
+  * Service Locator pattern
+  * Interface Segregation
+  * Dependency Injection
+
+ARCHITECTURE IMPROVEMENTS:
+1. Each service in its own module (Single Responsibility)
+2. Enhanced documentation (WHY/RESPONSIBILITY/PATTERNS headers)
+3. Guard clauses throughout (max 1 level nesting)
+4. Dispatch tables for log levels and parsers (no if/elif chains)
+5. Factory functions for dependency injection
+6. Service registry for centralized management
+7. Complete type hints on all methods
+8. Extended functionality (strict validation, line operations, etc.)
+
+NEW FEATURES IN REFACTORED VERSION:
+- TestRunner: Configurable pytest arguments, better error handling
+- HTMLValidator: Strict validation mode, multiple parser support
+- PipelineLogger: Extended log levels (SUCCESS, STAGE, etc.), custom formatters
+- FileManager: Line operations, append, file existence checks, size queries
+
+Patterns:
+- Facade Pattern: Re-exports services from new location
+- Adapter Pattern: Provides compatibility shim during migration
+- Proxy Pattern: Transparent forwarding to new implementations
 """
 
-import subprocess
-import re
-from datetime import datetime
-from pathlib import Path
-from typing import Dict
-from bs4 import BeautifulSoup
+import warnings
 
-from artemis_stage_interface import TestRunnerInterface, ValidatorInterface, LoggerInterface
-from artemis_constants import PYTEST_PATH as DEFAULT_PYTEST_PATH
-
-
-class TestRunner(TestRunnerInterface):
-    """
-    Single Responsibility: Run pytest and parse results
-
-    WHAT: Executes pytest test suites and parses the output into structured data.
-    WHY: Encapsulates all test execution logic in one place, making it testable and
-         allowing easy substitution with mock implementations.
-
-    This class does ONLY test execution - nothing else.
-    """
-
-    def __init__(self, pytest_path: str = None):
-        """
-        Initialize test runner.
-
-        WHAT: Sets up pytest executable path.
-        WHY: Allows overriding pytest location for different environments (venv, system, etc).
-        """
-        self.pytest_path = pytest_path or DEFAULT_PYTEST_PATH
-
-    def run_tests(self, test_path: str, timeout: int = 60) -> Dict:
-        """
-        Run pytest and return parsed results.
-
-        WHAT: Executes pytest with verbose output and parses pass/fail/skip counts.
-        WHY: Provides standardized test results format for pipeline stages to consume.
-             Timeout prevents hanging on infinite loops in tests.
-
-        Args:
-            test_path: Path to tests
-            timeout: Timeout in seconds
-
-        Returns:
-            Dict with test results
-        """
-        result = subprocess.run(
-            [self.pytest_path, test_path, "-v", "--tb=short", "-q"],
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-
-        output = result.stdout + result.stderr
-        passed, failed, skipped = self._parse_pytest_output(output)
-        total = passed + failed + skipped
-
-        return {
-            "total": total,
-            "passed": passed,
-            "failed": failed,
-            "skipped": skipped,
-            "pass_rate": f"{(passed/total*100):.1f}%" if total > 0 else "0%",
-            "exit_code": result.returncode,
-            "output": output
-        }
-
-    def _parse_pytest_output(self, output: str) -> tuple:
-        """
-        Parse pytest output to extract counts.
-
-        WHAT: Uses regex to extract passed/failed/skipped counts from pytest summary.
-        WHY: Pytest output format is consistent, regex is reliable and fast for parsing.
-        """
-        passed = failed = skipped = 0
-
-        if match := re.search(r'(\d+) passed', output):
-            passed = int(match.group(1))
-        if match := re.search(r'(\d+) failed', output):
-            failed = int(match.group(1))
-        if match := re.search(r'(\d+) skipped', output):
-            skipped = int(match.group(1))
-
-        return passed, failed, skipped
+# Import from new location and re-export
+from services.core import (
+    TestRunner,
+    HTMLValidator,
+    PipelineLogger,
+    FileManager,
+    create_test_runner,
+    create_html_validator,
+    create_logger,
+    create_silent_logger,
+    create_file_manager,
+    ServiceRegistry,
+    create_default_services,
+    initialize_services
+)
 
 
-class HTMLValidator(ValidatorInterface):
-    """
-    Single Responsibility: Validate HTML syntax
-
-    WHAT: Validates HTML files for syntax errors using BeautifulSoup parser.
-    WHY: Catches malformed HTML early before it causes runtime errors.
-         BeautifulSoup is lenient but will catch serious syntax issues.
-
-    This class does ONLY HTML validation - nothing else.
-    """
-
-    def validate(self, file_path: Path) -> Dict:
-        """
-        Validate HTML file syntax using BeautifulSoup.
-
-        WHAT: Attempts to parse HTML file and reports any parsing errors.
-        WHY: BeautifulSoup's parser is forgiving but will fail on severely malformed HTML.
-             Returns standardized result format for pipeline consumption.
-
-        Args:
-            file_path: Path to HTML file
-
-        Returns:
-            Dict with validation results
-        """
-        try:
-            with open(file_path) as f:
-                html = f.read()
-            soup = BeautifulSoup(html, 'html.parser')
-            return {
-                "status": "PASS",
-                "errors": 0,
-                "note": "HTML is valid and parseable"
-            }
-        except Exception as e:
-            return {
-                "status": "FAIL",
-                "errors": 1,
-                "note": str(e)
-            }
+# Issue deprecation warning on import
+def _issue_deprecation_warning():
+    """Issue deprecation warning when this module is imported."""
+    warnings.warn(
+        "artemis_services.py is deprecated. "
+        "Please use 'from services.core import TestRunner, HTMLValidator, "
+        "PipelineLogger, FileManager' instead. "
+        "This module will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=3
+    )
 
 
-class PipelineLogger(LoggerInterface):
-    """
-    Single Responsibility: Log pipeline messages
-
-    WHAT: Provides formatted console logging with timestamps and emoji indicators.
-    WHY: Separates logging concerns from business logic and provides consistent,
-         readable output format across all pipeline stages.
-
-    This class does ONLY logging - nothing else.
-    """
-
-    EMOJI_MAP = {
-        "INFO": "ℹ️",
-        "SUCCESS": "✅",
-        "ERROR": "❌",
-        "WARNING": "⚠️",
-        "STAGE": "🔄"
-    }
-
-    def __init__(self, verbose: bool = True):
-        """
-        Initialize logger.
-
-        WHAT: Sets verbosity flag to control output.
-        WHY: Allows silencing logs during testing or batch operations.
-        """
-        self.verbose = verbose
-
-    def log(self, message: str, level: str = "INFO"):
-        """
-        Log message with timestamp and emoji.
-
-        WHAT: Formats and prints log message with UTC timestamp and level-specific emoji.
-        WHY: Timestamps help trace execution order, emojis make scanning logs easier.
-        """
-        if self.verbose:
-            timestamp = datetime.utcnow().strftime("%H:%M:%S")
-            emoji = self.EMOJI_MAP.get(level, "•")
-            print(f"[{timestamp}] {emoji} {message}")
-
-    # Standard logging interface compatibility
-    def info(self, message: str, **kwargs):
-        """
-        Log info message (ignores extra kwargs for compatibility).
-
-        WHAT: Standard logging interface method mapping to log() with INFO level.
-        WHY: Enables drop-in replacement of Python's standard logger without code changes.
-        """
-        self.log(message, "INFO")
-
-    def warning(self, message: str, **kwargs):
-        """
-        Log warning message (ignores extra kwargs for compatibility).
-
-        WHAT: Standard logging interface method mapping to log() with WARNING level.
-        WHY: Enables drop-in replacement of Python's standard logger without code changes.
-        """
-        self.log(message, "WARNING")
-
-    def error(self, message: str, **kwargs):
-        """
-        Log error message (ignores extra kwargs for compatibility).
-
-        WHAT: Standard logging interface method mapping to log() with ERROR level.
-        WHY: Enables drop-in replacement of Python's standard logger without code changes.
-        """
-        self.log(message, "ERROR")
-
-    def debug(self, message: str, **kwargs):
-        """
-        Log debug message (ignores extra kwargs for compatibility).
-
-        WHAT: Standard logging interface method mapping to log() with INFO level.
-        WHY: Enables drop-in replacement of Python's standard logger without code changes.
-        """
-        self.log(message, "INFO")
+# Issue warning on module import
+_issue_deprecation_warning()
 
 
-class FileManager:
-    """
-    Single Responsibility: Handle file operations
+# Export for backward compatibility
+__all__ = [
+    # Original service classes (100% compatible)
+    "TestRunner",
+    "HTMLValidator",
+    "PipelineLogger",
+    "FileManager",
 
-    WHAT: Provides simple, safe file I/O operations with consistent error handling.
-    WHY: Centralizes all file operations to enable mocking in tests and consistent
-         error handling across the codebase.
+    # New factory functions (optional, for enhanced usage)
+    "create_test_runner",
+    "create_html_validator",
+    "create_logger",
+    "create_silent_logger",
+    "create_file_manager",
 
-    This class does ONLY file I/O - nothing else.
-    """
+    # New service management (optional, for advanced usage)
+    "ServiceRegistry",
+    "create_default_services",
+    "initialize_services",
+]
 
-    @staticmethod
-    def read_json(file_path: Path) -> Dict:
-        """
-        Read JSON file.
 
-        WHAT: Reads and parses JSON file into Python dictionary.
-        WHY: Encapsulates JSON parsing logic and provides single point for error handling.
-        """
-        import json
-        with open(file_path) as f:
-            return json.load(f)
+# Migration guide for developers
+_MIGRATION_GUIDE = """
+MIGRATION GUIDE: artemis_services.py -> services.core
 
-    @staticmethod
-    def write_json(file_path: Path, data: Dict):
-        """
-        Write JSON file.
+OLD IMPORT (deprecated):
+    from artemis_services import TestRunner, PipelineLogger, FileManager
 
-        WHAT: Serializes dictionary to JSON and writes to file with indentation.
-        WHY: Consistent JSON formatting (2-space indent) makes files human-readable.
-        """
-        import json
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=2)
+NEW IMPORT (recommended):
+    from services.core import TestRunner, PipelineLogger, FileManager
 
-    @staticmethod
-    def read_text(file_path: Path) -> str:
-        """
-        Read text file.
+BENEFITS OF MIGRATION:
+1. Modular structure (easier to navigate and maintain)
+2. Enhanced features (strict validation, custom formatters, etc.)
+3. Better documentation (WHY/RESPONSIBILITY/PATTERNS headers)
+4. Improved testability (factory functions, service registry)
+5. Future-proof (new features will only be in services.core)
 
-        WHAT: Reads entire text file content as string.
-        WHY: Provides consistent interface for text file reading across all modules.
-        """
-        with open(file_path) as f:
-            return f.read()
+STEP-BY-STEP MIGRATION:
+1. Replace import statement (see above)
+2. Code works unchanged (100% backward compatible)
+3. Optionally use new features:
+   - Factory functions for dependency injection
+   - ServiceRegistry for centralized service management
+   - Enhanced service capabilities (strict mode, etc.)
 
-    @staticmethod
-    def write_text(file_path: Path, content: str):
-        """
-        Write text file.
+EXAMPLE - BASIC MIGRATION:
+    # Before
+    from artemis_services import PipelineLogger
+    logger = PipelineLogger(verbose=True)
 
-        WHAT: Writes string content to file, overwriting if exists.
-        WHY: Provides consistent interface for text file writing across all modules.
-        """
-        with open(file_path, 'w') as f:
-            f.write(content)
+    # After
+    from services.core import PipelineLogger
+    logger = PipelineLogger(verbose=True)
 
-    @staticmethod
-    def ensure_directory(dir_path: Path):
-        """
-        Ensure directory exists.
+EXAMPLE - USING NEW FEATURES:
+    # Use factory functions
+    from services.core import create_logger
+    logger = create_logger(verbose=True)
 
-        WHAT: Creates directory and all parent directories if they don't exist.
-        WHY: Prevents FileNotFoundError when writing files to new directories.
-        """
-        dir_path.mkdir(parents=True, exist_ok=True)
+    # Use service registry
+    from services.core import initialize_services, ServiceRegistry
+    initialize_services(verbose=True)
+    logger = ServiceRegistry.get('logger')
+    logger.info("Services initialized!")
+
+For questions or issues, consult:
+- services/core/__init__.py (package documentation)
+- Individual module files (detailed implementation docs)
+- REFACTORING_REPORT.md (this refactoring's metrics and patterns)
+"""
+
+
+def print_migration_guide():
+    """Print migration guide to console."""
+    print(_MIGRATION_GUIDE)
+
+
+# Add migration guide to module docstring for help()
+__doc__ += "\n\n" + _MIGRATION_GUIDE

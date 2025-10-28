@@ -122,15 +122,7 @@ class BDDTestGenerationStage(PipelineStage, SupervisedStageMixin):
         self.update_progress({"step": "starting", "progress_percent": 10})
 
         # Get Gherkin scenarios from context or RAG
-        scenarios_content = context.get('scenarios_content')
-        if not scenarios_content:
-            # Try to fetch from RAG
-            scenarios_artifact = self.rag.query(
-                query_text=f"bdd scenarios for {title}",
-                filter_metadata={"card_id": card_id, "artifact_type": "bdd_scenarios"}
-            )
-            if scenarios_artifact:
-                scenarios_content = scenarios_artifact[0].get('content', '')
+        scenarios_content = self._get_scenarios_content(context, card_id, title)
 
         if not scenarios_content:
             self.logger.log("⚠️  No BDD scenarios found - skipping test generation", "WARNING")
@@ -191,6 +183,38 @@ class BDDTestGenerationStage(PipelineStage, SupervisedStageMixin):
             "step_count": len(steps),
             "framework": "pytest-bdd"
         }
+
+    def _get_scenarios_content(self, context: Dict, card_id: str, title: str) -> Optional[str]:
+        """
+        Retrieve Gherkin scenarios from context or RAG.
+
+        What it does: Attempts to get scenarios from context first, then falls back
+                      to querying RAG storage.
+
+        Why extracted: Eliminates nested if statements using early return pattern.
+
+        Args:
+            context: Pipeline context dictionary
+            card_id: Card ID for RAG query filtering
+            title: Feature title for RAG query
+
+        Returns:
+            Scenarios content string if found, None otherwise
+        """
+        scenarios_content = context.get('scenarios_content')
+        if scenarios_content:
+            return scenarios_content
+
+        # Try to fetch from RAG
+        scenarios_artifact = self.rag.query(
+            query_text=f"bdd scenarios for {title}",
+            filter_metadata={"card_id": card_id, "artifact_type": "bdd_scenarios"}
+        )
+
+        if not scenarios_artifact:
+            return None
+
+        return scenarios_artifact[0].get('content', '')
 
     def _extract_steps_from_gherkin(self, content: str) -> List[str]:
         """
@@ -304,17 +328,12 @@ Generate the test file now:
 """
 
         # Use AI Query Service if available for token optimization
+        response_text = None
         if self.ai_service:
-            result = self.ai_service.query(
-                query=prompt,
-                context={"card_id": card_id, "title": title},
-                temperature=0.3,
-                max_tokens=3000
-            )
-            if result.success:
-                return result.response
-            else:
-                self.logger.log(f"AI Query Service failed: {result.error}, falling back to direct LLM", "WARNING")
+            response_text = self._try_ai_service(prompt, card_id, title)
+
+        if response_text:
+            return response_text
 
         # Fallback to direct LLM call
         response = self.llm_client.chat_completion(
@@ -324,15 +343,68 @@ Generate the test file now:
         )
 
         # Extract Python code from response
+        return self._extract_code_from_response(response)
+
+    def _try_ai_service(self, prompt: str, card_id: str, title: str) -> Optional[str]:
+        """
+        Attempt to use AI Query Service for test generation.
+
+        What it does: Calls AI Query Service with token optimization and error handling.
+
+        Why extracted: Eliminates nested if statements (guard clause pattern).
+
+        Args:
+            prompt: Test generation prompt
+            card_id: Card ID for context
+            title: Feature title for context
+
+        Returns:
+            Response text if successful, None if failed (triggers fallback)
+        """
+        result = self.ai_service.query(
+            query=prompt,
+            context={"card_id": card_id, "title": title},
+            temperature=0.3,
+            max_tokens=3000
+        )
+
+        if result.success:
+            return result.response
+
+        self.logger.log(f"AI Query Service failed: {result.error}, falling back to direct LLM", "WARNING")
+        return None
+
+    def _extract_code_from_response(self, response: str) -> str:
+        """
+        Extract Python code from LLM response.
+
+        What it does: Parses markdown code blocks to extract clean Python code.
+
+        Why: LLMs often wrap code in ```python or ``` markdown blocks. This extracts
+             the actual code for file storage.
+
+        Parser Pattern:
+        - Checks for ```python first (most specific)
+        - Falls back to ``` (generic code block)
+        - Returns original response if no code blocks found
+
+        Args:
+            response: Raw LLM response text
+
+        Returns:
+            Extracted Python code or original response
+        """
         code = response
+
         if "```python" in code:
             code_start = code.find("```python") + 9
             code_end = code.find("```", code_start)
-            code = code[code_start:code_end].strip()
-        elif "```" in code:
+            return code[code_start:code_end].strip()
+
+        if "```" in code:
             code_start = code.find("```") + 3
             code_end = code.find("```", code_start)
-            code = code[code_start:code_end].strip()
+            return code[code_start:code_end].strip()
 
         return code
 
