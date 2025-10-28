@@ -23,6 +23,32 @@ from llm_client import LLMClient
 from artemis_exceptions import RAGStorageError, FileReadError, create_wrapped_exception
 
 
+def _validate_platform_hash(
+    stored_platform_hash: Optional[str],
+    platform_info: PlatformInfo,
+    logger: LoggerInterface
+) -> None:
+    """
+    Validate platform hash and log differences.
+
+    WHY: Separate validation logic to avoid nested control flow
+    RESPONSIBILITY: Compare hashes and log appropriate messages
+    PATTERNS: Guard Clauses
+    """
+    # Guard: No stored hash
+    if not stored_platform_hash:
+        return
+
+    # Check for hash mismatch
+    if stored_platform_hash != platform_info.platform_hash:
+        logger.log("⚠️  Platform configuration has changed since last run!", "WARNING")
+        logger.log(f"   Previous platform hash: {stored_platform_hash}", "WARNING")
+        logger.log(f"   Current platform hash: {platform_info.platform_hash}", "WARNING")
+        logger.log("   Updating platform information in RAG...", "INFO")
+    else:
+        logger.log("✅ Platform validation: Current platform matches stored configuration", "INFO")
+
+
 def store_and_validate_platform_info(
     platform_info: PlatformInfo,
     resource_allocation: ResourceAllocation,
@@ -40,17 +66,12 @@ def store_and_validate_platform_info(
         )
 
         # Validate platform hash if we have stored data
+        # Guard: No stored data or empty metadata
         if stored_platform_data and len(stored_platform_data.get('metadatas', [[]])[0]) > 0:
+            # Have stored data - validate hash
             stored_metadata = stored_platform_data['metadatas'][0][0]
             stored_platform_hash = stored_metadata.get('platform_hash')
-
-            if stored_platform_hash and stored_platform_hash != platform_info.platform_hash:
-                logger.log("⚠️  Platform configuration has changed since last run!", "WARNING")
-                logger.log(f"   Previous platform hash: {stored_platform_hash}", "WARNING")
-                logger.log(f"   Current platform hash: {platform_info.platform_hash}", "WARNING")
-                logger.log("   Updating platform information in RAG...", "INFO")
-            elif stored_platform_hash:
-                logger.log("✅ Platform validation: Current platform matches stored configuration", "INFO")
+            _validate_platform_hash(stored_platform_hash, platform_info, logger)
 
         # Store/update platform information
         platform_data = platform_info.to_dict()

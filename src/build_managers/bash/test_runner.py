@@ -240,15 +240,7 @@ class BatsTestRunner:
 
         # Count test lines
         for line in output.splitlines():
-            line = line.strip()
-            if line.startswith('✓'):
-                stats['run'] += 1
-                stats['passed'] += 1
-            elif line.startswith('✗'):
-                stats['run'] += 1
-                stats['failed'] += 1
-            elif line.startswith('-') and 'skipped' in line.lower():
-                stats['skipped'] += 1
+            self._parse_test_line(line.strip(), stats)
 
         # Alternative: Parse summary line
         # Example: "3 tests, 0 failures"
@@ -265,6 +257,37 @@ class BatsTestRunner:
             stats['passed'] = total - failures
 
         return stats
+
+    @staticmethod
+    def _parse_test_line(line: str, stats: dict) -> None:
+        """
+        Parse single test line and update stats.
+
+        WHY: Separate line parsing to avoid nested control flow
+        RESPONSIBILITY: Update stats dict based on line prefix
+        PATTERNS: Guard Clauses, Dispatch Table (O(1) lookups)
+        """
+        # Guard: Empty line
+        if not line:
+            return
+
+        # Dispatch table: prefix → stats updates
+        # Using tuple unpacking for clarity
+        prefix_handlers = {
+            '✓': ('run', 'passed'),
+            '✗': ('run', 'failed'),
+        }
+
+        # Check dispatch table
+        for prefix, fields in prefix_handlers.items():
+            if line.startswith(prefix):
+                for field in fields:
+                    stats[field] += 1
+                return
+
+        # Special case: skipped tests (prefix + content check)
+        if line.startswith('-') and 'skipped' in line.lower():
+            stats['skipped'] += 1
 
     def _find_test_files(self, test_dir: Path) -> List[Path]:
         """

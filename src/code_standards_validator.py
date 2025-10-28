@@ -44,11 +44,15 @@ if __name__ == "__main__":
     print(f"Violations found: {result.violation_count}")
 
     # Print sample violations
-    if not result.is_valid:
-        print("\nViolations:")
-        for v in result.violations[:5]:
-            print(f"  {v['file']}:{v['line']} - {v['message']}")
+    # Guard: No violations
+    if result.is_valid:
+        import sys
+        sys.exit(0)
 
-        remaining = result.violation_count - 5
-        if remaining > 0:
-            print(f"  ... and {remaining} more")
+    print("\nViolations:")
+    for v in result.violations[:5]:
+        print(f"  {v['file']}:{v['line']} - {v['message']}")
+
+    remaining = result.violation_count - 5
+    if remaining > 0:
+        print(f"  ... and {remaining} more")

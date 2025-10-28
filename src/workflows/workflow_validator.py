@@ -280,16 +280,20 @@ class WorkflowValidator:
             )
 
         # Validate retry configuration
-        if hasattr(action, 'retry_on_failure') and action.retry_on_failure:
-            if not hasattr(action, 'max_retries'):
-                result.add_warning(
-                    f"{action_ref} '{action.action_name}' has retry_on_failure "
-                    "but no max_retries"
-                )
-            elif action.max_retries <= 0:
-                result.add_error(
-                    f"{action_ref} '{action.action_name}' max_retries must be positive"
-                )
+        # Guard: No retry configured
+        if not hasattr(action, 'retry_on_failure') or not action.retry_on_failure:
+            return
+
+        # Check max_retries
+        if not hasattr(action, 'max_retries'):
+            result.add_warning(
+                f"{action_ref} '{action.action_name}' has retry_on_failure "
+                "but no max_retries"
+            )
+        elif action.max_retries <= 0:
+            result.add_error(
+                f"{action_ref} '{action.action_name}' max_retries must be positive"
+            )
 
     def _validate_state_transitions(
         self,

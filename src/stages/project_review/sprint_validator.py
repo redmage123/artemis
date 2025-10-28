@@ -144,14 +144,35 @@ class SprintValidator:
 
         # Deduct points based on issue types
         for issue in issues:
-            if "overcommitted" in issue:
-                base_score -= 2
-            elif "low" in issue and "capacity" in issue:
-                base_score -= 1
-            elif "ambitious" in issue:
-                base_score -= 1
+            base_score -= self._calculate_issue_penalty(issue)
 
         return max(0, base_score)
+
+    @staticmethod
+    def _calculate_issue_penalty(issue: str) -> int:
+        """
+        Calculate penalty for single issue.
+
+        WHY: Separate issue scoring to avoid nested control flow
+        RESPONSIBILITY: Return penalty points for issue type
+        PATTERNS: Dispatch Table (O(1) lookups)
+        """
+        # Dispatch table: issue substring → penalty points
+        penalty_checks = [
+            ("overcommitted", 2),
+            ("ambitious", 1),
+        ]
+
+        # Check each penalty condition
+        for substring, penalty in penalty_checks:
+            if substring in issue:
+                return penalty
+
+        # Special case: "low" AND "capacity"
+        if "low" in issue and "capacity" in issue:
+            return 1
+
+        return 0
 
     def _generate_sprint_feedback(
         self,
