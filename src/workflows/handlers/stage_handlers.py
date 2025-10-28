@@ -39,6 +39,36 @@ class RegenerateArchitectureHandler(WorkflowHandler):
     RESPONSIBILITY: Trigger architecture stage re-execution
     """
 
+    def _execute_architecture_via_orchestrator(self, orchestrator) -> bool:
+        """Execute architecture stage via orchestrator with guard clauses."""
+        if not hasattr(orchestrator, "run_stage"):
+            return False
+
+        logger.info("Triggering architecture stage via orchestrator...")
+        result = orchestrator.run_stage("architecture")
+
+        if not result:
+            logger.error("Architecture stage failed")
+            return False
+
+        logger.info("Architecture stage completed successfully")
+        return True
+
+    def _execute_architecture_via_pipeline(self, pipeline) -> bool:
+        """Execute architecture stage via pipeline with guard clauses."""
+        if not hasattr(pipeline, "execute_stage"):
+            return False
+
+        logger.info("Triggering architecture stage via pipeline...")
+        result = pipeline.execute_stage("architecture")
+
+        if not result:
+            logger.error("Architecture stage failed")
+            return False
+
+        logger.info("Architecture stage completed successfully")
+        return True
+
     def handle(self, context: Dict[str, Any]) -> bool:
         logger.info("Regenerating architecture...")
 
@@ -55,30 +85,20 @@ class RegenerateArchitectureHandler(WorkflowHandler):
                 )
                 return False
 
-            # Try to trigger architecture stage re-run
-            if orchestrator and hasattr(orchestrator, "run_stage"):
-                logger.info("Triggering architecture stage via orchestrator...")
-                result = orchestrator.run_stage("architecture")
+            # Try orchestrator approach first
+            if orchestrator:
+                result = self._execute_architecture_via_orchestrator(orchestrator)
                 if result:
-                    logger.info("Architecture stage completed successfully")
                     return True
-                else:
-                    logger.error("Architecture stage failed")
-                    return False
 
-            elif pipeline and hasattr(pipeline, "execute_stage"):
-                logger.info("Triggering architecture stage via pipeline...")
-                result = pipeline.execute_stage("architecture")
+            # Try pipeline approach
+            if pipeline:
+                result = self._execute_architecture_via_pipeline(pipeline)
                 if result:
-                    logger.info("Architecture stage completed successfully")
                     return True
-                else:
-                    logger.error("Architecture stage failed")
-                    return False
 
-            else:
-                logger.error("Neither orchestrator nor pipeline has required method for stage execution")
-                return False
+            logger.error("Neither orchestrator nor pipeline has required method for stage execution")
+            return False
 
         except Exception as e:
             logger.error(f"Failed to regenerate architecture: {e}")
@@ -162,6 +182,74 @@ class ResolveIntegrationConflictHandler(WorkflowHandler):
     RESPONSIBILITY: Identify and resolve conflicting files
     """
 
+    def _resolve_score_based(self, file_path: str, versions: List[Dict[str, Any]]) -> tuple:
+        """Resolve conflict using score-based selection."""
+        best_version = max(versions, key=lambda v: v.get("score", 0))
+        resolved_content = best_version.get("content")
+        logger.info(f"Resolved {file_path} using highest score: {best_version.get('score')}")
+        return best_version, resolved_content
+
+    def _resolve_latest(self, file_path: str, versions: List[Dict[str, Any]]) -> tuple:
+        """Resolve conflict using latest timestamp."""
+        best_version = max(versions, key=lambda v: v.get("timestamp", 0))
+        resolved_content = best_version.get("content")
+        logger.info(f"Resolved {file_path} using latest timestamp")
+        return best_version, resolved_content
+
+    def _resolve_author_preference(self, file_path: str, versions: List[Dict[str, Any]],
+                                   preferred_author: str) -> tuple:
+        """Resolve conflict using author preference with guard clauses."""
+        matching_versions = [v for v in versions if v.get("author") == preferred_author]
+
+        # Guard clause: No matching author found, fallback to score-based
+        if not matching_versions:
+            best_version = max(versions, key=lambda v: v.get("score", 0))
+            resolved_content = best_version.get("content")
+            logger.info(f"Resolved {file_path} using score (no preferred author)")
+            return best_version, resolved_content
+
+        # Preferred author found
+        best_version = matching_versions[0]
+        resolved_content = best_version.get("content")
+        logger.info(f"Resolved {file_path} using preferred author: {preferred_author}")
+        return best_version, resolved_content
+
+    def _resolve_conflict(self, conflict_file: Dict[str, Any], resolution_strategy: str,
+                         context: Dict[str, Any]) -> Dict[str, Any]:
+        """Resolve a single conflict file using the specified strategy."""
+        file_path = conflict_file.get("file_path")
+        versions = conflict_file.get("versions", [])
+
+        if not file_path or not versions:
+            logger.warning(f"Invalid conflict file entry: {conflict_file}")
+            return None
+
+        logger.info(f"Resolving conflict in: {file_path}")
+
+        # Dispatch table for resolution strategies
+        strategy_handlers = {
+            "score_based": lambda: self._resolve_score_based(file_path, versions),
+            "latest": lambda: self._resolve_latest(file_path, versions),
+            "author_preference": lambda: self._resolve_author_preference(
+                file_path, versions, context.get("preferred_author")
+            )
+        }
+
+        # Get handler from dispatch table or use default
+        handler = strategy_handlers.get(resolution_strategy)
+
+        if not handler:
+            logger.warning(f"Unknown resolution strategy: {resolution_strategy}, using score-based")
+            handler = strategy_handlers["score_based"]
+
+        best_version, resolved_content = handler()
+
+        return {
+            "file_path": file_path,
+            "content": resolved_content,
+            "selected_version": best_version
+        }
+
     def handle(self, context: Dict[str, Any]) -> bool:
         conflict_files = context.get("conflict_files", [])
 
@@ -177,53 +265,12 @@ class ResolveIntegrationConflictHandler(WorkflowHandler):
             failed_files = []
 
             for conflict_file in conflict_files:
-                file_path = conflict_file.get("file_path")
-                versions = conflict_file.get("versions", [])
+                resolved = self._resolve_conflict(conflict_file, resolution_strategy, context)
 
-                if not file_path or not versions:
-                    logger.warning(f"Invalid conflict file entry: {conflict_file}")
-                    failed_files.append(file_path)
-                    continue
-
-                logger.info(f"Resolving conflict in: {file_path}")
-
-                # Strategy 1: Score-based selection
-                if resolution_strategy == "score_based":
-                    best_version = max(versions, key=lambda v: v.get("score", 0))
-                    resolved_content = best_version.get("content")
-                    logger.info(f"Resolved {file_path} using highest score: {best_version.get('score')}")
-
-                # Strategy 2: Timestamp-based (latest wins)
-                elif resolution_strategy == "latest":
-                    best_version = max(versions, key=lambda v: v.get("timestamp", 0))
-                    resolved_content = best_version.get("content")
-                    logger.info(f"Resolved {file_path} using latest timestamp")
-
-                # Strategy 3: Author-based (prefer specific author)
-                elif resolution_strategy == "author_preference":
-                    preferred_author = context.get("preferred_author")
-                    matching_versions = [v for v in versions if v.get("author") == preferred_author]
-                    if matching_versions:
-                        best_version = matching_versions[0]
-                        resolved_content = best_version.get("content")
-                        logger.info(f"Resolved {file_path} using preferred author: {preferred_author}")
-                    else:
-                        # Fallback to score-based
-                        best_version = max(versions, key=lambda v: v.get("score", 0))
-                        resolved_content = best_version.get("content")
-                        logger.info(f"Resolved {file_path} using score (no preferred author)")
-
+                if resolved:
+                    resolved_files.append(resolved)
                 else:
-                    logger.warning(f"Unknown resolution strategy: {resolution_strategy}, using score-based")
-                    best_version = max(versions, key=lambda v: v.get("score", 0))
-                    resolved_content = best_version.get("content")
-
-                # Store resolved file
-                resolved_files.append({
-                    "file_path": file_path,
-                    "content": resolved_content,
-                    "selected_version": best_version
-                })
+                    failed_files.append(conflict_file.get("file_path"))
 
             # Store results in context
             context["resolved_files"] = resolved_files
@@ -249,6 +296,52 @@ class RerunValidationHandler(WorkflowHandler):
     RESPONSIBILITY: Trigger validation stage re-execution
     """
 
+    def _validate_via_validator(self, validator, context: Dict[str, Any]) -> bool:
+        """Execute validation via validator instance with guard clauses."""
+        if not hasattr(validator, "validate"):
+            return False
+
+        logger.info("Running validation via validator instance...")
+        validation_results = validator.validate()
+        context["validation_results"] = validation_results
+
+        if not validation_results.get("success", False):
+            logger.error("Validation failed")
+            return False
+
+        logger.info("Validation completed successfully")
+        return True
+
+    def _validate_via_orchestrator(self, orchestrator) -> bool:
+        """Execute validation stage via orchestrator with guard clauses."""
+        if not hasattr(orchestrator, "run_stage"):
+            return False
+
+        logger.info("Triggering validation stage via orchestrator...")
+        result = orchestrator.run_stage("validation")
+
+        if not result:
+            logger.error("Validation stage failed")
+            return False
+
+        logger.info("Validation stage completed successfully")
+        return True
+
+    def _validate_via_pipeline(self, pipeline) -> bool:
+        """Execute validation stage via pipeline with guard clauses."""
+        if not hasattr(pipeline, "execute_stage"):
+            return False
+
+        logger.info("Triggering validation stage via pipeline...")
+        result = pipeline.execute_stage("validation")
+
+        if not result:
+            logger.error("Validation stage failed")
+            return False
+
+        logger.info("Validation stage completed successfully")
+        return True
+
     def handle(self, context: Dict[str, Any]) -> bool:
         logger.info("Re-running validation...")
 
@@ -258,50 +351,32 @@ class RerunValidationHandler(WorkflowHandler):
             pipeline = context.get("pipeline")
             validator = context.get("validator")
 
-            # Try multiple approaches to trigger validation
+            # Try multiple approaches to trigger validation in priority order
 
             # Approach 1: Direct validator call
-            if validator and hasattr(validator, "validate"):
-                logger.info("Running validation via validator instance...")
-                validation_results = validator.validate()
-                context["validation_results"] = validation_results
-
-                if validation_results.get("success", False):
-                    logger.info("Validation completed successfully")
+            if validator:
+                result = self._validate_via_validator(validator, context)
+                if result:
                     return True
-                else:
-                    logger.error("Validation failed")
-                    return False
 
             # Approach 2: Orchestrator stage execution
-            elif orchestrator and hasattr(orchestrator, "run_stage"):
-                logger.info("Triggering validation stage via orchestrator...")
-                result = orchestrator.run_stage("validation")
+            if orchestrator:
+                result = self._validate_via_orchestrator(orchestrator)
                 if result:
-                    logger.info("Validation stage completed successfully")
                     return True
-                else:
-                    logger.error("Validation stage failed")
-                    return False
 
             # Approach 3: Pipeline stage execution
-            elif pipeline and hasattr(pipeline, "execute_stage"):
-                logger.info("Triggering validation stage via pipeline...")
-                result = pipeline.execute_stage("validation")
+            if pipeline:
+                result = self._validate_via_pipeline(pipeline)
                 if result:
-                    logger.info("Validation stage completed successfully")
                     return True
-                else:
-                    logger.error("Validation stage failed")
-                    return False
 
-            else:
-                logger.warning(
-                    "No validator, orchestrator, or pipeline provided in context. "
-                    "To fully implement, provide one of: context['validator'], "
-                    "context['orchestrator'], or context['pipeline']."
-                )
-                return False
+            logger.warning(
+                "No validator, orchestrator, or pipeline provided in context. "
+                "To fully implement, provide one of: context['validator'], "
+                "context['orchestrator'], or context['pipeline']."
+            )
+            return False
 
         except Exception as e:
             logger.error(f"Failed to re-run validation: {e}")
