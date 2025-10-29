@@ -464,6 +464,41 @@ Include all necessary files to complete the task. Each file must have a "path" a
         parent = str(Path(current_dir).parent) if current_dir else None
         return f'{parent}.{import_module}' if parent and import_module else parent
 
+    def _process_assign_exports(self, node: 'ast.Assign', exports: set) -> None:
+        """
+        Process assignment nodes to extract __all__ exports.
+
+        WHY: Extract nested logic for handling __all__ assignments.
+        PATTERN: Early return for non-matching targets.
+
+        Args:
+            node: AST Assign node
+            exports: Set to add exports to
+        """
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == '__all__':
+                exports.add('__all__')
+                return
+
+    def _process_import_from_exports(self, node: 'ast.ImportFrom', path: str, exports: set) -> None:
+        """
+        Process ImportFrom nodes in __init__.py to extract re-exported names.
+
+        WHY: Extract nested logic for handling re-exports in package __init__.py files.
+        PATTERN: Early return for non-__init__.py files.
+
+        Args:
+            node: AST ImportFrom node
+            path: File path being processed
+            exports: Set to add exports to
+        """
+        if not path.endswith('__init__.py'):
+            return
+
+        for alias in node.names:
+            if alias.name != '*':
+                exports.add(alias.asname if alias.asname else alias.name)
+
     def _validate_import_consistency(self, generated_code: Dict) ->Dict:
         """
         Validate that all imports have matching exports
@@ -518,23 +553,19 @@ Include all necessary files to complete the task. Each file must have a "path" a
             for node in tree.body:
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     exports.add(node.name)
-                elif isinstance(node, ast.ClassDef):
+                    continue
+
+                if isinstance(node, ast.ClassDef):
                     exports.add(node.name)
-                elif isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if not (isinstance(target, ast.Name) and target.id ==
-                            '__all__'):
-                            return None
-                        exports.add('__all__')
-                else:
-                    if not isinstance(node, ast.ImportFrom):
-                        return None
-                    if not path.endswith('__init__.py'):
-                        return None
-                    for alias in node.names:
-                        if alias.name != '*':
-                            exports.add(alias.asname if alias.asname else
-                                alias.name)
+                    continue
+
+                if isinstance(node, ast.Assign):
+                    self._process_assign_exports(node, exports)
+                    continue
+
+                if isinstance(node, ast.ImportFrom):
+                    self._process_import_from_exports(node, path, exports)
+                    continue
             base_module = module_name.split('.')[0]
             module_exports.setdefault(module_name, set()).update(exports)
             if '.' in module_name:
@@ -545,25 +576,35 @@ Include all necessary files to complete the task. Each file must have a "path" a
             current_dir = str(Path(path).parent) if Path(path).parent != Path(
                 '.') else ''
             for node in tree.body:
-                if isinstance(node, ast.ImportFrom):
-                    import_module = node.module
-                    resolved_module = self._resolve_import_module(
-                        node.level, import_module, current_dir)
-                    if resolved_module and resolved_module in module_exports:
-                        for alias in node.names:
-                            name = alias.name
-                            if not (name != '*' and name not in
-                                module_exports[resolved_module]):
-                                return None
-                            base_module = resolved_module.split('.')[0]
-                            if (base_module not in module_exports or name
-                                 not in module_exports[base_module]):
-                                available = sorted(module_exports[
-                                    resolved_module])
-                                issues.append(
-                                    f"""❌ {path}: imports '{name}' from '{import_module or '(relative)'}' but '{resolved_module}' doesn't export '{name}'
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+
+                import_module = node.module
+                resolved_module = self._resolve_import_module(
+                    node.level, import_module, current_dir)
+
+                if not resolved_module or resolved_module not in module_exports:
+                    continue
+
+                for alias in node.names:
+                    name = alias.name
+                    if name == '*':
+                        continue
+
+                    if name in module_exports[resolved_module]:
+                        continue
+
+                    # Check base module as fallback
+                    base_module = resolved_module.split('.')[0]
+                    if base_module in module_exports and name in module_exports[base_module]:
+                        continue
+
+                    # Name not found - add issue
+                    available = sorted(module_exports[resolved_module])
+                    issues.append(
+                        f"""❌ {path}: imports '{name}' from '{import_module or '(relative)'}' but '{resolved_module}' doesn't export '{name}'
    Available in '{resolved_module}': {', '.join(available) if available else 'none'}"""
-                                    )
+                    )
         return {'valid': len(issues) == 0, 'issues': issues,
             'module_exports': {k: sorted(list(v)) for k, v in
             module_exports.items()}}
