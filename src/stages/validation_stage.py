@@ -237,8 +237,8 @@ class ValidationStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         detector = FileTypeDetector()
 
         # Get developer output directory to check file types
-        from path_config_service import get_developer_output_path
-        output_path = get_developer_output_path(dev_name)
+        from path_config_service import get_developer_path
+        output_path = get_developer_path(dev_name)
 
         # Detect ALL file types in developer output
         file_types_found = set()
