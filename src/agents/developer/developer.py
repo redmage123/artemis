@@ -499,6 +499,39 @@ Include all necessary files to complete the task. Each file must have a "path" a
             if alias.name != '*':
                 exports.add(alias.asname if alias.asname else alias.name)
 
+    def _determine_module_name(self, path: str) -> 'Optional[str]':
+        """
+        Determine Python module name from file path.
+
+        WHY: Extract module name determination logic to avoid elif chain.
+        PATTERN: Early returns for clear control flow.
+
+        Args:
+            path: File path to determine module name for
+
+        Returns:
+            Module name string or None if not a module
+        """
+        from pathlib import Path
+
+        # Test files don't have module names
+        if path.startswith('tests/'):
+            return None
+
+        path_obj = Path(path)
+
+        # __init__.py files use parent directory as module name
+        if path_obj.name == '__init__.py':
+            return str(path_obj.parent) if path_obj.parent != Path('.') else None
+
+        # Python files use path as module name
+        if path_obj.suffix == '.py':
+            parts = path_obj.with_suffix('').parts
+            return '.'.join(parts)
+
+        # Non-Python files don't have module names
+        return None
+
     def _validate_import_consistency(self, generated_code: Dict) ->Dict:
         """
         Validate that all imports have matching exports
@@ -527,17 +560,8 @@ Include all necessary files to complete the task. Each file must have a "path" a
         for file_dict in all_files:
             path = file_dict.get('path', '')
             content = file_dict.get('content', '')
-            path_obj = Path(path)
-            if path.startswith('tests/'):
-                module_name = None
-            elif path_obj.name == '__init__.py':
-                module_name = str(path_obj.parent) if path_obj.parent != Path(
-                    '.') else None
-            elif path_obj.suffix == '.py':
-                parts = path_obj.with_suffix('').parts
-                module_name = '.'.join(parts)
-            else:
-                module_name = None
+            module_name = self._determine_module_name(path)
+
             try:
                 tree = ast.parse(content)
                 file_map[path] = module_name, content, tree
