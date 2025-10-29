@@ -5,9 +5,13 @@ import sys
 import os
 import py_compile
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
 
 @dataclass
 class ValidationIssue:
@@ -18,6 +22,49 @@ class ValidationIssue:
     message: str
     line_number: Optional[int] = None
     suggestion: Optional[str] = None
+
+
+def _compute_file_hash(file_path: str) -> str:
+    """
+    Compute SHA256 hash of file contents for caching.
+
+    WHY: Allows skipping validation of unchanged files.
+    PATTERN: Hash-based caching.
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        return ""
+
+
+def _check_syntax_worker(file_path: str) -> Tuple[str, bool, Optional[Dict]]:
+    """
+    Worker function for parallel syntax checking.
+
+    WHY: Must be top-level function for multiprocessing.
+    PATTERN: Worker function pattern for ProcessPoolExecutor.
+
+    Returns:
+        (file_path, success, error_dict)
+    """
+    try:
+        py_compile.compile(file_path, doraise=True)
+        return (file_path, True, None)
+    except SyntaxError as e:
+        return (file_path, False, {
+            'type': 'syntax_error',
+            'message': f'Syntax error: {e.msg}',
+            'line_number': e.lineno,
+            'text': e.text
+        })
+    except Exception as e:
+        return (file_path, False, {
+            'type': 'compilation_error',
+            'message': f'Compilation error: {str(e)}',
+            'line_number': None,
+            'text': None
+        })
 
 class PreflightValidator:
     """
@@ -32,16 +79,66 @@ class PreflightValidator:
     Can auto-fix syntax errors using LLM.
     """
 
-    def __init__(self, verbose: bool=True, llm_client=None, auto_fix: bool=False):
+    def __init__(self, verbose: bool=True, llm_client=None, auto_fix: bool=False,
+                 use_cache: bool=True, max_workers: int=4):
+        """
+        Initialize PreflightValidator.
+
+        Args:
+            verbose: Print progress messages
+            llm_client: LLM client for auto-fixing
+            auto_fix: Enable automatic fixing of syntax errors
+            use_cache: Use file hash caching to skip unchanged files
+            max_workers: Number of parallel workers for validation
+        """
         self.verbose = verbose
         self.issues: List[ValidationIssue] = []
         self.llm_client = llm_client
         self.auto_fix = auto_fix
         self.fixes_applied: List[Dict] = []
+        self.use_cache = use_cache
+        self.max_workers = max_workers
+        self.cache: Dict[str, Dict] = {}
+        self.cache_file = Path('.artemis_data/preflight_cache.json')
+
+    def _load_cache(self):
+        """
+        Load validation cache from disk.
+
+        WHY: Skip validation of unchanged files for performance.
+        PATTERN: File-based caching with hash validation.
+        """
+        if not self.use_cache:
+            return
+
+        if not self.cache_file.exists():
+            return
+
+        try:
+            with open(self.cache_file, 'r') as f:
+                self.cache = json.load(f)
+        except Exception:
+            self.cache = {}
+
+    def _save_cache(self):
+        """
+        Save validation cache to disk.
+
+        WHY: Persist validation results for future runs.
+        """
+        if not self.use_cache:
+            return
+
+        try:
+            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.cache_file, 'w') as f:
+                json.dump(self.cache, f)
+        except Exception:
+            pass  # Don't fail if cache can't be saved
 
     def validate_all(self, base_path: str='.') -> Dict:
         """
-        Run all preflight validation checks.
+        Run all preflight validation checks with caching and parallelization.
 
         Returns:
             dict: {
@@ -52,27 +149,161 @@ class PreflightValidator:
             }
         """
         self.issues = []
+        self._load_cache()
+
         agile_dir = Path(base_path)
         python_files = list(agile_dir.glob('*.py'))
+
         if self.verbose:
-            
             logger.log(f'\n🔍 Preflight Validation - Checking {len(python_files)} Python files...', 'INFO')
-        for py_file in python_files:
-            self._check_syntax(str(py_file))
+
+        # Parallel syntax checking with progress
+        self._check_syntax_parallel(python_files)
+
         self._check_critical_files(base_path)
         self._test_imports(base_path)
-        self._validate_signatures(base_path)
+
+        # Parallel signature validation with progress
+        self._validate_signatures_parallel(base_path, python_files)
         critical_count = sum((1 for issue in self.issues if issue.severity == 'critical'))
         high_count = sum((1 for issue in self.issues if issue.severity == 'high'))
         passed = critical_count == 0
+
+        # Save cache after validation
+        self._save_cache()
+
         if self.verbose:
             if passed:
-                
                 logger.log(f'✅ Preflight validation PASSED - {len(self.issues)} non-critical issues found', 'INFO')
             else:
-                
                 logger.log(f'❌ Preflight validation FAILED - {critical_count} critical issues found', 'INFO')
+
         return {'passed': passed, 'critical_count': critical_count, 'high_count': high_count, 'medium_count': sum((1 for issue in self.issues if issue.severity == 'medium')), 'low_count': sum((1 for issue in self.issues if issue.severity == 'low')), 'total_issues': len(self.issues), 'issues': self.issues}
+
+    def _check_syntax_parallel(self, python_files: List[Path]):
+        """
+        Check syntax of multiple files in parallel with caching.
+
+        WHY: Syntax checking is CPU-bound and benefits from parallelization.
+        PATTERN: ProcessPoolExecutor for parallel processing.
+        """
+        files_to_check = []
+        cached_count = 0
+
+        # Filter files using cache - early continue pattern
+        for py_file in python_files:
+            file_path = str(py_file)
+            file_hash = _compute_file_hash(file_path)
+
+            # Skip if not using cache or file not in cache
+            if not (self.use_cache and file_path in self.cache):
+                files_to_check.append((py_file, file_hash))
+                continue
+
+            # Check if cached result is valid
+            cached_data = self.cache[file_path]
+            if not (cached_data.get('hash') == file_hash and cached_data.get('syntax_ok')):
+                files_to_check.append((py_file, file_hash))
+                continue
+
+            # File is cached and valid
+            cached_count += 1
+            if not self.verbose:
+                continue
+
+            logger.log(f'  ✅ {py_file.name}', 'INFO')
+
+        if cached_count > 0 and self.verbose:
+            logger.log(f'  📦 Skipped {cached_count} unchanged files (cached)', 'INFO')
+
+        if not files_to_check:
+            return
+
+        # Process files in parallel with progress indicator
+        total = len(files_to_check)
+        completed = 0
+
+        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {executor.submit(_check_syntax_worker, str(py_file)): (py_file, file_hash)
+                      for py_file, file_hash in files_to_check}
+
+            for future in as_completed(futures):
+                py_file, file_hash = futures[future]
+                completed += 1
+
+                try:
+                    file_path, success, error_dict = future.result()
+                    self._process_syntax_result(file_path, success, error_dict, py_file, completed, total, file_hash)
+                except Exception as e:
+                    self._log_syntax_exception(py_file, e)
+
+    def _process_syntax_result(self, file_path: str, success: bool, error_dict: Optional[Dict],
+                               py_file: Path, completed: int, total: int, file_hash: str):
+        """
+        Process syntax check result without nested ifs.
+
+        WHY: Avoid nested conditionals by using early returns.
+        PATTERN: Early return pattern with helper method extraction.
+        """
+        if success:
+            self._handle_syntax_success(file_path, file_hash, py_file, completed, total)
+            return
+
+        self._handle_syntax_failure(file_path, file_hash, error_dict, py_file, completed, total)
+
+    def _handle_syntax_success(self, file_path: str, file_hash: str, py_file: Path,
+                               completed: int, total: int):
+        """Handle successful syntax check (no nesting)."""
+        self.cache[file_path] = {'hash': file_hash, 'syntax_ok': True}
+
+        if not self.verbose:
+            return
+
+        logger.log(f'  ✅ {py_file.name} ({completed}/{total})', 'INFO')
+
+    def _handle_syntax_failure(self, file_path: str, file_hash: str, error_dict: Dict,
+                               py_file: Path, completed: int, total: int):
+        """Handle failed syntax check (no nesting)."""
+        self.cache[file_path] = {'hash': file_hash, 'syntax_ok': False}
+
+        # Add appropriate issue based on error type
+        if error_dict['type'] == 'syntax_error':
+            self._add_syntax_error_issue(file_path, error_dict)
+        else:
+            self._add_compilation_error_issue(file_path, error_dict)
+
+        if not self.verbose:
+            return
+
+        logger.log(f'  ❌ {py_file.name} ({completed}/{total})', 'INFO')
+
+    def _add_syntax_error_issue(self, file_path: str, error_dict: Dict):
+        """Add syntax error issue to list."""
+        self.issues.append(ValidationIssue(
+            file_path=file_path,
+            issue_type='syntax_error',
+            severity='critical',
+            message=error_dict['message'],
+            line_number=error_dict['line_number'],
+            suggestion=f"Fix syntax error at line {error_dict['line_number']}: {error_dict['text']}"
+        ))
+
+    def _add_compilation_error_issue(self, file_path: str, error_dict: Dict):
+        """Add compilation error issue to list."""
+        self.issues.append(ValidationIssue(
+            file_path=file_path,
+            issue_type='syntax_error',
+            severity='critical',
+            message=error_dict['message'],
+            suggestion='Review the file for syntax issues'
+        ))
+
+    def _log_syntax_exception(self, py_file: Path, exception: Exception):
+        """Log exception during syntax check."""
+        if not self.verbose:
+            return
+
+        logger.log(f'  ⚠️  Error checking {py_file.name}: {exception}', 'INFO')
 
     def _check_syntax(self, file_path: str) -> bool:
         """Check if a Python file has valid syntax"""
@@ -175,16 +406,91 @@ class PreflightValidator:
             
             logger.log(f'    ⚠️  Could not test import for {module_name}: {exception}', 'INFO')
 
+    def _validate_signatures_parallel(self, base_path: str, python_files: List[Path]):
+        """
+        Validate function call signatures in parallel with caching and progress.
+
+        WHY: Signature validation is CPU-bound (AST parsing) and benefits from parallelization.
+        PATTERN: ThreadPoolExecutor for I/O-bound signature validation.
+        """
+        if self.verbose:
+            logger.log('  🔍 Validating function signatures...', 'INFO')
+
+        try:
+            from signature_validator import SignatureValidator
+        except ImportError:
+            self._log_signature_import_error()
+            return
+
+        try:
+            sig_validator = SignatureValidator(verbose=False)
+            files_to_validate = []
+            cached_count = 0
+
+            # Filter using cache
+            for py_file in python_files:
+                file_path = str(py_file)
+                file_hash = _compute_file_hash(file_path)
+
+                # Check cache - early continue pattern
+                if not (self.use_cache and file_path in self.cache):
+                    files_to_validate.append((py_file, file_hash))
+                    continue
+
+                cached_data = self.cache[file_path]
+                if cached_data.get('hash') == file_hash and cached_data.get('signature_ok') is not None:
+                    cached_count += 1
+                    continue
+
+                files_to_validate.append((py_file, file_hash))
+
+            if cached_count > 0 and self.verbose:
+                logger.log(f'    📦 Skipped {cached_count} unchanged files (cached)', 'INFO')
+
+            if not files_to_validate:
+                self._log_signature_results()
+                return
+
+            # Validate files with progress
+            total = len(files_to_validate)
+            completed = 0
+
+            for py_file, file_hash in files_to_validate:
+                completed += 1
+                file_path = str(py_file)
+
+                try:
+                    sig_issues = sig_validator.validate_file(file_path)
+                    self._convert_signature_issues(sig_issues)
+
+                    # Cache result using setdefault to avoid nested if
+                    cache_entry = self.cache.setdefault(file_path, {'hash': file_hash})
+                    cache_entry['signature_ok'] = len(sig_issues) == 0
+
+                    if not (self.verbose and completed % 20 == 0):
+                        continue
+
+                    logger.log(f'    📝 Validated {completed}/{total} files...', 'INFO')
+
+                except Exception:
+                    # Skip files that fail signature validation
+                    pass
+
+            self._log_signature_results()
+
+        except Exception as e:
+            self._log_signature_validation_error(e)
+
     def _validate_signatures(self, base_path: str):
         """
-        Validate function call signatures to catch parameter mismatches
+        Validate function call signatures to catch parameter mismatches (legacy method).
 
         WHY: Parameter mismatches (wrong args, unknown kwargs) cause TypeErrors at runtime.
         Static analysis can catch many of these errors before execution.
         """
         if self.verbose:
-            
             logger.log('  🔍 Validating function signatures...', 'INFO')
+
         try:
             from signature_validator import SignatureValidator
             sig_validator = SignatureValidator(verbose=False)
