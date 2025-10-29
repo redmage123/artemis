@@ -193,18 +193,27 @@ class ContentGenerationHelper:
 
     def _infer_task_type(self, task_description: str, requirements: Dict
         ) ->str:
-        """Infer task type from description and requirements."""
+        """
+        Infer task type from description and requirements.
+
+        WHY: Categorize tasks for appropriate content generation strategy.
+        PATTERN: Early returns to avoid nested ifs.
+        """
         desc_lower = task_description.lower()
+
         if 'presentation' in desc_lower or 'demo' in desc_lower:
             return 'interactive_presentation'
-        elif 'dashboard' in desc_lower:
+
+        if 'dashboard' in desc_lower:
             return 'dashboard'
-        elif 'api' in desc_lower or 'endpoint' in desc_lower:
+
+        if 'api' in desc_lower or 'endpoint' in desc_lower:
             return 'api'
-        else:
-            if not ('ui' in desc_lower or 'interface' in desc_lower):
-                return 'general'
+
+        if 'ui' in desc_lower or 'interface' in desc_lower:
             return 'user_interface'
+
+        return 'general'
 
     def _extract_domain(self, task_description: str) ->Optional[str]:
         """Extract domain name from task description."""

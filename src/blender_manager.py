@@ -395,10 +395,39 @@ class BlenderManager(BuildManagerBase):
                 str(build_dir), 'duration': duration}, original_exception=e)
 
 
+def _run_build_command(manager: 'BlenderManager', args, logger) -> int:
+    """Execute build command and return exit code."""
+    result = manager.build()
+    logger.log(str(result), 'INFO')
+    return 0 if result.success else 1
+
+
+def _run_test_command(manager: 'BlenderManager', args, logger) -> int:
+    """Execute test command and return exit code."""
+    result = manager.test()
+    logger.log(str(result), 'INFO')
+    return 0 if result.success else 1
+
+
+def _run_clean_command(manager: 'BlenderManager', args, logger) -> int:
+    """Execute clean command and return exit code."""
+    result = manager.clean()
+    logger.log(str(result), 'INFO')
+    return 0 if result.success else 1
+
+
+def _run_info_command(manager: 'BlenderManager', args, logger) -> int:
+    """Execute info command and return exit code."""
+    info = manager.get_project_info()
+    logger.log(json.dumps(info, indent=2), 'INFO')
+    return 0
+
+
 if __name__ == '__main__':
     import argparse
     import sys
     from artemis_logger import get_logger
+
     parser = argparse.ArgumentParser(description='Blender Build Manager CLI')
     parser.add_argument('--project-dir', type=Path, default=Path.cwd(),
         help='Blender project directory')
@@ -406,26 +435,27 @@ if __name__ == '__main__':
         'info'], default='build', help='Command to execute')
     parser.add_argument('--verbose', action='store_true', help=
         'Enable verbose logging')
+
     args = parser.parse_args()
     logger = get_logger(__name__)
+
+    # Strategy pattern: dispatch to appropriate command handler
+    command_handlers = {
+        'build': _run_build_command,
+        'test': _run_test_command,
+        'clean': _run_clean_command,
+        'info': _run_info_command,
+    }
+
     try:
         manager = BlenderManager(project_dir=args.project_dir, logger=logger)
-        if args.command == 'build':
-            result = manager.build()
-            logger.log(str(result), 'INFO')
-            sys.exit(0 if result.success else 1)
-        elif args.command == 'test':
-            result = manager.test()
-            logger.log(str(result), 'INFO')
-            sys.exit(0 if result.success else 1)
-        elif args.command == 'clean':
-            result = manager.clean()
-            logger.log(str(result), 'INFO')
-            sys.exit(0 if result.success else 1)
-        elif args.command == 'info':
-            info = manager.get_project_info()
-            logger.log(json.dumps(info, indent=2), 'INFO')
-            sys.exit(0)
+        handler = command_handlers.get(args.command)
+        if handler:
+            exit_code = handler(manager, args, logger)
+            sys.exit(exit_code)
+        else:
+            logger.log(f'Unknown command: {args.command}', 'ERROR')
+            sys.exit(1)
     except Exception as e:
         logger.log(f'Error: {str(e)}', 'ERROR')
         sys.exit(1)

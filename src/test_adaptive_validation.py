@@ -273,25 +273,40 @@ class AdaptiveValidationTester:
         logger.log('\n' + '─' * 80, 'INFO')
         logger.log('📈 SYSTEM GRADE', 'INFO')
         logger.log('─' * 80, 'INFO')
+
         accuracy = summary['overall_accuracy']
-        if accuracy >= 90:
-            grade = 'A'
-            assessment = 'Excellent! System is highly accurate.'
-        elif accuracy >= 80:
-            grade = 'B'
-            assessment = 'Good! Minor tuning recommended.'
-        elif accuracy >= 70:
-            grade = 'C'
-            assessment = 'Fair. Needs tuning and more indicators.'
-        elif accuracy >= 60:
-            grade = 'D'
-            assessment = 'Poor. Significant tuning required.'
-        else:
-            grade = 'F'
-            assessment = 'Failing. Major overhaul needed.'
+        grade, assessment = self._calculate_grade(accuracy)
+
         logger.log(f'\n   Grade: {grade} ({accuracy:.1f}%)', 'INFO')
         logger.log(f'   Assessment: {assessment}', 'INFO')
         logger.log('\n' + '=' * 80 + '\n', 'INFO')
+
+    def _calculate_grade(self, accuracy: float) -> tuple[str, str]:
+        """
+        Calculate grade and assessment based on accuracy.
+
+        WHY: Extract grading logic to avoid if/elif chain.
+        PATTERN: Strategy pattern using threshold-based dispatch.
+
+        Args:
+            accuracy: Overall accuracy percentage
+
+        Returns:
+            Tuple of (grade, assessment)
+        """
+        # Define grade thresholds in descending order
+        grade_thresholds = [
+            (90, 'A', 'Excellent! System is highly accurate.'),
+            (80, 'B', 'Good! Minor tuning recommended.'),
+            (70, 'C', 'Fair. Needs tuning and more indicators.'),
+            (60, 'D', 'Poor. Significant tuning required.'),
+        ]
+
+        for threshold, grade, assessment in grade_thresholds:
+            if accuracy >= threshold:
+                return grade, assessment
+
+        return 'F', 'Failing. Major overhaul needed.'
 
 
 def load_kanban_test_cases() ->List[ValidationTestCase]:

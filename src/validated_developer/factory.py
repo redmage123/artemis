@@ -67,20 +67,26 @@ def _apply_validation_mixin(agent: Any) ->None:
 
     WHY: Allows adding validation to existing agent instances without
          modifying their class definition.
+    PATTERN: Early continue to avoid nested ifs.
 
     Args:
         agent: Agent instance to add validation to
     """
     for attr_name in dir(ValidatedDeveloperMixin):
-        is_magic_method = attr_name.startswith('__') and attr_name.endswith(
-            '__')
+        is_magic_method = attr_name.startswith('__') and attr_name.endswith('__')
         is_init_method = attr_name.startswith('__init')
         should_include = not is_magic_method or is_init_method
-        if should_include:
-            attr = getattr(ValidatedDeveloperMixin, attr_name)
-            if callable(attr):
-                if hasattr(attr, '__get__'):
-                    setattr(agent, attr_name, attr.__get__(agent, type(agent)))
-                else:
-                    import types
-                    setattr(agent, attr_name, types.MethodType(attr, agent))
+
+        if not should_include:
+            continue
+
+        attr = getattr(ValidatedDeveloperMixin, attr_name)
+        if not callable(attr):
+            continue
+
+        # Bind method to agent instance
+        if hasattr(attr, '__get__'):
+            setattr(agent, attr_name, attr.__get__(agent, type(agent)))
+        else:
+            import types
+            setattr(agent, attr_name, types.MethodType(attr, agent))

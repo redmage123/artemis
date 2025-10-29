@@ -129,31 +129,16 @@ class SignatureValidator:
                 func_name = node.name
                 runtime_modifying_decorators = ['hydra.main',
                     'click.command', 'app.route']
-                has_runtime_decorator = False
-                for decorator in node.decorator_list:
-                    if isinstance(decorator, ast.Attribute):
-                        decorator_name = (
-                            f"{decorator.value.id if isinstance(decorator.value, ast.Name) else ''}.{decorator.attr}"
-                            )
-                        if not any(mod_dec in decorator_name for mod_dec in
-                            runtime_modifying_decorators):
-                            return
-                        has_runtime_decorator = True
-                        break
-                    else:
-                        if not (isinstance(decorator, ast.Call) and
-                            isinstance(decorator.func, ast.Attribute)):
-                            return
-                        decorator_name = (
-                            f"{decorator.func.value.id if isinstance(decorator.func.value, ast.Name) else ''}.{decorator.func.attr}"
-                            )
-                        if any(mod_dec in decorator_name for mod_dec in
-                            runtime_modifying_decorators):
-                            has_runtime_decorator = True
-                            break
+
+                # Check if function has runtime-modifying decorators
+                has_runtime_decorator = self._check_runtime_decorators(
+                    node.decorator_list, runtime_modifying_decorators)
+
                 if has_runtime_decorator:
                     self.decorator_modified_functions.add(func_name)
                     continue
+
+                # Collect function parameters
                 params = {'args': [], 'defaults': [], 'kwonly': [],
                     'kwdefaults': []}
                 for arg in node.args.args:
@@ -164,6 +149,49 @@ class SignatureValidator:
                     params['kwonly'].append(arg.arg)
                 params['kwdefaults'] = node.args.kw_defaults
                 self.function_signatures[func_name] = params
+
+    def _check_runtime_decorators(self, decorator_list: list,
+                                   runtime_modifying_decorators: list) -> bool:
+        """
+        Check if decorator list contains runtime-modifying decorators.
+
+        WHY: Extract nested decorator checking logic to avoid nested ifs.
+        PATTERN: Early returns for cleaner control flow.
+
+        Args:
+            decorator_list: List of decorator nodes
+            runtime_modifying_decorators: List of decorator names that modify runtime
+
+        Returns:
+            True if runtime-modifying decorator found, False otherwise
+        """
+        for decorator in decorator_list:
+            # Handle attribute decorators (e.g., @hydra.main)
+            if isinstance(decorator, ast.Attribute):
+                decorator_name = self._get_attribute_decorator_name(decorator)
+                if any(mod_dec in decorator_name for mod_dec in runtime_modifying_decorators):
+                    return True
+                continue
+
+            # Handle call decorators (e.g., @hydra.main(...))
+            if not (isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)):
+                continue
+
+            decorator_name = self._get_call_decorator_name(decorator)
+            if any(mod_dec in decorator_name for mod_dec in runtime_modifying_decorators):
+                return True
+
+        return False
+
+    def _get_attribute_decorator_name(self, decorator: ast.Attribute) -> str:
+        """Get decorator name from ast.Attribute node."""
+        value_id = decorator.value.id if isinstance(decorator.value, ast.Name) else ''
+        return f"{value_id}.{decorator.attr}"
+
+    def _get_call_decorator_name(self, decorator: ast.Call) -> str:
+        """Get decorator name from ast.Call node."""
+        value_id = decorator.func.value.id if isinstance(decorator.func.value, ast.Name) else ''
+        return f"{value_id}.{decorator.func.attr}"
 
     def _validate_calls(self, tree: ast.AST, file_path: str):
         """
