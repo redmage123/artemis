@@ -27,7 +27,9 @@ DETECTION_MAP: Dict[BuildSystem, List[str]] = {
     BuildSystem.COMPOSER: ["composer.json"],
     BuildSystem.BUNDLER: ["Gemfile.lock"],
     BuildSystem.DOTNET: ["*.csproj", "*.sln"],
-    BuildSystem.LUA: ["*.rockspec", ".busted", "init.lua"]
+    BuildSystem.LUA: ["*.rockspec", ".busted", "init.lua"],
+    BuildSystem.BLENDER: ["*.blend", "__init__.py"],  # .blend files or addon structure
+    BuildSystem.UNREAL: ["*.uproject"]  # Unreal project file
 }
 
 

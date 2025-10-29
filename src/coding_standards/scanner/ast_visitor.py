@@ -10,7 +10,11 @@ AST visitor enables accurate code pattern detection.
 import ast
 from typing import List
 from coding_standards.scanner.models import Violation
-from coding_standards.scanner.checkers import NestedIfChecker, ElifChainChecker
+from coding_standards.scanner.checkers import (
+    NestedIfChecker,
+    ElifChainChecker,
+    PlaceholderImplementationChecker
+)
 
 
 class CodeStandardsVisitor(ast.NodeVisitor):
@@ -37,14 +41,20 @@ class CodeStandardsVisitor(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node):
         """
-        Track function entry for context.
+        Track function entry for context and check for placeholder implementations.
 
-        WHY: Some checks may be context-dependent.
+        WHY: Detect incomplete implementations and missing format specifications.
 
         Args:
             node: Function definition node
         """
         self.in_function = True
+
+        # Check for placeholder implementations
+        violation = PlaceholderImplementationChecker.check(node, self.file_path, self.source_lines)
+        if violation:
+            self.violations.append(violation)
+
         self.generic_visit(node)
         self.in_function = False
 

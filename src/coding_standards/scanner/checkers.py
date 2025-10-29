@@ -120,6 +120,87 @@ class ElifChainChecker:
         )
 
 
+class PlaceholderImplementationChecker:
+    """
+    Checks for placeholder/incomplete implementations.
+
+    WHY: Placeholder code can cause runtime failures when LLMs don't receive proper instructions.
+    RESPONSIBILITY: Detect incomplete implementations, missing format specifications.
+    PATTERNS: Strategy (detection strategy).
+    """
+
+    @staticmethod
+    def check(
+        node: ast.FunctionDef,
+        file_path: str,
+        source_lines: List[str]
+    ) -> Optional[Violation]:
+        """
+        Check if function has placeholder implementation indicators.
+
+        WHY: Incomplete prompts cause LLMs to return unexpected formats.
+
+        Args:
+            node: AST FunctionDef node to check
+            file_path: File path for violation reporting
+            source_lines: Source code lines for context
+
+        Returns:
+            Violation if placeholder found, None otherwise
+        """
+        # Get function source code
+        func_start = node.lineno - 1
+        func_end = node.end_lineno if hasattr(node, 'end_lineno') else func_start + 10
+        func_lines = source_lines[func_start:func_end]
+        func_source = '\n'.join(func_lines)
+
+        # Pattern 1: Check for placeholder comments
+        placeholder_patterns = [
+            '# Simple',
+            '(can be enhanced',
+            '# Placeholder',
+            '# TODO: implement',
+            '# FIXME:',
+            'NotImplemented',
+        ]
+
+        for pattern in placeholder_patterns:
+            if pattern in func_source:
+                context = _get_line_context(source_lines, node.lineno)
+                return Violation(
+                    file_path=file_path,
+                    line_number=node.lineno,
+                    violation_type='placeholder_implementation',
+                    severity='critical',
+                    message=f'Placeholder implementation detected: "{pattern}" - complete implementation required',
+                    context=context
+                )
+
+        # Pattern 2: Check if function builds prompts but doesn't specify JSON format
+        if 'prompt' in node.name.lower() or 'build' in node.name.lower():
+            has_json_instruction = any(
+                'JSON' in line or 'json' in line
+                for line in func_lines
+            )
+            returns_string = any(
+                'return' in line and ('f"""' in line or "f'''" in line or 'str(' in line)
+                for line in func_lines
+            )
+
+            if returns_string and not has_json_instruction:
+                context = _get_line_context(source_lines, node.lineno)
+                return Violation(
+                    file_path=file_path,
+                    line_number=node.lineno,
+                    violation_type='missing_format_specification',
+                    severity='warning',
+                    message=f'Prompt builder "{node.name}" does not specify expected JSON response format',
+                    context=context
+                )
+
+        return None
+
+
 def _get_line_context(source_lines: List[str], line_no: int, context_lines: int = 2) -> str:
     """
     Get source code context around a line.

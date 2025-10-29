@@ -1,33 +1,8 @@
-#!/usr/bin/env python3
-"""
-Document Reader - Backward Compatibility Wrapper
-
-WHY: Maintain backward compatibility with existing code while delegating to
-     refactored document_reading package.
-RESPONSIBILITY: Re-export DocumentReader class with same API as original.
-PATTERNS: Facade pattern - wrapper around new modular implementation.
-
-This module provides backward compatibility for code using the old DocumentReader class.
-All new code should import from document_reading package directly:
-    from document_reading import ContentExtractor
-
-Deprecated - Use document_reading.ContentExtractor instead.
-
-Migration example:
-    # Old:
-    from document_reader import DocumentReader
-    reader = DocumentReader(verbose=True)
-    text = reader.read_document("file.pdf")
-
-    # New:
-    from document_reading import ContentExtractor
-    extractor = ContentExtractor(verbose=True)
-    text = extractor.extract_text("file.pdf")
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('document_reader')
+'\nDocument Reader - Backward Compatibility Wrapper\n\nWHY: Maintain backward compatibility with existing code while delegating to\n     refactored document_reading package.\nRESPONSIBILITY: Re-export DocumentReader class with same API as original.\nPATTERNS: Facade pattern - wrapper around new modular implementation.\n\nThis module provides backward compatibility for code using the old DocumentReader class.\nAll new code should import from document_reading package directly:\n    from document_reading import ContentExtractor\n\nDeprecated - Use document_reading.ContentExtractor instead.\n\nMigration example:\n    # Old:\n    from document_reader import DocumentReader\n    reader = DocumentReader(verbose=True)\n    text = reader.read_document("file.pdf")\n\n    # New:\n    from document_reading import ContentExtractor\n    extractor = ContentExtractor(verbose=True)\n    text = extractor.extract_text("file.pdf")\n'
 from typing import Dict, List
 from document_reading import ContentExtractor
-
 
 class DocumentReader:
     """
@@ -43,7 +18,7 @@ class DocumentReader:
     but delegates to the refactored modular document_reading package.
     """
 
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool=True):
         """
         Initialize Document Reader (Compatibility Wrapper).
 
@@ -54,13 +29,11 @@ class DocumentReader:
         """
         self.verbose = verbose
         self._extractor = ContentExtractor(verbose=verbose)
-
-        # Maintain backward compatibility attributes
         self.has_pdf = self._check_parser_available('PDF')
         self.has_docx = self._check_parser_available('Microsoft Word')
         self.has_openpyxl = self._check_parser_available('Microsoft Excel')
         self.has_odf = self._check_parser_available('LibreOffice Writer')
-        self.has_pypandoc = False  # Pypandoc not supported in new version
+        self.has_pypandoc = False
 
     def _check_parser_available(self, category: str) -> bool:
         """
@@ -122,8 +95,8 @@ class DocumentReader:
             message: Message to log
         """
         if self.verbose:
-            print(f"[DocumentReader] {message}")
-
+            
+            logger.log(f'[DocumentReader] {message}', 'INFO')
 
 def main():
     """
@@ -132,26 +105,25 @@ def main():
     WHY: Maintain same CLI interface as original.
     """
     import argparse
-
-    parser = argparse.ArgumentParser(description="Test document reader")
-    parser.add_argument("file", help="File to read")
+    parser = argparse.ArgumentParser(description='Test document reader')
+    parser.add_argument('file', help='File to read')
     args = parser.parse_args()
-
     reader = DocumentReader(verbose=True)
-
-    print("\n📚 Supported Formats:")
+    
+    logger.log('\n📚 Supported Formats:', 'INFO')
     for category, extensions in reader.get_supported_formats().items():
-        print(f"  {category}: {', '.join(extensions)}")
-
-    print(f"\n📄 Reading: {args.file}\n")
-    print("=" * 80)
-
+        
+        logger.log(f"  {category}: {', '.join(extensions)}", 'INFO')
+    
+    logger.log(f'\n📄 Reading: {args.file}\n', 'INFO')
+    
+    logger.log('=' * 80, 'INFO')
     text = reader.read_document(args.file)
-    print(text)
-
-    print("=" * 80)
-    print(f"\n✅ Extracted {len(text)} characters")
-
-
-if __name__ == "__main__":
+    
+    logger.log(text, 'INFO')
+    
+    logger.log('=' * 80, 'INFO')
+    
+    logger.log(f'\n✅ Extracted {len(text)} characters', 'INFO')
+if __name__ == '__main__':
     main()

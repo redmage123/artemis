@@ -6,6 +6,89 @@
 - Keep responses concise and to-the-point
 - Avoid verbose explanations unless asked
 
+## Output Policy
+- **NEVER write to stdout or stderr** - Artemis is a headless system
+- **ALWAYS use logging** - Use `artemis_logger.get_logger()` for all output
+- **NO print() statements** - All console output must go through the logger
+- Output destinations:
+  - Logs: `/var/log/artemis` or fallback to `/tmp/artemis_logs`
+  - UI: Future web interface will consume logs
+  - Never: stdout, stderr, console output
+
+## Dev Docs Workflow
+
+**Purpose**: Maintain context across sessions and prevent repeated work
+
+### Three-File System (Required for Complex Tasks)
+
+All complex development tasks MUST use the three-file system in `dev/active/[task-name]/`:
+
+1. **plan.md** - Strategic overview (< 500 lines)
+   - Objective, requirements, architecture
+   - Implementation strategy broken into phases
+   - Testing strategy and success criteria
+   - Risks and mitigations
+   - **When to create**: At task start, before any code
+   - **Update frequency**: Only when strategy changes
+
+2. **context.md** - Tactical state (update constantly)
+   - Current status: what we're working on RIGHT NOW
+   - Recent progress with timestamps
+   - Active files being modified
+   - Key decisions made and why
+   - Issues/blockers with resolution strategies
+   - Integration points and impacts
+   - Learnings and insights
+   - **Critical**: "Resume From" section for next session
+   - **When to update**: Every significant change or decision
+   - **Update frequency**: Multiple times per session
+
+3. **tasks.md** - Execution tracking
+   - Active sprint (max 3 in-progress tasks)
+   - Prioritized ready queue
+   - Backlog
+   - Completed tasks with results
+   - Blocked tasks with unblock strategies
+   - Definition of Done checklist
+   - **When to update**: Every task state change
+   - **Update frequency**: Constantly throughout session
+
+### When to Use Dev Docs
+
+**REQUIRED for**:
+- Multi-session tasks (anything spanning multiple conversations)
+- Complex refactoring (touching 5+ files)
+- New feature implementation
+- Architecture changes
+- Debugging complex issues
+
+**NOT REQUIRED for**:
+- Single-file quick fixes
+- Documentation updates
+- Simple bug fixes (< 20 lines changed)
+- Configuration tweaks
+
+### Dev Docs Best Practices
+
+1. **Start with templates**: Copy from `dev/templates/` to `dev/active/[task-name]/`
+2. **Update context.md FREQUENTLY**: After every significant change
+3. **Keep plan.md stable**: Only update when strategy fundamentally changes
+4. **Limit WIP**: Max 3 in-progress tasks in tasks.md
+5. **Move completed**: `dev/active/` → `dev/completed/` when done
+6. **Resume From section**: CRITICAL for context preservation across sessions
+
+### Skills Auto-Activation
+
+Skills are automatically activated based on keywords, files, and commands in `.claude/skill-rules.json`:
+
+- **artemis-core-dev**: Pipeline, orchestrator, stages, agents
+- **python-standards**: Refactoring, guard clauses, type hints
+- **rag-integration**: RAG, vector store, embeddings
+- **build-managers**: Build systems, compilation
+- **testing-patterns**: Tests, pytest, mocking
+
+Skills provide specialized context and patterns without cluttering main conversation.
+
 ---
 
 # Build System Modernization - Session Status

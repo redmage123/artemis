@@ -1,17 +1,8 @@
-#!/usr/bin/env python3
-"""
-Configuration Validation Report Generator
-
-WHY: Handles generating and printing validation reports
-
-RESPONSIBILITY: Aggregate validation results and format reports
-
-PATTERNS: Pure functions for report generation
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('report_generator')
+'\nConfiguration Validation Report Generator\n\nWHY: Handles generating and printing validation reports\n\nRESPONSIBILITY: Aggregate validation results and format reports\n\nPATTERNS: Pure functions for report generation\n'
 from typing import List
 from .models import ValidationResult, ValidationReport
-
 
 def generate_report(results: List[ValidationResult]) -> ValidationReport:
     """
@@ -26,29 +17,16 @@ def generate_report(results: List[ValidationResult]) -> ValidationReport:
     Returns:
         ValidationReport with aggregated statistics
     """
-    # Use list comprehensions for performance (faster than loops)
-    errors = [r for r in results if not r.passed and r.severity == "error"]
-    warnings = [r for r in results if not r.passed and r.severity == "warning"]
+    errors = [r for r in results if not r.passed and r.severity == 'error']
+    warnings = [r for r in results if not r.passed and r.severity == 'warning']
     passed = [r for r in results if r.passed]
-
-    # Guard clause: Determine overall status with early returns
-    # WHY: More readable than nested if/else
     if errors:
-        overall_status = "fail"
+        overall_status = 'fail'
     elif warnings:
-        overall_status = "warning"
+        overall_status = 'warning'
     else:
-        overall_status = "pass"
-
-    return ValidationReport(
-        overall_status=overall_status,
-        total_checks=len(results),
-        passed=len(passed),
-        warnings=len(warnings),
-        errors=len(errors),
-        results=results
-    )
-
+        overall_status = 'pass'
+    return ValidationReport(overall_status=overall_status, total_checks=len(results), passed=len(passed), warnings=len(warnings), errors=len(errors), results=results)
 
 def print_report(report: ValidationReport) -> None:
     """
@@ -61,40 +39,29 @@ def print_report(report: ValidationReport) -> None:
     Args:
         report: ValidationReport to print
     """
-    print("\n" + "=" * 70)
-    print("VALIDATION SUMMARY")
-    print("=" * 70)
-
-    print(f"\nTotal checks: {report.total_checks}")
-    print(f"  Passed: {report.passed}")
+    
+    logger.log('\n' + '=' * 70, 'INFO')
+    
+    logger.log('VALIDATION SUMMARY', 'INFO')
+    
+    logger.log('=' * 70, 'INFO')
+    
+    logger.log(f'\nTotal checks: {report.total_checks}', 'INFO')
+    
+    logger.log(f'  Passed: {report.passed}', 'INFO')
     if report.warnings > 0:
-        print(f"  Warnings: {report.warnings}")
+        
+        logger.log(f'  Warnings: {report.warnings}', 'INFO')
     if report.errors > 0:
-        print(f"  Errors: {report.errors}")
-
-    # Strategy pattern: Dictionary mapping for status messages
-    # WHY: Avoids if/elif chain, makes it easy to add new status types
-    status_messages = {
-        "pass": (
-            "\nAll validation checks passed!",
-            "Artemis is ready to run."
-        ),
-        "warning": (
-            "\nValidation completed with warnings",
-            "Artemis can run but some features may not work."
-        ),
-        "fail": (
-            "\nValidation failed!",
-            "Fix errors before running Artemis."
-        )
-    }
-
-    messages = status_messages.get(report.overall_status, ("Unknown status", ""))
+        
+        logger.log(f'  Errors: {report.errors}', 'INFO')
+    status_messages = {'pass': ('\nAll validation checks passed!', 'Artemis is ready to run.'), 'warning': ('\nValidation completed with warnings', 'Artemis can run but some features may not work.'), 'fail': ('\nValidation failed!', 'Fix errors before running Artemis.')}
+    messages = status_messages.get(report.overall_status, ('Unknown status', ''))
     for message in messages:
-        print(message)
-
-    print("\n" + "=" * 70 + "\n")
-
+        
+        logger.log(message, 'INFO')
+    
+    logger.log('\n' + '=' * 70 + '\n', 'INFO')
 
 def print_result(result: ValidationResult) -> None:
     """
@@ -105,10 +72,9 @@ def print_result(result: ValidationResult) -> None:
     Args:
         result: ValidationResult to print
     """
-    # Print result with appropriate symbol (avoid emojis per claude.md)
-    symbol = "[PASS]" if result.passed else ("[WARN]" if result.severity == "warning" else "[FAIL]")
-    print(f"{symbol} {result.check_name}: {result.message}")
-
-    # Print fix suggestion if validation failed
+    symbol = '[PASS]' if result.passed else '[WARN]' if result.severity == 'warning' else '[FAIL]'
+    
+    logger.log(f'{symbol} {result.check_name}: {result.message}', 'INFO')
     if not result.passed and result.fix_suggestion:
-        print(f"   Fix: {result.fix_suggestion}")
+        
+        logger.log(f'   Fix: {result.fix_suggestion}', 'INFO')

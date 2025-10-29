@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 BACKWARD COMPATIBILITY WRAPPER
 
@@ -18,81 +17,61 @@ To migrate your code:
 
 No breaking changes - all imports remain identical.
 """
-
-# Re-export all public APIs from the modular package
-from protected import (
-    ProtectedRAGAgent,
-    ProtectedLLMClient,
-    ProtectedKnowledgeGraph,
-    check_all_protected_components,
-    reset_all_circuit_breakers,
-)
-
-__all__ = [
-    'ProtectedRAGAgent',
-    'ProtectedLLMClient',
-    'ProtectedKnowledgeGraph',
-    'check_all_protected_components',
-    'reset_all_circuit_breakers',
-]
-
-# CLI interface
-if __name__ == "__main__":
+from protected import ProtectedRAGAgent, ProtectedLLMClient, ProtectedKnowledgeGraph, check_all_protected_components, reset_all_circuit_breakers
+__all__ = ['ProtectedRAGAgent', 'ProtectedLLMClient', 'ProtectedKnowledgeGraph', 'check_all_protected_components', 'reset_all_circuit_breakers']
+if __name__ == '__main__':
     import argparse
     import logging
     import json
     import sys
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-
-    parser = argparse.ArgumentParser(description="Protected Components Status")
-    parser.add_argument("--status", action="store_true", help="Show all circuit breaker statuses")
-    parser.add_argument("--reset", action="store_true", help="Reset all circuit breakers")
-    parser.add_argument("--test-rag", action="store_true", help="Test RAG with protection")
-    parser.add_argument("--test-llm", action="store_true", help="Test LLM with protection")
-
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    parser = argparse.ArgumentParser(description='Protected Components Status')
+    parser.add_argument('--status', action='store_true', help='Show all circuit breaker statuses')
+    parser.add_argument('--reset', action='store_true', help='Reset all circuit breakers')
+    parser.add_argument('--test-rag', action='store_true', help='Test RAG with protection')
+    parser.add_argument('--test-llm', action='store_true', help='Test LLM with protection')
     args = parser.parse_args()
-
-    # Guard clauses for commands
     if args.status:
         statuses = check_all_protected_components()
-        print(json.dumps(statuses, indent=2))
+        
+        logger.log(json.dumps(statuses, indent=2), 'INFO')
         sys.exit(0)
-
     if args.reset:
         reset_all_circuit_breakers()
-        print("✅ All circuit breakers reset")
+        
+        logger.log('✅ All circuit breakers reset', 'INFO')
         sys.exit(0)
-
     if args.test_rag:
-        print("Testing RAG with circuit breaker protection...")
-        rag = ProtectedRAGAgent(db_path="db", verbose=False)
+        
+        logger.log('Testing RAG with circuit breaker protection...', 'INFO')
+        rag = ProtectedRAGAgent(db_path='db', verbose=False)
         try:
-            result = rag.query_similar("test query", top_k=1)
-            print(f"✅ RAG query successful: {len(result) if result else 0} results")
+            result = rag.query_similar('test query', top_k=1)
+            
+            logger.log(f'✅ RAG query successful: {(len(result) if result else 0)} results', 'INFO')
         except Exception as e:
-            print(f"❌ RAG query failed: {e}")
-        print(f"\nCircuit breaker status:")
-        print(json.dumps(rag.get_circuit_status(), indent=2))
+            
+            logger.log(f'❌ RAG query failed: {e}', 'INFO')
+        
+        logger.log(f'\nCircuit breaker status:', 'INFO')
+        
+        logger.log(json.dumps(rag.get_circuit_status(), indent=2), 'INFO')
         sys.exit(0)
-
     if args.test_llm:
         from llm_client import LLMMessage
-        print("Testing LLM with circuit breaker protection...")
-        llm = ProtectedLLMClient("openai")
+        
+        logger.log('Testing LLM with circuit breaker protection...', 'INFO')
+        llm = ProtectedLLMClient('openai')
         try:
-            response = llm.complete(
-                messages=[LLMMessage(role="user", content="Say 'test'")],
-                max_tokens=10
-            )
-            print(f"✅ LLM call successful: {response.content[:50]}")
+            response = llm.complete(messages=[LLMMessage(role='user', content="Say 'test'")], max_tokens=10)
+            
+            logger.log(f'✅ LLM call successful: {response.content[:50]}', 'INFO')
         except Exception as e:
-            print(f"❌ LLM call failed: {e}")
-        print(f"\nCircuit breaker status:")
-        print(json.dumps(llm.get_circuit_status(), indent=2))
+            
+            logger.log(f'❌ LLM call failed: {e}', 'INFO')
+        
+        logger.log(f'\nCircuit breaker status:', 'INFO')
+        
+        logger.log(json.dumps(llm.get_circuit_status(), indent=2), 'INFO')
         sys.exit(0)
-
     parser.print_help()

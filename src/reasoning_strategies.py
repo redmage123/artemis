@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Backward Compatibility Wrapper for Reasoning Strategies
 
@@ -29,84 +28,32 @@ REFACTORING SUMMARY:
     - Wrapper: ~80 lines (this file)
     - Reduction: ~87% reduction in module complexity
 """
-
-# Re-export all public components from refactored package
-from reasoning.strategies import (
-    # Core models and enums
-    ReasoningStrategy,
-    ReasoningStep,
-    ThoughtNode,
-    LogicRule,
-    ReasoningStrategyBase,
-
-    # Strategy implementations
-    ChainOfThoughtStrategy,
-    TreeOfThoughtsStrategy,
-    LogicOfThoughtsStrategy,
-    SelfConsistencyStrategy,
-
-    # Factory and utilities
-    ReasoningStrategyFactory,
-    StrategyBuilder,
-)
-
-# Preserve __all__ for star imports
-__all__ = [
-    # Enums and core models
-    'ReasoningStrategy',
-    'ReasoningStep',
-    'ThoughtNode',
-    'LogicRule',
-    'ReasoningStrategyBase',
-
-    # Strategy implementations
-    'ChainOfThoughtStrategy',
-    'TreeOfThoughtsStrategy',
-    'LogicOfThoughtsStrategy',
-    'SelfConsistencyStrategy',
-
-    # Factory and utilities
-    'ReasoningStrategyFactory',
-    'StrategyBuilder',
-]
-
-# CLI interface preserved for backward compatibility
-if __name__ == "__main__":
+from reasoning.strategies import ReasoningStrategy, ReasoningStep, ThoughtNode, LogicRule, ReasoningStrategyBase, ChainOfThoughtStrategy, TreeOfThoughtsStrategy, LogicOfThoughtsStrategy, SelfConsistencyStrategy, ReasoningStrategyFactory, StrategyBuilder
+__all__ = ['ReasoningStrategy', 'ReasoningStep', 'ThoughtNode', 'LogicRule', 'ReasoningStrategyBase', 'ChainOfThoughtStrategy', 'TreeOfThoughtsStrategy', 'LogicOfThoughtsStrategy', 'SelfConsistencyStrategy', 'ReasoningStrategyFactory', 'StrategyBuilder']
+if __name__ == '__main__':
     import argparse
     import logging
-
     logging.basicConfig(level=logging.INFO)
-
-    parser = argparse.ArgumentParser(description="Reasoning Strategy Demo")
-    parser.add_argument(
-        "strategy",
-        choices=["cot", "tot", "lot", "sc"],
-        help="Reasoning strategy to demonstrate"
-    )
-    parser.add_argument("--task", required=True, help="Task to solve")
-    parser.add_argument("--context", help="Additional context")
-
+    parser = argparse.ArgumentParser(description='Reasoning Strategy Demo')
+    parser.add_argument('strategy', choices=['cot', 'tot', 'lot', 'sc'], help='Reasoning strategy to demonstrate')
+    parser.add_argument('--task', required=True, help='Task to solve')
+    parser.add_argument('--context', help='Additional context')
     args = parser.parse_args()
-
-    # Map CLI args to enum (dispatch table pattern)
-    strategy_map = {
-        "cot": ReasoningStrategy.CHAIN_OF_THOUGHT,
-        "tot": ReasoningStrategy.TREE_OF_THOUGHTS,
-        "lot": ReasoningStrategy.LOGIC_OF_THOUGHTS,
-        "sc": ReasoningStrategy.SELF_CONSISTENCY
-    }
-
-    # Create strategy using factory
+    strategy_map = {'cot': ReasoningStrategy.CHAIN_OF_THOUGHT, 'tot': ReasoningStrategy.TREE_OF_THOUGHTS, 'lot': ReasoningStrategy.LOGIC_OF_THOUGHTS, 'sc': ReasoningStrategy.SELF_CONSISTENCY}
     factory = ReasoningStrategyFactory()
     strategy = factory.create(strategy_map[args.strategy])
-
-    # Generate prompt
     prompt = strategy.generate_prompt(args.task, args.context)
-
-    print("=" * 80)
-    print(f"REASONING STRATEGY: {args.strategy.upper()}")
-    print("=" * 80)
-    print("\nGENERATED PROMPT:")
-    print("-" * 80)
-    print(prompt)
-    print("=" * 80)
+    
+    logger.log('=' * 80, 'INFO')
+    
+    logger.log(f'REASONING STRATEGY: {args.strategy.upper()}', 'INFO')
+    
+    logger.log('=' * 80, 'INFO')
+    
+    logger.log('\nGENERATED PROMPT:', 'INFO')
+    
+    logger.log('-' * 80, 'INFO')
+    
+    logger.log(prompt, 'INFO')
+    
+    logger.log('=' * 80, 'INFO')

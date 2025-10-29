@@ -13,7 +13,7 @@ This module handles:
 EXTRACTED FROM: artemis_orchestrator.py (lines 601-744, 140 lines)
 """
 
-from supervisor_agent import SupervisorAgent, RecoveryStrategy
+from supervisor_agent import SupervisorAgent, RecoveryStrategy, RecoveryAction
 from artemis_constants import (
     MAX_RETRY_ATTEMPTS,
     DEFAULT_RETRY_INTERVAL_SECONDS,
@@ -30,7 +30,7 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
 
     WHAT:
     Configures supervisor with stage-specific recovery strategies including
-    max retries, timeouts, and circuit breaker thresholds.
+    max retries, timeouts, and backoff factors.
 
     WHY:
     Different stages have different failure characteristics:
@@ -65,10 +65,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "requirements_parsing",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS,  # 5s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 15,  # 240s (4 min)
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 15  # 240s (4 min)
         )
     )
 
@@ -76,10 +77,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "project_analysis",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS - 3.0,  # 2s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 30,  # 120s
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 30  # 120s
         )
     )
 
@@ -87,10 +89,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "architecture",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS,  # 5s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 20,  # 180s
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 20  # 180s
         )
     )
 
@@ -98,10 +101,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "dependencies",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS - 3.0,  # 2s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 60,  # 60s
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 60  # 60s
         )
     )
 
@@ -109,11 +113,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "development",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS,  # 3 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS * 2,  # 10s
-            backoff_multiplier=RETRY_BACKOFF_FACTOR,  # 2.0
-            timeout_seconds=DEVELOPER_AGENT_TIMEOUT_SECONDS / 6,  # 600s (10 min)
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS + 2  # 5
+            backoff_factor=RETRY_BACKOFF_FACTOR,  # 2.0
+            timeout_seconds=DEVELOPER_AGENT_TIMEOUT_SECONDS / 6  # 600s (10 min)
         )
     )
 
@@ -121,10 +125,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "arbitration",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS - 2.0,  # 3s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 30,  # 120s (2 min)
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS  # 3
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 30  # 120s (2 min)
         )
     )
 
@@ -132,10 +137,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "code_review",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS,  # 5s
-            timeout_seconds=CODE_REVIEW_TIMEOUT_SECONDS / 10,  # 180s
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS + 1  # 4
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=CODE_REVIEW_TIMEOUT_SECONDS / 10  # 180s
         )
     )
 
@@ -143,10 +149,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "validation",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS - 2.0,  # 3s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 30,  # 120s
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 30  # 120s
         )
     )
 
@@ -154,10 +161,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "integration",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS,  # 5s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 20,  # 180s
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 20  # 180s
         )
     )
 
@@ -165,10 +173,11 @@ def register_stages_with_supervisor(supervisor: SupervisorAgent) -> None:
     supervisor.register_stage(
         "testing",
         RecoveryStrategy(
+            action=RecoveryAction.RETRY,
             max_retries=MAX_RETRY_ATTEMPTS - 1,  # 2 retries
             retry_delay_seconds=DEFAULT_RETRY_INTERVAL_SECONDS,  # 5s
-            timeout_seconds=STAGE_TIMEOUT_SECONDS / 12,  # 300s (5 min)
-            circuit_breaker_threshold=MAX_RETRY_ATTEMPTS
+            backoff_factor=RETRY_BACKOFF_FACTOR,
+            timeout_seconds=STAGE_TIMEOUT_SECONDS / 12  # 300s (5 min)
         )
     )
 

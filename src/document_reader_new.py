@@ -1,21 +1,10 @@
-#!/usr/bin/env python3
-"""
-WHY: Backward compatibility wrapper for legacy DocumentReader API.
-RESPONSIBILITY: Maintain existing API while delegating to new modular system.
-PATTERNS: Adapter pattern - wraps new ContentExtractor to match old DocumentReader interface.
-
-This wrapper ensures all existing code using DocumentReader continues to work
-without modification while benefiting from the new modular architecture.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('document_reader_new')
+'\nWHY: Backward compatibility wrapper for legacy DocumentReader API.\nRESPONSIBILITY: Maintain existing API while delegating to new modular system.\nPATTERNS: Adapter pattern - wraps new ContentExtractor to match old DocumentReader interface.\n\nThis wrapper ensures all existing code using DocumentReader continues to work\nwithout modification while benefiting from the new modular architecture.\n'
 from typing import Dict, List
 from pathlib import Path
 from document_reading import ContentExtractor, DocumentType
-from artemis_exceptions import (
-    UnsupportedDocumentFormatError,
-    DocumentReadError
-)
-
+from artemis_exceptions import UnsupportedDocumentFormatError, DocumentReadError
 
 class DocumentReader:
     """
@@ -25,26 +14,9 @@ class DocumentReader:
     This class maintains the exact same API as the original DocumentReader,
     but delegates all work to the new modular ContentExtractor system.
     """
+    EXTENSION_HANDLERS = {'.pdf': '_read_pdf', '.docx': '_read_word', '.doc': '_read_word', '.xlsx': '_read_excel', '.xls': '_read_excel', '.odt': '_read_odt', '.ods': '_read_ods', '.txt': '_read_text', '.md': '_read_text', '.markdown': '_read_text', '.csv': '_read_csv', '.html': '_read_html', '.htm': '_read_html', '.ipynb': '_read_ipynb'}
 
-    # Keep original extension map for API compatibility
-    EXTENSION_HANDLERS = {
-        '.pdf': '_read_pdf',
-        '.docx': '_read_word',
-        '.doc': '_read_word',
-        '.xlsx': '_read_excel',
-        '.xls': '_read_excel',
-        '.odt': '_read_odt',
-        '.ods': '_read_ods',
-        '.txt': '_read_text',
-        '.md': '_read_text',
-        '.markdown': '_read_text',
-        '.csv': '_read_csv',
-        '.html': '_read_html',
-        '.htm': '_read_html',
-        '.ipynb': '_read_ipynb'
-    }
-
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool=True):
         """
         WHY: Initialize with same signature as original.
         RESPONSIBILITY: Create new ContentExtractor and mirror old API.
@@ -54,8 +26,6 @@ class DocumentReader:
         """
         self.verbose = verbose
         self.extractor = ContentExtractor(verbose=verbose)
-
-        # Mirror old library detection flags for API compatibility
         self._set_compatibility_flags()
 
     def _set_compatibility_flags(self) -> None:
@@ -63,32 +33,21 @@ class DocumentReader:
         WHY: Set library availability flags for backward compatibility.
         RESPONSIBILITY: Mirror the old has_* flags from original DocumentReader.
         """
-        from document_reading import (
-            PDFParser, WordParser, ExcelParser,
-            ODTParser, HTMLParser
-        )
-
-        # Check library availability
+        from document_reading import PDFParser, WordParser, ExcelParser, ODTParser, HTMLParser
         self.has_pdf = PDFParser(verbose=False).is_available()
         self.has_docx = WordParser(verbose=False).is_available()
         self.has_openpyxl = ExcelParser(verbose=False).is_available()
         self.has_odf = ODTParser(verbose=False).is_available()
-
-        # Check BeautifulSoup for HTML
         try:
             from bs4 import BeautifulSoup
             self.has_bs4 = True
         except ImportError:
             self.has_bs4 = False
-
-        # Check pypandoc
         try:
             import pypandoc
             self.has_pypandoc = True
         except ImportError:
             self.has_pypandoc = False
-
-        # Set PDF library name if available
         if self.has_pdf:
             parser = PDFParser(verbose=False)
             self.pdf_library = parser.library
@@ -109,11 +68,8 @@ class DocumentReader:
             FileNotFoundError: If file doesn't exist
         """
         try:
-            # Delegate to new system
             return self.extractor.extract_text(file_path)
-
         except UnsupportedDocumentFormatError as e:
-            # Convert to ValueError for backward compatibility
             raise ValueError(str(e))
 
     def get_supported_formats(self) -> Dict[str, List[str]]:
@@ -135,8 +91,8 @@ class DocumentReader:
             message: Message to log
         """
         if self.verbose:
-            print(f"[DocumentReader] {message}")
-
+            
+            logger.log(f'[DocumentReader] {message}', 'INFO')
 
 def main():
     """
@@ -144,26 +100,25 @@ def main():
     RESPONSIBILITY: Provide CLI for testing document reading.
     """
     import argparse
-
-    parser = argparse.ArgumentParser(description="Test document reader")
-    parser.add_argument("file", help="File to read")
+    parser = argparse.ArgumentParser(description='Test document reader')
+    parser.add_argument('file', help='File to read')
     args = parser.parse_args()
-
     reader = DocumentReader(verbose=True)
-
-    print("\n📚 Supported Formats:")
+    
+    logger.log('\n📚 Supported Formats:', 'INFO')
     for category, extensions in reader.get_supported_formats().items():
-        print(f"  {category}: {', '.join(extensions)}")
-
-    print(f"\n📄 Reading: {args.file}\n")
-    print("=" * 80)
-
+        
+        logger.log(f"  {category}: {', '.join(extensions)}", 'INFO')
+    
+    logger.log(f'\n📄 Reading: {args.file}\n', 'INFO')
+    
+    logger.log('=' * 80, 'INFO')
     text = reader.read_document(args.file)
-    print(text)
-
-    print("=" * 80)
-    print(f"\n✅ Extracted {len(text)} characters")
-
-
-if __name__ == "__main__":
+    
+    logger.log(text, 'INFO')
+    
+    logger.log('=' * 80, 'INFO')
+    
+    logger.log(f'\n✅ Extracted {len(text)} characters', 'INFO')
+if __name__ == '__main__':
     main()

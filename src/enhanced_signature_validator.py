@@ -1,44 +1,11 @@
-#!/usr/bin/env python3
-"""
-Enhanced Function Signature Validator for Artemis (Backward Compatibility Wrapper)
-
-WHY: Maintains backward compatibility while delegating to modular implementation
-RESPONSIBILITY: Provide legacy API that delegates to signature_validation package
-PATTERNS: Facade pattern, delegation pattern
-
-This is a backward compatibility wrapper. New code should use:
-    from signature_validation import EnhancedSignatureValidator
-
-USAGE:
-    from enhanced_signature_validator import EnhancedSignatureValidator
-
-    validator = EnhancedSignatureValidator()
-    result = validator.validate_file("src/my_module.py")
-
-    for issue in result:
-        print(f"{issue.file_path}:{issue.line_number} - {issue.message}")
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('enhanced_signature_validator')
+'\nEnhanced Function Signature Validator for Artemis (Backward Compatibility Wrapper)\n\nWHY: Maintains backward compatibility while delegating to modular implementation\nRESPONSIBILITY: Provide legacy API that delegates to signature_validation package\nPATTERNS: Facade pattern, delegation pattern\n\nThis is a backward compatibility wrapper. New code should use:\n    from signature_validation import EnhancedSignatureValidator\n\nUSAGE:\n    from enhanced_signature_validator import EnhancedSignatureValidator\n\n    validator = EnhancedSignatureValidator()\n    result = validator.validate_file("src/my_module.py")\n\n    for issue in result:\n        print(f"{issue.file_path}:{issue.line_number} - {issue.message}")\n'
 from pathlib import Path
 from typing import List, Set, Optional
 import sys
-
-# Import from modular package
-from signature_validation import (
-    EnhancedSignatureValidator,
-    SignatureIssue,
-    FunctionInfo,
-    TypeChecker,
-)
-
-# Re-export for backward compatibility
-__all__ = [
-    'EnhancedSignatureValidator',
-    'SignatureIssue',
-    'FunctionInfo',
-    'TypeChecker',
-]
-
+from signature_validation import EnhancedSignatureValidator, SignatureIssue, FunctionInfo, TypeChecker
+__all__ = ['EnhancedSignatureValidator', 'SignatureIssue', 'FunctionInfo', 'TypeChecker']
 
 def _print_issue(issue: SignatureIssue) -> None:
     """
@@ -48,18 +15,17 @@ def _print_issue(issue: SignatureIssue) -> None:
     RESPONSIBILITY: Display single validation issue
     PATTERNS: Simple formatting helper
     """
-    print(f"   {issue.file_path}:{issue.line_number}")
-    print(f"   {issue.message}")
+    
+    logger.log(f'   {issue.file_path}:{issue.line_number}', 'INFO')
+    
+    logger.log(f'   {issue.message}', 'INFO')
     if issue.suggestion:
-        print(f"   💡 {issue.suggestion}")
-    print()
+        
+        logger.log(f'   💡 {issue.suggestion}', 'INFO')
+    
+    pass
 
-
-def _print_issues_by_severity(
-    issues: List[SignatureIssue],
-    severity: str,
-    label: str
-) -> None:
+def _print_issues_by_severity(issues: List[SignatureIssue], severity: str, label: str) -> None:
     """
     Print issues of a specific severity
 
@@ -73,20 +39,14 @@ def _print_issues_by_severity(
         label: Display label for section
     """
     filtered = [i for i in issues if i.severity == severity]
-
-    # Guard clause: no issues of this severity
     if not filtered:
         return
-
-    print(f"{label} ({len(filtered)}):\n")
+    
+    logger.log(f'{label} ({len(filtered)}):\n', 'INFO')
     for issue in filtered:
         _print_issue(issue)
 
-
-def _run_validation(
-    target: str,
-    validator: EnhancedSignatureValidator
-) -> List[SignatureIssue]:
+def _run_validation(target: str, validator: EnhancedSignatureValidator) -> List[SignatureIssue]:
     """
     Run validation on file or directory
 
@@ -105,7 +65,6 @@ def _run_validation(
         return validator.validate_file(target)
     return validator.validate_directory(target)
 
-
 def _print_results(issues: List[SignatureIssue]) -> None:
     """
     Print validation results
@@ -117,15 +76,14 @@ def _print_results(issues: List[SignatureIssue]) -> None:
     Args:
         issues: List of all validation issues
     """
-    # Guard clause: no issues found
     if not issues:
-        print("✅ No signature or type issues found!")
+        
+        logger.log('✅ No signature or type issues found!', 'INFO')
         return
-
-    print(f"\n🔍 Found {len(issues)} signature/type issues:\n")
+    
+    logger.log(f'\n🔍 Found {len(issues)} signature/type issues:\n', 'INFO')
     _print_issues_by_severity(issues, 'critical', '🚨 CRITICAL')
     _print_issues_by_severity(issues, 'warning', '⚠️  WARNINGS')
-
 
 def _get_exit_code(issues: List[SignatureIssue]) -> int:
     """
@@ -141,24 +99,17 @@ def _get_exit_code(issues: List[SignatureIssue]) -> int:
     Returns:
         0 for success, 1 for critical issues
     """
-    # Guard clause: no issues
     if not issues:
         return 0
-
     critical = [i for i in issues if i.severity == 'critical']
     return 1 if critical else 0
-
-
-# Example usage and CLI
-if __name__ == "__main__":
-    # Guard clause: check arguments
+if __name__ == '__main__':
     if len(sys.argv) <= 1:
-        print("Usage: python3 enhanced_signature_validator.py <file_or_directory>")
+        
+        logger.log('Usage: python3 enhanced_signature_validator.py <file_or_directory>', 'INFO')
         sys.exit(1)
-
     validator = EnhancedSignatureValidator(verbose=True)
     target = sys.argv[1]
-
     issues = _run_validation(target, validator)
     _print_results(issues)
     sys.exit(_get_exit_code(issues))

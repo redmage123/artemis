@@ -8,7 +8,7 @@ PATTERNS: Template Method Pattern, Strategy Pattern, guard clauses, dispatch tab
 from typing import Dict, Optional, Any, Callable
 
 from artemis_stage_interface import LoggerInterface
-from artemis_exceptions import ADRGenerationError, wrap_exception
+from artemis_exceptions import ADRGenerationError, create_wrapped_exception
 from documentation.models import (
     create_adr_context_from_card,
     create_adr_metadata,
@@ -96,7 +96,7 @@ class ADRGeneratorCore:
             # Re-raise already wrapped exceptions
             raise
         except Exception as e:
-            raise wrap_exception(
+            raise create_wrapped_exception(
                 e,
                 ADRGenerationError,
                 f"Failed to generate ADR: {str(e)}",

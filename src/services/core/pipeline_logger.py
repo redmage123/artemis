@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Module: services.core.pipeline_logger
 
@@ -23,12 +22,10 @@ DESIGN DECISIONS:
 
 Dependencies: core.interfaces
 """
-
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
-
 from core.interfaces import LoggerInterface
-
+from artemis_logger import get_logger
 
 class PipelineLogger(LoggerInterface):
     """
@@ -48,32 +45,11 @@ class PipelineLogger(LoggerInterface):
         >>> logger.success("Processing completed")
         [12:34:57] ✅ Processing completed
     """
+    EMOJI_MAP: Dict[str, str] = {'DEBUG': '🔍', 'INFO': 'ℹ️', 'SUCCESS': '✅', 'WARNING': '⚠️', 'ERROR': '❌', 'CRITICAL': '🔥', 'STAGE': '🔄', 'PIPELINE': '⚙️', 'TEST': '🧪', 'DEPLOY': '🚀'}
+    DEFAULT_EMOJI: str = '•'
+    TIMESTAMP_FORMAT: str = '%H:%M:%S'
 
-    # Log level to emoji mapping (dispatch table pattern)
-    EMOJI_MAP: Dict[str, str] = {
-        "DEBUG": "🔍",
-        "INFO": "ℹ️",
-        "SUCCESS": "✅",
-        "WARNING": "⚠️",
-        "ERROR": "❌",
-        "CRITICAL": "🔥",
-        "STAGE": "🔄",
-        "PIPELINE": "⚙️",
-        "TEST": "🧪",
-        "DEPLOY": "🚀"
-    }
-
-    # Default emoji for unknown levels
-    DEFAULT_EMOJI: str = "•"
-
-    # Timestamp format (ISO 8601 time only)
-    TIMESTAMP_FORMAT: str = "%H:%M:%S"
-
-    def __init__(
-        self,
-        verbose: bool = True,
-        formatter: Optional[Callable[[str, str, str], str]] = None
-    ) -> None:
+    def __init__(self, verbose: bool=True, formatter: Optional[Callable[[str, str, str], str]]=None) -> None:
         """
         Initialize pipeline logger.
 
@@ -90,8 +66,9 @@ class PipelineLogger(LoggerInterface):
         """
         self.verbose: bool = verbose
         self.formatter: Optional[Callable[[str, str, str], str]] = formatter
+        self._logger = get_logger('pipeline')
 
-    def log(self, message: str, level: str = "INFO", **kwargs: Any) -> None:
+    def log(self, message: str, level: str='INFO', **kwargs: Any) -> None:
         """
         Log message with timestamp and emoji indicator.
 
@@ -107,19 +84,13 @@ class PipelineLogger(LoggerInterface):
             >>> logger.log("Test started", level="TEST")
             [12:34:56] 🧪 Test started
         """
-        # Guard clause: Skip if not verbose
         if not self.verbose:
             return
-
-        # Get timestamp
         timestamp = self._get_timestamp()
-
-        # Get emoji for level
         emoji = self._get_emoji(level)
-
-        # Format and output message
         formatted_message = self._format_message(timestamp, emoji, message)
-        print(formatted_message)
+
+        self._logger.log(formatted_message, 'INFO')
 
     def _get_timestamp(self) -> str:
         """
@@ -160,14 +131,9 @@ class PipelineLogger(LoggerInterface):
 
         WHY: Separates formatting logic for easier testing and customization.
         """
-        # Use custom formatter if provided
         if self.formatter:
             return self.formatter(timestamp, emoji, message)
-
-        # Default format: [timestamp] emoji message
-        return f"[{timestamp}] {emoji} {message}"
-
-    # Standard logging interface methods (compatibility with logging.Logger)
+        return f'[{timestamp}] {emoji} {message}'
 
     def debug(self, message: str, **kwargs: Any) -> None:
         """
@@ -180,7 +146,7 @@ class PipelineLogger(LoggerInterface):
             message: Debug message
             **kwargs: Additional context (ignored for compatibility)
         """
-        self.log(message, "DEBUG", **kwargs)
+        self.log(message, 'DEBUG', **kwargs)
 
     def info(self, message: str, **kwargs: Any) -> None:
         """
@@ -193,7 +159,7 @@ class PipelineLogger(LoggerInterface):
             message: Info message
             **kwargs: Additional context (ignored for compatibility)
         """
-        self.log(message, "INFO", **kwargs)
+        self.log(message, 'INFO', **kwargs)
 
     def warning(self, message: str, **kwargs: Any) -> None:
         """
@@ -206,7 +172,7 @@ class PipelineLogger(LoggerInterface):
             message: Warning message
             **kwargs: Additional context (ignored for compatibility)
         """
-        self.log(message, "WARNING", **kwargs)
+        self.log(message, 'WARNING', **kwargs)
 
     def error(self, message: str, **kwargs: Any) -> None:
         """
@@ -219,7 +185,7 @@ class PipelineLogger(LoggerInterface):
             message: Error message
             **kwargs: Additional context (ignored for compatibility)
         """
-        self.log(message, "ERROR", **kwargs)
+        self.log(message, 'ERROR', **kwargs)
 
     def critical(self, message: str, **kwargs: Any) -> None:
         """
@@ -232,9 +198,7 @@ class PipelineLogger(LoggerInterface):
             message: Critical message
             **kwargs: Additional context (ignored for compatibility)
         """
-        self.log(message, "CRITICAL", **kwargs)
-
-    # Extended interface methods (pipeline-specific)
+        self.log(message, 'CRITICAL', **kwargs)
 
     def success(self, message: str, **kwargs: Any) -> None:
         """
@@ -246,7 +210,7 @@ class PipelineLogger(LoggerInterface):
             message: Success message
             **kwargs: Additional context
         """
-        self.log(message, "SUCCESS", **kwargs)
+        self.log(message, 'SUCCESS', **kwargs)
 
     def stage(self, message: str, **kwargs: Any) -> None:
         """
@@ -258,7 +222,7 @@ class PipelineLogger(LoggerInterface):
             message: Stage message
             **kwargs: Additional context
         """
-        self.log(message, "STAGE", **kwargs)
+        self.log(message, 'STAGE', **kwargs)
 
     def pipeline(self, message: str, **kwargs: Any) -> None:
         """
@@ -270,7 +234,7 @@ class PipelineLogger(LoggerInterface):
             message: Pipeline message
             **kwargs: Additional context
         """
-        self.log(message, "PIPELINE", **kwargs)
+        self.log(message, 'PIPELINE', **kwargs)
 
     def set_verbose(self, verbose: bool) -> None:
         """
@@ -299,10 +263,7 @@ class PipelineLogger(LoggerInterface):
         """
         return self.verbose
 
-
-# Service factory functions for dependency injection
-
-def create_logger(verbose: bool = True) -> PipelineLogger:
+def create_logger(verbose: bool=True) -> PipelineLogger:
     """
     Factory function to create PipelineLogger instance.
 
@@ -320,7 +281,6 @@ def create_logger(verbose: bool = True) -> PipelineLogger:
     """
     return PipelineLogger(verbose=verbose)
 
-
 def create_silent_logger() -> PipelineLogger:
     """
     Factory function to create silent logger (for testing).
@@ -335,6 +295,4 @@ def create_silent_logger() -> PipelineLogger:
         >>> logger.info("This won't print")
     """
     return PipelineLogger(verbose=False)
-
-
-__all__ = ["PipelineLogger", "create_logger", "create_silent_logger"]
+__all__ = ['PipelineLogger', 'create_logger', 'create_silent_logger']

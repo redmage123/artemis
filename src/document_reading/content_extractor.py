@@ -1,21 +1,12 @@
-#!/usr/bin/env python3
-"""
-WHY: Unified document content extraction orchestrator.
-RESPONSIBILITY: Coordinate format detection, parser selection, and content extraction.
-PATTERNS: Facade pattern - simple interface over complex subsystem, Guard clauses.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('content_extractor')
+'\nWHY: Unified document content extraction orchestrator.\nRESPONSIBILITY: Coordinate format detection, parser selection, and content extraction.\nPATTERNS: Facade pattern - simple interface over complex subsystem, Guard clauses.\n'
 from pathlib import Path
 from typing import Optional
 from document_reading.models import DocumentType, ParsedDocument
 from document_reading.format_detector import FormatDetector
 from document_reading.reader_factory import ParserFactory
-from artemis_exceptions import (
-    UnsupportedDocumentFormatError,
-    DocumentReadError,
-    wrap_exception
-)
-
+from artemis_exceptions import UnsupportedDocumentFormatError, DocumentReadError, wrap_exception
 
 class ContentExtractor:
     """
@@ -23,7 +14,7 @@ class ContentExtractor:
     RESPONSIBILITY: Orchestrate format detection, parser creation, and content extraction.
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         WHY: Initialize extractor with dependencies.
         RESPONSIBILITY: Create factory for parser instantiation.
@@ -53,63 +44,28 @@ class ContentExtractor:
         """
         try:
             path = Path(file_path)
-
-            # Guard: Check file exists
             if not path.exists():
-                raise FileNotFoundError(f"File not found: {file_path}")
-
-            # Detect document format
+                raise FileNotFoundError(f'File not found: {file_path}')
             document_type = self.format_detector.detect_from_path(file_path)
             extension = self.format_detector.get_extension(file_path)
-
             if self.verbose:
-                print(f"[ContentExtractor] Reading {extension} file: {path.name}")
-
-            # Guard: Check format is supported
+                
+                logger.log(f'[ContentExtractor] Reading {extension} file: {path.name}', 'INFO')
             if document_type == DocumentType.UNKNOWN:
-                raise UnsupportedDocumentFormatError(
-                    f"Unsupported file format: {extension}",
-                    context={"file_path": file_path, "extension": extension}
-                )
-
-            # Create appropriate parser
+                raise UnsupportedDocumentFormatError(f'Unsupported file format: {extension}', context={'file_path': file_path, 'extension': extension})
             parser = self.factory.create_parser(document_type)
-
-            # Guard: Check parser availability (some parsers need optional libraries)
-            if hasattr(parser, 'is_available') and not parser.is_available():
-                raise DocumentReadError(
-                    f"Parser for {document_type.value} not available (missing dependencies)",
-                    context={"file_path": file_path, "document_type": str(document_type)}
-                )
-
-            # Extract content
+            if hasattr(parser, 'is_available') and (not parser.is_available()):
+                raise DocumentReadError(f'Parser for {document_type.value} not available (missing dependencies)', context={'file_path': file_path, 'document_type': str(document_type)})
             content = parser.parse(file_path)
-
-            # Return structured result
-            return ParsedDocument(
-                content=content,
-                document_type=document_type,
-                file_path=str(path.absolute()),
-                metadata={
-                    'extension': extension,
-                    'file_name': path.name,
-                    'file_size': path.stat().st_size
-                }
-            )
-
+            return ParsedDocument(content=content, document_type=document_type, file_path=str(path.absolute()), metadata={'extension': extension, 'file_name': path.name, 'file_size': path.stat().st_size})
         except FileNotFoundError:
-            raise  # Re-raise as-is
+            raise
         except UnsupportedDocumentFormatError:
-            raise  # Re-raise as-is
+            raise
         except DocumentReadError:
-            raise  # Re-raise as-is
+            raise
         except Exception as e:
-            raise wrap_exception(
-                e,
-                DocumentReadError,
-                f"Error extracting content from: {file_path}",
-                context={"file_path": file_path}
-            )
+            raise wrap_exception(e, DocumentReadError, f'Error extracting content from: {file_path}', context={'file_path': file_path})
 
     def extract_text(self, file_path: str) -> str:
         """
@@ -136,29 +92,15 @@ class ContentExtractor:
         Returns:
             Dictionary of supported formats grouped by category
         """
-        supported = {
-            "Always Supported": [".txt", ".md", ".markdown", ".csv", ".ipynb"],
-        }
-
-        # Check each parser type for availability
-        parser_checks = {
-            "PDF": (DocumentType.PDF, [".pdf"]),
-            "Microsoft Word": (DocumentType.WORD, [".docx", ".doc"]),
-            "Microsoft Excel": (DocumentType.EXCEL, [".xlsx", ".xls"]),
-            "LibreOffice Writer": (DocumentType.ODT, [".odt"]),
-            "LibreOffice Calc": (DocumentType.ODS, [".ods"]),
-            "HTML": (DocumentType.HTML, [".html", ".htm"])
-        }
-
+        supported = {'Always Supported': ['.txt', '.md', '.markdown', '.csv', '.ipynb']}
+        parser_checks = {'PDF': (DocumentType.PDF, ['.pdf']), 'Microsoft Word': (DocumentType.WORD, ['.docx', '.doc']), 'Microsoft Excel': (DocumentType.EXCEL, ['.xlsx', '.xls']), 'LibreOffice Writer': (DocumentType.ODT, ['.odt']), 'LibreOffice Calc': (DocumentType.ODS, ['.ods']), 'HTML': (DocumentType.HTML, ['.html', '.htm'])}
         for category, (doc_type, extensions) in parser_checks.items():
             try:
                 parser = self.factory.create_parser(doc_type)
                 if hasattr(parser, 'is_available') and parser.is_available():
                     supported[category] = extensions
             except Exception:
-                # Parser not available, skip it
                 pass
-
         return supported
 
     def log(self, message: str) -> None:
@@ -170,4 +112,5 @@ class ContentExtractor:
             message: Message to log
         """
         if self.verbose:
-            print(f"[ContentExtractor] {message}")
+            
+            logger.log(f'[ContentExtractor] {message}', 'INFO')

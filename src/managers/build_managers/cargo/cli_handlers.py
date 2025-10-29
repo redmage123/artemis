@@ -12,18 +12,13 @@ This module contains:
 
 EXTRACTED FROM: cargo_manager.py (lines 478-597)
 """
-
 import argparse
 import json
 import logging
 import sys
 from typing import Any, Callable, Dict
-
-# Type hint for CargoManager (to avoid circular import)
 CargoManagerType = Any
 
-
-# Command handler dispatch table
 def _get_command_handlers() -> Dict[str, Callable]:
     """
     Get command handler mapping.
@@ -34,17 +29,7 @@ def _get_command_handlers() -> Dict[str, Callable]:
     Returns:
         Dict mapping command names to handler functions
     """
-    return {
-        "info": _handle_info_command,
-        "build": _handle_build_command,
-        "test": _handle_test_command,
-        "check": _handle_check_command,
-        "clippy": _handle_clippy_command,
-        "fmt": _handle_fmt_command,
-        "clean": _handle_clean_command,
-        "add": _handle_add_command
-    }
-
+    return {'info': _handle_info_command, 'build': _handle_build_command, 'test': _handle_test_command, 'check': _handle_check_command, 'clippy': _handle_clippy_command, 'fmt': _handle_fmt_command, 'clean': _handle_clean_command, 'add': _handle_add_command}
 
 def _handle_info_command(cargo: CargoManagerType) -> int:
     """
@@ -60,9 +45,9 @@ def _handle_info_command(cargo: CargoManagerType) -> int:
         Exit code (0 for success)
     """
     info = cargo.get_project_info()
-    print(json.dumps(info, indent=2))
+    
+    logger.log(json.dumps(info, indent=2), 'INFO')
     return 0
-
 
 def _handle_build_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -78,11 +63,11 @@ def _handle_build_command(cargo: CargoManagerType, args: argparse.Namespace) -> 
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    features = args.features.split(",") if args.features else None
+    features = args.features.split(',') if args.features else None
     result = cargo.build(release=args.release, features=features)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_test_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -99,9 +84,9 @@ def _handle_test_command(cargo: CargoManagerType, args: argparse.Namespace) -> i
         Exit code (0 for success, 1 for failure)
     """
     result = cargo.test(release=args.release)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_check_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -118,9 +103,9 @@ def _handle_check_command(cargo: CargoManagerType, args: argparse.Namespace) -> 
         Exit code (0 for success, 1 for failure)
     """
     result = cargo.check()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_clippy_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -137,9 +122,9 @@ def _handle_clippy_command(cargo: CargoManagerType, args: argparse.Namespace) ->
         Exit code (0 for success, 1 for failure)
     """
     result = cargo.clippy()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_fmt_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -156,9 +141,9 @@ def _handle_fmt_command(cargo: CargoManagerType, args: argparse.Namespace) -> in
         Exit code (0 for success, 1 for failure)
     """
     result = cargo.fmt()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_clean_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -175,9 +160,9 @@ def _handle_clean_command(cargo: CargoManagerType, args: argparse.Namespace) -> 
         Exit code (always 0)
     """
     result = cargo.clean()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0
-
 
 def _handle_add_command(cargo: CargoManagerType, args: argparse.Namespace) -> int:
     """
@@ -194,13 +179,13 @@ def _handle_add_command(cargo: CargoManagerType, args: argparse.Namespace) -> in
         Exit code (0 for success, 1 for failure)
     """
     if not args.crate:
-        print("Error: --crate required for add command")
+        
+        logger.log('Error: --crate required for add command', 'INFO')
         return 1
-
     cargo.install_dependency(args.crate, version=args.version, dev=args.dev)
-    print(f"Added {args.crate}")
+    
+    logger.log(f'Added {args.crate}', 'INFO')
     return 0
-
 
 def run_cli() -> None:
     """
@@ -212,56 +197,32 @@ def run_cli() -> None:
     Example:
         $ python -m managers.build_managers.cargo.cli_handlers --project-dir . build --release
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-
-    parser = argparse.ArgumentParser(description="Cargo Manager")
-    parser.add_argument("--project-dir", default=".", help="Project directory")
-    parser.add_argument(
-        "command",
-        choices=["info", "build", "test", "check", "clippy", "fmt", "clean", "add"],
-        help="Command to execute"
-    )
-    parser.add_argument("--release", action="store_true", help="Release build")
-    parser.add_argument("--features", help="Features to enable (comma-separated)")
-    parser.add_argument("--crate", help="Crate to add")
-    parser.add_argument("--version", help="Crate version")
-    parser.add_argument("--dev", action="store_true", help="Add as dev dependency")
-
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    parser = argparse.ArgumentParser(description='Cargo Manager')
+    parser.add_argument('--project-dir', default='.', help='Project directory')
+    parser.add_argument('command', choices=['info', 'build', 'test', 'check', 'clippy', 'fmt', 'clean', 'add'], help='Command to execute')
+    parser.add_argument('--release', action='store_true', help='Release build')
+    parser.add_argument('--features', help='Features to enable (comma-separated)')
+    parser.add_argument('--crate', help='Crate to add')
+    parser.add_argument('--version', help='Crate version')
+    parser.add_argument('--dev', action='store_true', help='Add as dev dependency')
     args = parser.parse_args()
-
     try:
-        # Import here to avoid circular dependency
         from managers.build_managers.cargo.cargo_manager import CargoManager
-
         cargo = CargoManager(project_dir=args.project_dir)
         handlers = _get_command_handlers()
         handler = handlers.get(args.command)
-
         if not handler:
-            logging.error(f"Unknown command: {args.command}")
+            logging.error(f'Unknown command: {args.command}')
             sys.exit(1)
-
-        # Call handler with appropriate arguments (guard clause for info command)
-        if args.command == "info":
+        if args.command == 'info':
             exit_code = handler(cargo)
         else:
             exit_code = handler(cargo, args)
-
         sys.exit(exit_code)
-
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f'Error: {e}')
         sys.exit(1)
-
-
-__all__ = [
-    "run_cli",
-]
-
-
-# CLI entry point
-if __name__ == "__main__":
+__all__ = ['run_cli']
+if __name__ == '__main__':
     run_cli()

@@ -1,17 +1,9 @@
-#!/usr/bin/env python3
-"""
-WHY: Store research examples in RAG using Repository Pattern
-RESPONSIBILITY: Handle storage operations with fault tolerance
-PATTERNS: Repository (storage abstraction), Fault Tolerance (non-fatal failures)
-
-Example storage coordinates with the repository to persist code examples,
-handling storage failures gracefully without failing the entire stage.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('example_storage')
+'\nWHY: Store research examples in RAG using Repository Pattern\nRESPONSIBILITY: Handle storage operations with fault tolerance\nPATTERNS: Repository (storage abstraction), Fault Tolerance (non-fatal failures)\n\nExample storage coordinates with the repository to persist code examples,\nhandling storage failures gracefully without failing the entire stage.\n'
 from typing import List
 from research_strategy import ResearchExample
 from research_repository import ExampleRepository
-
 
 class ExampleStorage:
     """
@@ -32,12 +24,7 @@ class ExampleStorage:
         """
         self.repository = repository
 
-    def store_examples(
-        self,
-        examples: List[ResearchExample],
-        card_id: str,
-        task_title: str
-    ) -> List[str]:
+    def store_examples(self, examples: List[ResearchExample], card_id: str, task_title: str) -> List[str]:
         """
         Store examples in RAG.
 
@@ -55,18 +42,11 @@ class ExampleStorage:
             Storage failures are logged but don't fail the operation.
             Returns empty list on failure.
         """
-        # Guard clause - early return for empty input
         if not examples:
             return []
-
         return self._perform_storage(examples, card_id, task_title)
 
-    def _perform_storage(
-        self,
-        examples: List[ResearchExample],
-        card_id: str,
-        task_title: str
-    ) -> List[str]:
+    def _perform_storage(self, examples: List[ResearchExample], card_id: str, task_title: str) -> List[str]:
         """
         Perform the actual storage operation with error handling.
 
@@ -81,14 +61,9 @@ class ExampleStorage:
             List of artifact IDs (empty list on failure)
         """
         try:
-            artifact_ids = self.repository.store_examples_batch(
-                examples=examples,
-                card_id=card_id,
-                task_title=task_title
-            )
+            artifact_ids = self.repository.store_examples_batch(examples=examples, card_id=card_id, task_title=task_title)
             return artifact_ids
-
         except Exception as e:
-            # Don't fail stage if storage fails - just log warning
-            print(f"Warning: Failed to store some examples: {e}")
+            
+            logger.log(f'Warning: Failed to store some examples: {e}', 'INFO')
             return []

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Validated Developer Agent Factory
 
@@ -16,24 +15,15 @@ PATTERNS:
 - Guard Clauses: Early returns for invalid configurations
 - Dependency Injection: Inject dependencies from caller
 """
-
 from typing import Optional, Any
-
 from validated_developer.core_mixin import ValidatedDeveloperMixin
 
 
-def create_validated_developer_agent(
-    developer_name: str,
-    developer_type: str,
-    llm_provider: str = "openai",
-    llm_model: Optional[str] = None,
-    logger: Optional[Any] = None,
-    rag_agent: Optional[Any] = None,
-    ai_service: Optional[Any] = None,
-    enable_validation: bool = True,
-    enable_rag_validation: bool = True,
-    enable_self_critique: bool = True
-):
+def create_validated_developer_agent(developer_name: str, developer_type:
+    str, llm_provider: str='openai', llm_model: Optional[str]=None, logger:
+    Optional[Any]=None, rag_agent: Optional[Any]=None, ai_service: Optional
+    [Any]=None, enable_validation: bool=True, enable_rag_validation: bool=
+    True, enable_self_critique: bool=True):
     """
     Factory function to create a validated developer agent.
 
@@ -58,36 +48,20 @@ def create_validated_developer_agent(
         StandaloneDeveloperAgent with validation enabled
     """
     from standalone_developer_agent import StandaloneDeveloperAgent
-
-    # Create base developer agent
-    agent = StandaloneDeveloperAgent(
-        developer_name=developer_name,
-        developer_type=developer_type,
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        logger=logger,
-        rag_agent=rag_agent,
-        ai_service=ai_service
-    )
-
-    # Add validation mixin functionality dynamically
+    agent = StandaloneDeveloperAgent(developer_name=developer_name,
+        developer_type=developer_type, llm_provider=llm_provider, llm_model
+        =llm_model, logger=logger, rag_agent=rag_agent, ai_service=ai_service)
     _apply_validation_mixin(agent)
-
-    # Initialize validation pipeline (Layer 3 + Layer 3.5 + Layer 5)
-    agent.__init_validation_pipeline__(
-        strict_mode=True,
-        enable_rag_validation=enable_rag_validation,
-        enable_self_critique=enable_self_critique
-    )
+    agent.__init_validation_pipeline__(strict_mode=True,
+        enable_rag_validation=enable_rag_validation, enable_self_critique=
+        enable_self_critique)
     agent.enable_validation(enable_validation)
-
     if logger:
-        logger.log(f"Created validated developer: {developer_name}", "INFO")
-
+        logger.log(f'Created validated developer: {developer_name}', 'INFO')
     return agent
 
 
-def _apply_validation_mixin(agent: Any) -> None:
+def _apply_validation_mixin(agent: Any) ->None:
     """
     Apply ValidatedDeveloperMixin to agent instance dynamically.
 
@@ -97,17 +71,16 @@ def _apply_validation_mixin(agent: Any) -> None:
     Args:
         agent: Agent instance to add validation to
     """
-    # Copy methods from ValidatedDeveloperMixin to agent instance
     for attr_name in dir(ValidatedDeveloperMixin):
-        # Include public methods and special validation methods
-        should_include = (
-            not attr_name.startswith('_') or
-            attr_name.startswith('_validated') or
-            attr_name.startswith('__init')
-        )
-
+        is_magic_method = attr_name.startswith('__') and attr_name.endswith(
+            '__')
+        is_init_method = attr_name.startswith('__init')
+        should_include = not is_magic_method or is_init_method
         if should_include:
             attr = getattr(ValidatedDeveloperMixin, attr_name)
             if callable(attr):
-                # Bind method to agent instance
-                setattr(agent, attr_name, attr.__get__(agent, type(agent)))
+                if hasattr(attr, '__get__'):
+                    setattr(agent, attr_name, attr.__get__(agent, type(agent)))
+                else:
+                    import types
+                    setattr(agent, attr_name, types.MethodType(attr, agent))

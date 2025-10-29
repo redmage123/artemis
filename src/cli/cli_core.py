@@ -1,18 +1,11 @@
-"""
-WHY: Orchestrate CLI execution flow with clean error handling
-RESPONSIBILITY: Main entry point for CLI, coordinates parser and dispatcher
-PATTERNS:
-- Facade pattern for CLI subsystems
-- Guard clauses for validation
-- Single responsibility for CLI lifecycle management
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('cli_core')
+'\nWHY: Orchestrate CLI execution flow with clean error handling\nRESPONSIBILITY: Main entry point for CLI, coordinates parser and dispatcher\nPATTERNS:\n- Facade pattern for CLI subsystems\n- Guard clauses for validation\n- Single responsibility for CLI lifecycle management\n'
 import sys
 from typing import Optional, List
 from cli.parser import ArgumentParser
 from cli.commands import CommandDispatcher
 from cli.models import CommandResult
-
 
 class ArtemisCLI:
     """
@@ -30,7 +23,7 @@ class ArtemisCLI:
         self.parser = ArgumentParser()
         self.dispatcher = CommandDispatcher()
 
-    def run(self, args: Optional[List[str]] = None) -> int:
+    def run(self, args: Optional[List[str]]=None) -> int:
         """
         Run the CLI with given arguments
 
@@ -41,25 +34,19 @@ class ArtemisCLI:
             Exit code (0 for success, non-zero for failure)
         """
         try:
-            # Parse arguments
             cli_args = self.parser.parse(args)
-
-            # Handle no command case
             if not cli_args.command:
                 self.parser.print_help()
                 return 0
-
-            # Dispatch command
             result = self.dispatcher.dispatch(cli_args)
-
-            # Handle result
             return self._handle_result(result)
-
         except KeyboardInterrupt:
-            print("\n\nInterrupted by user")
+            
+            logger.log('\n\nInterrupted by user', 'INFO')
             return 130
         except Exception as e:
-            print(f"\nUnexpected error: {e}")
+            
+            logger.log(f'\nUnexpected error: {e}', 'INFO')
             import traceback
             traceback.print_exc()
             return 1
@@ -75,12 +62,11 @@ class ArtemisCLI:
             Exit code
         """
         if result.message:
-            print(result.message)
-
+            
+            logger.log(result.message, 'INFO')
         return result.exit_code
 
-
-def main(args: Optional[List[str]] = None) -> int:
+def main(args: Optional[List[str]]=None) -> int:
     """
     Main entry point for Artemis CLI
 
@@ -92,7 +78,5 @@ def main(args: Optional[List[str]] = None) -> int:
     """
     cli = ArtemisCLI()
     return cli.run(args)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

@@ -1,15 +1,10 @@
-#!/usr/bin/env python3
-"""
-WHY: Orchestrate all state machine components into cohesive state management system
-RESPONSIBILITY: Facade coordinating transitions, workflows, persistence, and recovery
-PATTERNS: Facade pattern, dependency injection, composition over inheritance
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('state_machine_core')
+'\nWHY: Orchestrate all state machine components into cohesive state management system\nRESPONSIBILITY: Facade coordinating transitions, workflows, persistence, and recovery\nPATTERNS: Facade pattern, dependency injection, composition over inheritance\n'
 import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
-
 from state_machine.pipeline_state import PipelineState
 from state_machine.stage_state import StageState
 from state_machine.event_type import EventType
@@ -22,7 +17,6 @@ from state_machine.pushdown_automaton import PushdownAutomaton
 from state_machine.checkpoint_integration import CheckpointIntegration
 from state_machine.state_persistence import StatePersistence
 from state_machine.stage_state_manager import StageStateManager
-
 
 class ArtemisStateMachineCore:
     """
@@ -44,13 +38,7 @@ class ArtemisStateMachineCore:
     - Snapshot/restore for debugging
     """
 
-    def __init__(
-        self,
-        card_id: str,
-        state_dir: Optional[str] = None,
-        verbose: bool = True,
-        llm_client: Optional[Any] = None
-    ):
+    def __init__(self, card_id: str, state_dir: Optional[str]=None, verbose: bool=True, llm_client: Optional[Any]=None):
         """
         Initialize state machine
 
@@ -63,37 +51,22 @@ class ArtemisStateMachineCore:
         self.card_id = card_id
         self.llm_client = llm_client
         self.verbose = verbose
-
-        # Setup state directory
-        state_dir = state_dir or os.getenv("ARTEMIS_STATE_DIR", "../../.artemis_data/state")
+        state_dir = state_dir or os.getenv('ARTEMIS_STATE_DIR', '../../.artemis_data/state')
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(exist_ok=True, parents=True)
-
-        # Initialize components
         self.transition_engine = StateTransitionEngine(verbose=verbose)
         self.stage_manager = StageStateManager(verbose=verbose)
         self.automaton = PushdownAutomaton(verbose=verbose)
         self.checkpoint = CheckpointIntegration(card_id=card_id, verbose=verbose)
-        self.persistence = StatePersistence(
-            state_dir=self.state_dir,
-            card_id=card_id,
-            verbose=verbose
-        )
-
-        # Initialize workflows
+        self.persistence = StatePersistence(state_dir=self.state_dir, card_id=card_id, verbose=verbose)
         self.workflows = self._register_default_workflows()
-        self.workflow_executor = WorkflowExecutor(
-            workflows=self.workflows,
-            verbose=verbose
-        )
-        self.llm_generator = LLMWorkflowGenerator(
-            llm_client=llm_client,
-            verbose=verbose
-        )
-
+        self.workflow_executor = WorkflowExecutor(workflows=self.workflows, verbose=verbose)
+        self.llm_generator = LLMWorkflowGenerator(llm_client=llm_client, verbose=verbose)
         if self.verbose:
-            print(f"[StateMachine] Initialized for card {card_id}")
-            print(f"[StateMachine] State persistence: {self.state_dir}")
+            
+            logger.log(f'[StateMachine] Initialized for card {card_id}', 'INFO')
+            
+            logger.log(f'[StateMachine] State persistence: {self.state_dir}', 'INFO')
 
     def _register_default_workflows(self) -> Dict[IssueType, Any]:
         """Register default recovery workflows"""
@@ -101,24 +74,16 @@ class ArtemisStateMachineCore:
             from artemis_workflows import WorkflowBuilder
             workflows = WorkflowBuilder.build_all_workflows()
             if self.verbose:
-                print(f"[StateMachine] Registered {len(workflows)} recovery workflows")
+                
+                logger.log(f'[StateMachine] Registered {len(workflows)} recovery workflows', 'INFO')
             return workflows
         except ImportError:
             if self.verbose:
-                print(f"[StateMachine] ⚠️  WorkflowBuilder not available")
+                
+                logger.log(f'[StateMachine] ⚠️  WorkflowBuilder not available', 'INFO')
             return {}
 
-    # ========================================================================
-    # STATE TRANSITION API
-    # ========================================================================
-
-    def transition(
-        self,
-        to_state: PipelineState,
-        event: EventType,
-        reason: Optional[str] = None,
-        **metadata
-    ) -> bool:
+    def transition(self, to_state: PipelineState, event: EventType, reason: Optional[str]=None, **metadata) -> bool:
         """
         Transition to a new state
 
@@ -132,11 +97,8 @@ class ArtemisStateMachineCore:
             True if transition was valid and executed
         """
         success = self.transition_engine.transition(to_state, event, reason, **metadata)
-
-        # Persist state after successful transition
         if success:
             self._save_state()
-
         return success
 
     @property
@@ -149,16 +111,7 @@ class ArtemisStateMachineCore:
         """Get state transition history"""
         return self.transition_engine.get_history()
 
-    # ========================================================================
-    # STAGE STATE API
-    # ========================================================================
-
-    def update_stage_state(
-        self,
-        stage_name: str,
-        state: StageState,
-        **metadata
-    ) -> None:
+    def update_stage_state(self, stage_name: str, state: StageState, **metadata) -> None:
         """
         Update state of a specific stage
 
@@ -185,10 +138,6 @@ class ArtemisStateMachineCore:
         """Set currently active stage"""
         self.stage_manager.set_active_stage(stage_name)
 
-    # ========================================================================
-    # ISSUE TRACKING AND WORKFLOW API
-    # ========================================================================
-
     def register_issue(self, issue_type: IssueType, **metadata) -> None:
         """
         Register an active issue
@@ -198,8 +147,6 @@ class ArtemisStateMachineCore:
             **metadata: Issue details
         """
         self.workflow_executor.register_issue(issue_type, **metadata)
-
-        # Trigger health state transitions
         health_status = self.workflow_executor.compute_health_status()
         self._update_health_state(health_status)
 
@@ -211,16 +158,10 @@ class ArtemisStateMachineCore:
             issue_type: Type of issue
         """
         self.workflow_executor.resolve_issue(issue_type)
-
-        # Restore health if all issues resolved
         health_status = self.workflow_executor.compute_health_status()
         self._update_health_state(health_status)
 
-    def execute_workflow(
-        self,
-        issue_type: IssueType,
-        context: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def execute_workflow(self, issue_type: IssueType, context: Optional[Dict[str, Any]]=None) -> bool:
         """
         Execute recovery workflow for an issue
 
@@ -231,63 +172,43 @@ class ArtemisStateMachineCore:
         Returns:
             True if workflow succeeded
         """
-        # Try registered workflow first
         success = self.workflow_executor.execute_workflow(issue_type, context)
         if success:
             self._handle_workflow_success(issue_type)
             return True
-
-        # Fallback: Try LLM generation
         generated_workflow = self.llm_generator.generate_workflow(issue_type, context or {})
         if not generated_workflow:
             self._handle_workflow_failure(issue_type)
             return False
-
-        # Register and execute generated workflow
         self.workflows[issue_type] = generated_workflow
         self.workflow_executor.workflows = self.workflows
         success = self.workflow_executor.execute_workflow(issue_type, context)
-
         if success:
             self._handle_workflow_success(issue_type)
         else:
             self._handle_workflow_failure(issue_type)
-
         return success
 
     def _update_health_state(self, health_status: str) -> None:
         """Update health state based on status"""
-        HEALTH_STATE_MAP = {
-            "critical": (PipelineState.CRITICAL, EventType.HEALTH_CRITICAL),
-            "degraded": (PipelineState.DEGRADED_HEALTH, EventType.HEALTH_DEGRADED),
-            "healthy": (PipelineState.HEALTHY, EventType.HEALTH_RESTORED)
-        }
-
+        HEALTH_STATE_MAP = {'critical': (PipelineState.CRITICAL, EventType.HEALTH_CRITICAL), 'degraded': (PipelineState.DEGRADED_HEALTH, EventType.HEALTH_DEGRADED), 'healthy': (PipelineState.HEALTHY, EventType.HEALTH_RESTORED)}
         state_event = HEALTH_STATE_MAP.get(health_status)
         if state_event:
             state, event = state_event
             issue_count = len(self.workflow_executor.active_issues)
-            self.transition(state, event, reason=f"{issue_count} active issues")
+            self.transition(state, event, reason=f'{issue_count} active issues')
 
     def _handle_workflow_success(self, issue_type: IssueType) -> None:
         """Handle successful workflow completion"""
         workflow = self.workflows.get(issue_type)
         if workflow:
-            self.transition(
-                workflow.success_state,
-                EventType.RECOVERY_SUCCESS,
-                reason=f"Workflow {workflow.name} completed successfully"
-            )
+            self.transition(workflow.success_state, EventType.RECOVERY_SUCCESS, reason=f'Workflow {workflow.name} completed successfully')
 
     def _handle_workflow_failure(self, issue_type: IssueType) -> None:
         """Handle workflow failure"""
         workflow = self.workflows.get(issue_type)
         if workflow:
-            self.transition(
-                workflow.failure_state,
-                EventType.RECOVERY_FAIL,
-                reason=f"Workflow {workflow.name} failed"
-            )
+            self.transition(workflow.failure_state, EventType.RECOVERY_FAIL, reason=f'Workflow {workflow.name} failed')
 
     @property
     def active_issues(self) -> Set[IssueType]:
@@ -304,11 +225,7 @@ class ArtemisStateMachineCore:
         """Get workflow execution history"""
         return self.workflow_executor.workflow_history
 
-    # ========================================================================
-    # PUSHDOWN AUTOMATON API
-    # ========================================================================
-
-    def push_state(self, state: PipelineState, context: Optional[Dict[str, Any]] = None) -> None:
+    def push_state(self, state: PipelineState, context: Optional[Dict[str, Any]]=None) -> None:
         """Push state onto stack for rollback support"""
         self.automaton.push_state(state, context)
 
@@ -331,53 +248,22 @@ class ArtemisStateMachineCore:
             True if rollback succeeded
         """
         rollback_steps = self.automaton.rollback_to_state(target_state)
-
-        # Guard: Check rollback found path
         if not rollback_steps:
             return False
-
-        # Transition to target state
-        self.transition(
-            target_state,
-            EventType.ROLLBACK_COMPLETE,
-            reason=f"Rolled back {len(rollback_steps)} states"
-        )
+        self.transition(target_state, EventType.ROLLBACK_COMPLETE, reason=f'Rolled back {len(rollback_steps)} states')
         return True
 
     def get_state_depth(self) -> int:
         """Get current depth of state stack"""
         return self.automaton.get_depth()
 
-    # ========================================================================
-    # CHECKPOINT/RESUME API
-    # ========================================================================
-
     def create_checkpoint(self, total_stages: int) -> None:
         """Create checkpoint for pipeline execution"""
-        self.checkpoint.create_checkpoint(
-            total_stages=total_stages,
-            execution_context={
-                "card_id": self.card_id,
-                "current_state": self.current_state.value
-            }
-        )
+        self.checkpoint.create_checkpoint(total_stages=total_stages, execution_context={'card_id': self.card_id, 'current_state': self.current_state.value})
 
-    def save_stage_checkpoint(
-        self,
-        stage_name: str,
-        status: str,
-        result: Optional[Dict[str, Any]] = None,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None
-    ) -> None:
+    def save_stage_checkpoint(self, stage_name: str, status: str, result: Optional[Dict[str, Any]]=None, start_time: Optional[datetime]=None, end_time: Optional[datetime]=None) -> None:
         """Save checkpoint after stage completion"""
-        self.checkpoint.save_stage_checkpoint(
-            stage_name=stage_name,
-            status=status,
-            result=result,
-            start_time=start_time,
-            end_time=end_time
-        )
+        self.checkpoint.save_stage_checkpoint(stage_name=stage_name, status=status, result=result, start_time=start_time, end_time=end_time)
 
     def can_resume(self) -> bool:
         """Check if pipeline can be resumed from checkpoint"""
@@ -391,39 +277,18 @@ class ArtemisStateMachineCore:
         """Get checkpoint execution progress"""
         return self.checkpoint.get_progress()
 
-    # ========================================================================
-    # SNAPSHOT AND PERSISTENCE API
-    # ========================================================================
-
     def get_snapshot(self) -> PipelineSnapshot:
         """Get current pipeline state snapshot"""
-        return PipelineSnapshot(
-            state=self.current_state,
-            timestamp=datetime.now(),
-            card_id=self.card_id,
-            stages=self.stage_states,
-            active_stage=self.active_stage,
-            health_status=self.workflow_executor.compute_health_status(),
-            circuit_breakers_open=self.stage_manager.get_circuit_breakers_open(),
-            active_issues=list(self.active_issues)
-        )
+        return PipelineSnapshot(state=self.current_state, timestamp=datetime.now(), card_id=self.card_id, stages=self.stage_states, active_stage=self.active_stage, health_status=self.workflow_executor.compute_health_status(), circuit_breakers_open=self.stage_manager.get_circuit_breakers_open(), active_issues=list(self.active_issues))
 
     def _save_state(self) -> None:
         """Persist state to disk"""
         snapshot = self.get_snapshot()
         self.persistence.save_snapshot(snapshot)
 
-    # ========================================================================
-    # STATISTICS API
-    # ========================================================================
-
     @property
     def stats(self) -> Dict[str, int]:
         """Get combined statistics from all components"""
         transition_stats = self.transition_engine.get_stats()
         workflow_stats = self.workflow_executor.get_stats()
-
-        return {
-            **transition_stats,
-            **workflow_stats
-        }
+        return {**transition_stats, **workflow_stats}

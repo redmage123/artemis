@@ -31,6 +31,7 @@ from artemis_services import TestRunner, FileManager
 from kanban_manager import KanbanBoard
 from agent_messenger import AgentMessenger
 from rag_agent import RAGAgent
+from rag_storage_helper import RAGStorageHelper
 from developer_invoker import DeveloperInvoker
 from project_analysis_agent import ProjectAnalysisEngine, UserApprovalHandler
 from artemis_exceptions import (
@@ -38,6 +39,9 @@ from artemis_exceptions import (
     ADRGenerationError,
     wrap_exception
 )
+
+# Import Content Generation Helper for RAG-enhanced development
+from stages.content_generation_helper import ContentGenerationHelper
 
 # Import PromptManager for RAG-based prompts
 try:
@@ -124,7 +128,14 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         self.logger.log("Starting Development Stage", "STAGE")
 
         card_id = card['card_id']
-        num_developers = context.get('parallel_developers', 1)
+
+        # Check for adaptive config first, then fall back to context defaults
+        adaptive_config = context.get('adaptive_config', None)
+        if adaptive_config:
+            num_developers = adaptive_config.max_parallel_developers
+            self.logger.log(f"🔧 Using adaptive config: {num_developers} parallel developers", "INFO")
+        else:
+            num_developers = context.get('parallel_developers', 1)
 
         # DEBUG: Log stage entry
         self.debug_log("Starting development stage", card_id=card_id, num_developers=num_developers)
@@ -148,22 +159,91 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
 
         # Register stage with supervisor
         if self.supervisor:
-            from supervisor_agent import RecoveryStrategy
+            from supervisor_agent import RecoveryStrategy, RecoveryAction
             self.supervisor.register_stage(
                 stage_name=stage_name,
                 recovery_strategy=RecoveryStrategy(
+                    action=RecoveryAction.RETRY,
                     max_retries=3,
                     retry_delay_seconds=10,
-                    timeout_seconds=600,  # 10 minutes for developers
-                    circuit_breaker_threshold=5
+                    backoff_factor=2.0,
+                    timeout_seconds=600  # 10 minutes for developers
                 )
             )
 
         try:
-            # Get ADR from context
+            # Get ADR from context (optional - use card description if missing)
             self.update_progress({"step": "reading_adr", "progress_percent": 20})
             adr_file = context.get('adr_file', '')
-            adr_content = self._read_adr(adr_file)
+
+            # Try to read ADR, but fall back to card description if missing
+            if adr_file and adr_file.strip():
+                adr_content = self._read_adr(adr_file)
+            else:
+                # No ADR file - use card description as architecture guidance
+                self.logger.log("⚠️  No ADR file found - using task description as guidance", "WARNING")
+                adr_content = f"""# Architecture Decision Record (Generated from Task)
+
+## Task: {card.get('title', 'Unknown')}
+
+## Description
+{card.get('description', 'No description provided')}
+
+## Technical Approach
+This is a {context.get('complexity', 'medium')} complexity {context.get('task_type', 'development')} task.
+Developers should analyze the requirements and implement accordingly.
+"""
+                adr_file = "auto-generated"  # Set a placeholder for logging
+
+            # Generate content brief using RAG
+            self.update_progress({"step": "generating_content_brief", "progress_percent": 25})
+            self.logger.log("📝 Generating content brief from RAG...", "INFO")
+
+            try:
+                content_helper = ContentGenerationHelper(self.rag)
+                content_brief = content_helper.generate_content_brief(
+                    task_description=card.get('description', ''),
+                    requirements={
+                        'functional': context.get('functional_requirements', []),
+                        'non_functional': context.get('non_functional_requirements', []),
+                        'acceptance_criteria': card.get('acceptance_criteria', [])
+                    },
+                    task_type=context.get('task_type', 'general')
+                )
+
+                # Enhance ADR with content brief
+                enhanced_adr = f"""{adr_content}
+
+---
+
+{content_brief}
+
+---
+
+CRITICAL INSTRUCTIONS FOR DEVELOPERS:
+1. Study the reference implementations shown above
+2. Generate ACTUAL CONTENT, not generic placeholders
+3. Include ALL domain features listed in the content brief
+4. Aim for similar quality and completeness as the references (400+ lines for presentations)
+5. Use specific data, not random numbers (e.g., "Developer A: 127 tasks" not "Stage 1: 10")
+"""
+
+                self.logger.log("✅ Content brief generated - developers will have rich context", "INFO")
+                adr_content = enhanced_adr
+
+            except Exception as e:
+                wrapped_error = wrap_exception(
+                    e,
+                    "Content brief generation failed",
+                    context={
+                        'card_id': card_id,
+                        'task_type': context.get('task_type', 'unknown'),
+                        'has_rag': self.rag is not None
+                    }
+                )
+                self.logger.log(f"⚠️  {wrapped_error}", "WARNING")
+                self.logger.log("   Continuing with standard ADR only...", "INFO")
+                # Continue with original ADR if content generation fails
 
             # Invoke developers in parallel
             self.update_progress({"step": "invoking_developers", "progress_percent": 30})
@@ -197,8 +277,12 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             self.update_progress({"step": "sandboxing_code", "progress_percent": 65})
             self._execute_in_sandbox_if_enabled(developer_results)
 
+            # Post-processing: Ensure all Python packages have __init__.py files
+            self.update_progress({"step": "creating_init_files", "progress_percent": 70})
+            self._ensure_python_packages_have_init_files(developer_results)
+
             # Store each developer's solution in RAG
-            self.update_progress({"step": "storing_in_rag", "progress_percent": 80})
+            self.update_progress({"step": "storing_in_rag", "progress_percent": 75})
             for dev_result in developer_results:
                 self._store_developer_solution_in_rag(card_id, card, dev_result)
 
@@ -344,6 +428,53 @@ class DevelopmentStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             # In production, we might want to retry the stage here
         else:
             self.logger.log("Supervisor could not recover", "ERROR")
+
+    def _ensure_python_packages_have_init_files(self, developer_results: List[Dict]) -> None:
+        """
+        Post-processing: Ensure all Python package directories have __init__.py files.
+
+        WHY: Python requires __init__.py for directory imports to work (e.g., "from auth.module import X").
+             LLMs sometimes forget to generate these files, causing import errors during testing.
+
+        RESPONSIBILITY: Walk through developer output directories and create missing __init__.py files.
+
+        Args:
+            developer_results: List of developer result dictionaries with 'developer' key
+        """
+        from pathlib import Path
+        from path_config_service import get_developer_path
+
+        for dev_result in developer_results:
+            if not dev_result.get('success', False):
+                continue  # Skip failed developers
+
+            dev_name = dev_result.get('developer', 'unknown')
+            dev_output_dir = Path(get_developer_path(dev_name))
+
+            if not dev_output_dir.exists():
+                continue  # Skip if directory doesn't exist
+
+            # Walk through all subdirectories
+            for dirpath in dev_output_dir.rglob('*'):
+                if not dirpath.is_dir():
+                    continue
+
+                # Skip special directories
+                if any(part.startswith('.') or part == '__pycache__' for part in dirpath.parts):
+                    continue
+
+                # Check if directory contains Python files
+                has_python_files = any(dirpath.glob('*.py'))
+
+                if has_python_files:
+                    init_file = dirpath / '__init__.py'
+                    if not init_file.exists():
+                        # Create empty __init__.py
+                        init_file.touch()
+                        self.logger.log(
+                            f"Created {init_file.relative_to(dev_output_dir.parent)}",
+                            "INFO"
+                        )
 
     def _read_adr(self, adr_file: str) -> str:
         """Read ADR content"""

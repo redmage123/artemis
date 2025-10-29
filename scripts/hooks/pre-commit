@@ -1,0 +1,130 @@
+#!/bin/bash
+# Pre-commit hook for Artemis - Comprehensive validation suite
+#
+# WHY: Prevents committing code with syntax errors, import issues, or signature mismatches
+# PATTERNS: Defense in depth (multiple validation layers), fail-fast (exit on first error)
+#
+# To install: Run scripts/install-hooks.sh
+
+set -e
+
+echo "🔍 Running Artemis validation suite..."
+echo ""
+
+# Get staged Python files
+STAGED_PY_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+
+# Guard: No Python files to check
+if [ -z "$STAGED_PY_FILES" ]; then
+    echo "ℹ️  No Python files to check"
+    echo "✅ Pre-commit checks complete"
+    exit 0
+fi
+
+echo "📝 Checking $(echo "$STAGED_PY_FILES" | wc -l) Python files..."
+echo ""
+
+# ============================================================
+# STEP 1: Code Standards Scanner
+# ============================================================
+echo "🔍 [1/3] Running code standards checks..."
+
+if ! python3 src/code_standards_scanner.py --root src --exit-code; then
+    echo ""
+    echo "❌ CODE STANDARDS VIOLATION DETECTED"
+    echo ""
+    echo "Your commit has been blocked because it violates claude.md coding standards."
+    echo "This includes:"
+    echo "  - Nested if statements (use early returns)"
+    echo "  - Long if/elif chains (use strategy pattern or dict mapping)"
+    echo "  - TODO comments in production code"
+    echo ""
+    echo "To fix:"
+    echo "  1. Review the violations above"
+    echo "  2. Refactor using patterns from claude.md and REFACTORING_GUIDE.md"
+    echo "  3. Run: python3 src/code_standards_scanner.py --root src"
+    echo "  4. Fix all violations"
+    echo "  5. Try committing again"
+    echo ""
+    exit 1
+fi
+
+echo "  ✅ Code standards passed"
+echo ""
+
+# ============================================================
+# STEP 2: Preflight Validation (Syntax + Imports + Signatures)
+# ============================================================
+echo "🔍 [2/3] Running preflight validation..."
+echo "  - Syntax checking"
+echo "  - Import testing (circular dependency detection)"
+echo "  - Function signature validation (parameter mismatches)"
+echo ""
+
+if ! python3 src/preflight_validator.py src; then
+    echo ""
+    echo "❌ PREFLIGHT VALIDATION FAILED"
+    echo ""
+    echo "Your commit has been blocked due to validation errors."
+    echo "This may include:"
+    echo "  - Syntax errors (compilation failures)"
+    echo "  - Circular imports or import errors"
+    echo "  - Function signature mismatches (wrong parameters)"
+    echo ""
+    echo "To fix:"
+    echo "  1. Review the errors above"
+    echo "  2. Fix the specific issues identified"
+    echo "  3. Run: python3 src/preflight_validator.py src"
+    echo "  4. Ensure all validation passes"
+    echo "  5. Try committing again"
+    echo ""
+    exit 1
+fi
+
+echo "  ✅ Preflight validation passed"
+echo ""
+
+# ============================================================
+# STEP 3: Signature Validation (Detailed Check)
+# ============================================================
+echo "🔍 [3/3] Running signature validation..."
+
+if ! python3 src/signature_validator.py src; then
+    echo ""
+    echo "❌ SIGNATURE VALIDATION FAILED"
+    echo ""
+    echo "Your commit has been blocked due to function signature mismatches."
+    echo "This includes:"
+    echo "  - Too many/few arguments to functions"
+    echo "  - Unknown keyword arguments"
+    echo "  - Missing required parameters"
+    echo ""
+    echo "To fix:"
+    echo "  1. Review the signature mismatches above"
+    echo "  2. Check function definitions match call sites"
+    echo "  3. Run: python3 src/signature_validator.py src"
+    echo "  4. Fix all signature issues"
+    echo "  5. Try committing again"
+    echo ""
+    exit 1
+fi
+
+echo "  ✅ Signature validation passed"
+echo ""
+
+# ============================================================
+# ALL CHECKS PASSED
+# ============================================================
+echo "✅ All validation checks passed!"
+echo ""
+echo "Summary:"
+echo "  ✓ Code standards compliant"
+echo "  ✓ No syntax errors"
+echo "  ✓ No import errors or circular dependencies"
+echo "  ✓ No signature mismatches"
+echo ""
+echo "To bypass these checks (NOT RECOMMENDED):"
+echo "  git commit --no-verify"
+echo ""
+
+exit 0

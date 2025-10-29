@@ -86,6 +86,8 @@ class TestRunner(TestRunnerInterface):
                 - pass_rate: Percentage string (e.g., "85.7%")
                 - exit_code: pytest exit code (0 = all passed)
                 - output: Full pytest output (stdout + stderr)
+                - stdout: Standard output only
+                - stderr: Standard error only
 
         Raises:
             subprocess.TimeoutExpired: If tests exceed timeout duration
@@ -100,12 +102,36 @@ class TestRunner(TestRunnerInterface):
         if not test_path:
             raise ValueError("test_path cannot be empty")
 
+        # Determine working directory for pytest
+        # WHY: Tests need to import modules relative to their package root (e.g., "from auth.module import X")
+        # If test_path points to a 'tests' directory, run pytest from the parent directory
+        # so Python's import system can find sibling modules
+        from pathlib import Path
+        test_path_obj = Path(test_path)
+
+        # If test_path is a tests directory, use parent as cwd so imports work
+        if test_path_obj.name == 'tests' and test_path_obj.is_dir():
+            working_dir = str(test_path_obj.parent)
+            # Use relative path "tests" instead of absolute path
+            pytest_target = "tests"
+        else:
+            working_dir = None
+            pytest_target = test_path
+
+        # Discover modules for coverage tracking
+        # WHY: Generated code needs coverage tracking on its specific modules, not global config
+        coverage_args = self._discover_coverage_modules(working_dir if working_dir else Path.cwd())
+
         # Execute pytest with configured arguments
+        # WHY: Use "python -m pytest" instead of "pytest" directly for proper import resolution
+        # This ensures Python's sys.path is set correctly for module imports
+        import sys
         result = subprocess.run(
-            [self.pytest_path, test_path, *self.PYTEST_ARGS],
+            [sys.executable, "-m", "pytest", pytest_target, *self.PYTEST_ARGS, *coverage_args],
             capture_output=True,
             text=True,
-            timeout=timeout
+            timeout=timeout,
+            cwd=working_dir  # Set working directory for proper imports
         )
 
         # Combine stdout and stderr for comprehensive parsing
@@ -125,8 +151,52 @@ class TestRunner(TestRunnerInterface):
             "skipped": skipped,
             "pass_rate": pass_rate,
             "exit_code": result.returncode,
-            "output": output
+            "output": output,
+            "stdout": result.stdout,  # Added for detailed debugging
+            "stderr": result.stderr   # Added for detailed debugging
         }
+
+    def _discover_coverage_modules(self, working_dir: str) -> Tuple[str, ...]:
+        """
+        Discover Python modules/packages in working directory for coverage tracking.
+
+        WHAT: Scans for directories containing __init__.py (Python packages) to track coverage.
+        WHY: Generated code needs dynamic coverage configuration based on what modules exist.
+
+        Args:
+            working_dir: Directory to scan for Python packages
+
+        Returns:
+            Tuple of coverage arguments (e.g., ("--cov=auth_module", "--cov-fail-under=75"))
+
+        Example:
+            If working_dir contains auth_module/__init__.py, returns:
+            ("--cov=auth_module", "--cov-report=term-missing", "--cov-fail-under=75")
+        """
+        from pathlib import Path
+
+        coverage_args = []
+        working_path = Path(working_dir)
+
+        # Find all directories with __init__.py (Python packages)
+        for item in working_path.iterdir():
+            if item.is_dir() and not item.name.startswith(('.', '__', 'tests')):
+                init_file = item / '__init__.py'
+                if init_file.exists():
+                    # Add coverage for this module
+                    coverage_args.append(f"--cov={item.name}")
+
+        # If we found modules, add coverage reporting options
+        if coverage_args:
+            coverage_args.extend([
+                "--cov-report=term-missing",
+                "--cov-fail-under=80"  # Require 80% coverage for generated code
+            ])
+        else:
+            # No modules found - skip coverage to avoid global pytest.ini conflicts
+            coverage_args.append("--no-cov")
+
+        return tuple(coverage_args)
 
     def _parse_pytest_output(self, output: str) -> Tuple[int, int, int]:
         """

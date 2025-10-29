@@ -21,7 +21,25 @@ EXTRACTED FROM: supervisor_agent.py (lines 572-668)
 
 from typing import Dict, Optional, Any
 from datetime import datetime, timedelta
-from agents.supervisor.models import StageHealth, RecoveryStrategy
+from dataclasses import dataclass
+from agents.supervisor.models import RecoveryStrategy
+
+
+@dataclass
+class CircuitBreakerState:
+    """
+    Circuit breaker state for a stage (mutable)
+
+    WHY: Track circuit breaker status separate from stage execution health
+    PATTERNS: State Pattern - mutable state for circuit breaker transitions
+    """
+    stage_name: str
+    failure_count: int = 0
+    last_failure: Optional[datetime] = None
+    total_duration: float = 0.0
+    execution_count: int = 0
+    circuit_open: bool = False
+    circuit_open_until: Optional[datetime] = None
 
 
 class CircuitBreakerManager:
@@ -36,7 +54,8 @@ class CircuitBreakerManager:
         self,
         verbose: bool = False,
         messenger: Optional[Any] = None,
-        state_machine: Optional[Any] = None
+        state_machine: Optional[Any] = None,
+        logger: Optional[Any] = None
     ):
         """
         Initialize circuit breaker manager
@@ -45,11 +64,13 @@ class CircuitBreakerManager:
             verbose: Enable verbose logging
             messenger: Optional messenger for alerts
             state_machine: Optional state machine for logging
+            logger: Optional logger for recording events
         """
         self.verbose = verbose
         self.messenger = messenger
         self.state_machine = state_machine
-        self.stage_health: Dict[str, StageHealth] = {}
+        self.logger = logger
+        self.stage_health: Dict[str, CircuitBreakerState] = {}
         self.recovery_strategies: Dict[str, RecoveryStrategy] = {}
 
     def register_stage(
@@ -69,7 +90,7 @@ class CircuitBreakerManager:
             return
 
         # Create initial health status
-        self.stage_health[stage_name] = StageHealth(
+        self.stage_health[stage_name] = CircuitBreakerState(
             stage_name=stage_name,
             failure_count=0,
             last_failure=None,
@@ -93,8 +114,8 @@ class CircuitBreakerManager:
                 StageState.PENDING
             )
 
-        if self.verbose:
-            print(f"[CircuitBreaker] Registered stage: {stage_name}")
+        if self.verbose and self.logger:
+            self.logger.log(f"[CircuitBreaker] Registered stage: {stage_name}", "INFO")
 
     def check_circuit_breaker(self, stage_name: str) -> bool:
         """
@@ -123,9 +144,9 @@ class CircuitBreakerManager:
             return False
 
         # Circuit is still open
-        if self.verbose:
+        if self.verbose and self.logger:
             time_remaining = self._calculate_time_remaining(health)
-            print(f"[CircuitBreaker] ⚠️  Circuit OPEN for {stage_name} ({time_remaining}s remaining)")
+            self.logger.log(f"[CircuitBreaker] ⚠️  Circuit OPEN for {stage_name} ({time_remaining}s remaining)", "WARNING")
 
         return True
 
@@ -146,7 +167,7 @@ class CircuitBreakerManager:
         # Open the circuit with timeout
         health.circuit_open = True
         health.circuit_open_until = datetime.now() + timedelta(
-            seconds=strategy.circuit_breaker_timeout_seconds
+            seconds=strategy.timeout_seconds
         )
 
         # Send alert
@@ -154,18 +175,18 @@ class CircuitBreakerManager:
             self.messenger.send_message(
                 f"🚨 CIRCUIT BREAKER OPEN: {stage_name}",
                 f"Stage has failed {health.failure_count} times. Temporarily disabled for "
-                f"{strategy.circuit_breaker_timeout_seconds}s"
+                f"{strategy.timeout_seconds}s"
             )
 
-        if self.verbose:
-            print(f"[CircuitBreaker] 🚨 Circuit OPEN for {stage_name} (timeout: {strategy.circuit_breaker_timeout_seconds}s)")
+        if self.verbose and self.logger:
+            self.logger.log(f"[CircuitBreaker] 🚨 Circuit OPEN for {stage_name} (timeout: {strategy.timeout_seconds}s)", "ERROR")
 
-    def _should_auto_close_circuit(self, health: StageHealth) -> bool:
+    def _should_auto_close_circuit(self, health: CircuitBreakerState) -> bool:
         """
         Check if circuit should automatically close (timeout expired)
 
         Args:
-            health: Stage health status
+            health: Circuit breaker state
 
         Returns:
             True if circuit should close
@@ -176,7 +197,7 @@ class CircuitBreakerManager:
 
         return datetime.now() > health.circuit_open_until
 
-    def _close_circuit(self, stage_name: str, health: StageHealth) -> None:
+    def _close_circuit(self, stage_name: str, health: CircuitBreakerState) -> None:
         """
         Close the circuit breaker (enable stage again)
 
@@ -187,15 +208,15 @@ class CircuitBreakerManager:
         health.circuit_open = False
         health.circuit_open_until = None
 
-        if self.verbose:
-            print(f"[CircuitBreaker] Circuit closed for {stage_name}")
+        if self.verbose and self.logger:
+            self.logger.log(f"[CircuitBreaker] Circuit closed for {stage_name}", "INFO")
 
-    def _calculate_time_remaining(self, health: StageHealth) -> int:
+    def _calculate_time_remaining(self, health: CircuitBreakerState) -> int:
         """
         Calculate time remaining until circuit auto-closes
 
         Args:
-            health: Stage health status
+            health: Circuit breaker state
 
         Returns:
             Seconds remaining (0 if no timeout set)
@@ -207,7 +228,7 @@ class CircuitBreakerManager:
         time_delta = health.circuit_open_until - datetime.now()
         return max(0, time_delta.seconds)
 
-    def get_stage_health(self, stage_name: str) -> Optional[StageHealth]:
+    def get_stage_health(self, stage_name: str) -> Optional[CircuitBreakerState]:
         """
         Get health status for a stage
 
@@ -219,7 +240,7 @@ class CircuitBreakerManager:
         """
         return self.stage_health.get(stage_name)
 
-    def get_all_stage_health(self) -> Dict[str, StageHealth]:
+    def get_all_stage_health(self) -> Dict[str, CircuitBreakerState]:
         """
         Get health status for all registered stages
 

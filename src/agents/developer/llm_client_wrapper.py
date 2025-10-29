@@ -205,17 +205,17 @@ class LLMClientWrapper:
 
         # Add validation awareness to system prompt
         try:
-            # Estimate code complexity from prompt length if not provided
+            # Estimate code size from prompt length if not provided
             if code_complexity is None:
                 code_complexity = len(prompt) // 10
 
             # Get validation strategy for this task
             strategy = get_validation_strategy_for_task(
                 task_type=task_type,
-                code_complexity=code_complexity,
+                code_size=code_complexity,  # Function expects code_size parameter
                 is_critical=is_critical,
                 has_tests=has_tests,
-                dependencies_count=0,  # Not available at this level
+                dependencies=0,  # Not available at this level (function expects dependencies parameter)
                 logger=self.logger
             )
 

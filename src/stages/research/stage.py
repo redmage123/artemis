@@ -63,13 +63,14 @@ class ResearchStage(PipelineStage):
         self.storage = ExampleStorage(self.repository)
         self.formatter = SummaryFormatter()
 
-    def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def execute(self, card: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute research stage.
 
         WHY: Orchestrates the complete research pipeline before development.
 
         Args:
+            card: Kanban card containing task details
             context: Pipeline context with:
                 - card_id: Card ID
                 - task_title: Task title

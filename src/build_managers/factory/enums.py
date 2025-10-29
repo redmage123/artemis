@@ -60,3 +60,7 @@ class BuildSystem(Enum):
 
     # Lua build system
     LUA = "lua"
+
+    # 3D/Game engines
+    BLENDER = "blender"
+    UNREAL = "unreal"

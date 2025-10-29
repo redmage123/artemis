@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Standard Sequential Pipeline Execution Strategy.
 
@@ -8,13 +7,10 @@ PATTERNS: Strategy Pattern, Template Method Pattern.
 
 Dependencies: base_strategy, execution_context, datetime
 """
-
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-
 from artemis_stage_interface import PipelineStage
 from pipeline_observer import PipelineObservable
-
 from .base_strategy import PipelineStrategy
 from .execution_context import ExecutionContextManager
 
@@ -38,7 +34,9 @@ class StandardPipelineStrategy(PipelineStrategy):
     8. Testing
     """
 
-    def __init__(self, verbose: bool = True, observable: Optional[PipelineObservable] = None, adaptive_config: Optional[Any] = None, summary_mode: bool = True):
+    def __init__(self, verbose: bool=True, observable: Optional[
+        PipelineObservable]=None, adaptive_config: Optional[Any]=None,
+        summary_mode: bool=True):
         """
         Initialize standard strategy.
 
@@ -52,9 +50,29 @@ class StandardPipelineStrategy(PipelineStrategy):
         self.context_manager = ExecutionContextManager()
         self.adaptive_config = adaptive_config
         self.summary_mode = summary_mode
-        self.summary_display = None  # Will be initialized when logger is available
+        self.summary_display = None
 
-    def execute(self, stages: List[PipelineStage], context: Dict[str, Any]) -> Dict[str, Any]:
+    def _log_adaptive_config(self):
+        """Log adaptive configuration details."""
+        if self.verbose:
+            self._log(
+                f'🔧 Using adaptive config: {self.adaptive_config.profile} profile')
+            self._log(
+                f'   Parallel devs: {self.adaptive_config.max_parallel_developers}')
+            self._log(
+                f'   Validation: {self.adaptive_config.validation_level}')
+            self._log(
+                f'   Code review: {self.adaptive_config.code_review_depth}')
+            return
+
+        # Summary mode logging
+        if not self.summary_mode:
+            return
+
+        self._log(f'🔧 Using {self.adaptive_config.profile.upper()} profile')
+
+    def execute(self, stages: List[PipelineStage], context: Dict[str, Any]
+        ) ->Dict[str, Any]:
         """
         Execute all stages sequentially.
 
@@ -69,73 +87,44 @@ class StandardPipelineStrategy(PipelineStrategy):
             Execution result dict with status, results, duration
         """
         start_time = datetime.now()
-
-        # Inject adaptive config into context if available
         if self.adaptive_config:
             context['adaptive_config'] = self.adaptive_config
-
-            # Log based on verbosity mode
-            if self.verbose:
-                # Verbose mode: Show all details
-                self._log(f"🔧 Using adaptive config: {self.adaptive_config.profile} profile")
-                self._log(f"   Parallel devs: {self.adaptive_config.max_parallel_developers}")
-                self._log(f"   Validation: {self.adaptive_config.validation_level}")
-                self._log(f"   Code review: {self.adaptive_config.code_review_depth}")
-            elif self.summary_mode:
-                # Summary mode: Show key decisions only
-                self._log(f"🔧 Using {self.adaptive_config.profile.upper()} profile")
-
+            self._log_adaptive_config()
         if self.summary_mode and not self.verbose:
-            self._log(f"\n▶️  Starting pipeline ({len(stages)} stages)")
+            self._log(f'\n▶️  Starting pipeline ({len(stages)} stages)')
         else:
-            self._log(f"🎯 Starting STANDARD pipeline execution ({len(stages)} stages)")
-
+            self._log(
+                f'🎯 Starting STANDARD pipeline execution ({len(stages)} stages)'
+                )
         results = {}
-
         for i, stage in enumerate(stages, 1):
             stage_name = stage.__class__.__name__
             card_id = self.context_manager.get_card_id(context)
-
             if self.summary_mode and not self.verbose:
-                self._log(f"▶️  Stage {i}/{len(stages)}: {stage_name}")
+                self._log(f'▶️  Stage {i}/{len(stages)}: {stage_name}')
             else:
-                self._log(f"▶️  Stage {i}/{len(stages)}: {stage_name}", "STAGE")
-
-            # Notify stage started
-            self._notify_stage_started(card_id, stage_name, stage_number=i, total_stages=len(stages))
-
-            # Execute stage
+                self._log(f'▶️  Stage {i}/{len(stages)}: {stage_name}', 'STAGE'
+                    )
+            self._notify_stage_started(card_id, stage_name, stage_number=i,
+                total_stages=len(stages))
             stage_result = self._execute_stage(stage, context, stage_name)
-
-            # Guard: Check for execution failure
             if stage_result is None:
-                return self._build_exception_result(i, stage_name, "Stage execution returned None", results, start_time)
-
-            # Store result
+                return self._build_exception_result(i, stage_name,
+                    'Stage execution returned None', results, start_time)
             results[stage_name] = stage_result
-
-            # Update context with stage result
-            self.context_manager.update_context_from_result(context, stage_result)
-
-            # POST-SPRINT-PLANNING HOOK
-            self._handle_sprint_planning_hook(stage_name, stage_result, context)
-
-            # Check if stage succeeded
+            self.context_manager.update_context_from_result(context,
+                stage_result)
+            self._handle_sprint_planning_hook(stage_name, stage_result, context
+                )
             if not self.context_manager.is_stage_successful(stage_result):
-                return self._handle_stage_failure(i, stage_name, stage_result, card_id, results, start_time)
-
-            # Stage succeeded
-            self._handle_stage_success(i, stage_name, stage_result, card_id, context, start_time)
-
-        # All stages completed successfully
+                return self._handle_stage_failure(i, stage_name,
+                    stage_result, card_id, results, start_time)
+            self._handle_stage_success(i, stage_name, stage_result, card_id,
+                context, start_time)
         return self._build_success_result(len(stages), results, start_time)
 
-    def _execute_stage(
-        self,
-        stage: PipelineStage,
-        context: Dict[str, Any],
-        stage_name: str
-    ) -> Optional[Dict[str, Any]]:
+    def _execute_stage(self, stage: PipelineStage, context: Dict[str, Any],
+        stage_name: str) ->Optional[Dict[str, Any]]:
         """
         Execute a single stage with exception handling.
 
@@ -154,15 +143,11 @@ class StandardPipelineStrategy(PipelineStrategy):
             card = self.context_manager.get_card(context)
             return stage.execute(card, context)
         except Exception as e:
-            self._log(f"❌ Stage EXCEPTION: {stage_name} - {e}", "ERROR")
+            self._log(f'❌ Stage EXCEPTION: {stage_name} - {e}', 'ERROR')
             return None
 
-    def _handle_sprint_planning_hook(
-        self,
-        stage_name: str,
-        stage_result: Dict[str, Any],
-        context: Dict[str, Any]
-    ):
+    def _handle_sprint_planning_hook(self, stage_name: str, stage_result:
+        Dict[str, Any], context: Dict[str, Any]):
         """
         Handle post-sprint-planning complexity recalculation.
 
@@ -174,27 +159,19 @@ class StandardPipelineStrategy(PipelineStrategy):
             stage_result: Stage execution result
             context: Pipeline execution context
         """
-        if stage_name != "SprintPlanningStage":
+        if stage_name != 'SprintPlanningStage':
             return
-
-        if "total_story_points" not in stage_result:
+        if 'total_story_points' not in stage_result:
             return
-
         card = self.context_manager.get_card(context)
         if not card:
             return
+        self._recalculate_complexity_after_sprint_planning(card,
+            stage_result, context)
 
-        self._recalculate_complexity_after_sprint_planning(card, stage_result, context)
-
-    def _handle_stage_failure(
-        self,
-        stage_index: int,
-        stage_name: str,
-        stage_result: Dict[str, Any],
-        card_id: str,
-        results: Dict[str, Any],
-        start_time: datetime
-    ) -> Dict[str, Any]:
+    def _handle_stage_failure(self, stage_index: int, stage_name: str,
+        stage_result: Dict[str, Any], card_id: str, results: Dict[str, Any],
+        start_time: datetime) ->Dict[str, Any]:
         """
         Handle stage failure.
 
@@ -212,30 +189,18 @@ class StandardPipelineStrategy(PipelineStrategy):
         Returns:
             Failure result dict
         """
-        self._log(f"❌ Stage FAILED: {stage_name}", "ERROR")
+        self._log(f'❌ Stage FAILED: {stage_name}', 'ERROR')
+        error = Exception(stage_result.get('error', 'Unknown error'))
+        self._notify_stage_failed(card_id, stage_name, error, stage_result=
+            stage_result)
+        return self.context_manager.build_failure_result(stages_completed=
+            stage_index - 1, failed_stage=stage_name, error=stage_result.
+            get('error', 'Unknown error'), results=results, duration=(
+            datetime.now() - start_time).total_seconds(), strategy='standard')
 
-        # Notify stage failed
-        error = Exception(stage_result.get("error", "Unknown error"))
-        self._notify_stage_failed(card_id, stage_name, error, stage_result=stage_result)
-
-        return self.context_manager.build_failure_result(
-            stages_completed=stage_index - 1,
-            failed_stage=stage_name,
-            error=stage_result.get("error", "Unknown error"),
-            results=results,
-            duration=(datetime.now() - start_time).total_seconds(),
-            strategy="standard"
-        )
-
-    def _handle_stage_success(
-        self,
-        stage_index: int,
-        stage_name: str,
-        stage_result: Dict[str, Any],
-        card_id: str,
-        context: Dict[str, Any],
-        start_time: datetime
-    ):
+    def _handle_stage_success(self, stage_index: int, stage_name: str,
+        stage_result: Dict[str, Any], card_id: str, context: Dict[str, Any],
+        start_time: datetime):
         """
         Handle stage success.
 
@@ -251,25 +216,18 @@ class StandardPipelineStrategy(PipelineStrategy):
             start_time: Execution start time
         """
         if self.summary_mode and not self.verbose:
-            self._log(f"   ✅ Complete")
+            self._log(f'   ✅ Complete')
         else:
-            self._log(f"✅ Stage COMPLETE: {stage_name}", "SUCCESS")
-
-        # Notify stage completed
-        self._notify_stage_completed(card_id, stage_name, stage_result=stage_result)
-
-        # Save checkpoint (estimate start time as 5 seconds ago)
+            self._log(f'✅ Stage COMPLETE: {stage_name}', 'SUCCESS')
+        self._notify_stage_completed(card_id, stage_name, stage_result=
+            stage_result)
         stage_start = datetime.now() - timedelta(seconds=5)
-        self.context_manager.save_checkpoint(context, stage_name, stage_result, stage_start)
+        self.context_manager.save_checkpoint(context, stage_name,
+            stage_result, stage_start)
 
-    def _build_exception_result(
-        self,
-        stage_index: int,
-        stage_name: str,
-        error: str,
-        results: Dict[str, Any],
-        start_time: datetime
-    ) -> Dict[str, Any]:
+    def _build_exception_result(self, stage_index: int, stage_name: str,
+        error: str, results: Dict[str, Any], start_time: datetime) ->Dict[
+        str, Any]:
         """
         Build result for stage exception.
 
@@ -286,21 +244,13 @@ class StandardPipelineStrategy(PipelineStrategy):
         Returns:
             Failure result dict
         """
-        return self.context_manager.build_failure_result(
-            stages_completed=stage_index - 1,
-            failed_stage=stage_name,
-            error=error,
-            results=results,
-            duration=(datetime.now() - start_time).total_seconds(),
-            strategy="standard"
-        )
+        return self.context_manager.build_failure_result(stages_completed=
+            stage_index - 1, failed_stage=stage_name, error=error, results=
+            results, duration=(datetime.now() - start_time).total_seconds(),
+            strategy='standard')
 
-    def _build_success_result(
-        self,
-        total_stages: int,
-        results: Dict[str, Any],
-        start_time: datetime
-    ) -> Dict[str, Any]:
+    def _build_success_result(self, total_stages: int, results: Dict[str,
+        Any], start_time: datetime) ->Dict[str, Any]:
         """
         Build result for successful pipeline completion.
 
@@ -316,15 +266,10 @@ class StandardPipelineStrategy(PipelineStrategy):
             Success result dict
         """
         duration = (datetime.now() - start_time).total_seconds()
-
         if self.summary_mode and not self.verbose:
-            self._log(f"\n✅ Pipeline complete ({duration/60:.1f} minutes)")
+            self._log(f'\n✅ Pipeline complete ({duration / 60:.1f} minutes)')
         else:
-            self._log(f"🎉 Pipeline COMPLETE! ({duration:.1f}s)", "SUCCESS")
-
-        return self.context_manager.build_success_result(
-            stages_completed=total_stages,
-            results=results,
-            duration=duration,
-            strategy="standard"
-        )
+            self._log(f'🎉 Pipeline COMPLETE! ({duration:.1f}s)', 'SUCCESS')
+        return self.context_manager.build_success_result(stages_completed=
+            total_stages, results=results, duration=duration, strategy=
+            'standard')

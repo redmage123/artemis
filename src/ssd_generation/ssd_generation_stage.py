@@ -15,7 +15,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from artemis_stage_interface import PipelineStage, LoggerInterface
-from artemis_exceptions import PipelineStageError, wrap_exception
+from artemis_exceptions import PipelineStageError, create_wrapped_exception
 from llm_client import LLMClient
 from rag_agent import RAGAgent
 
@@ -211,7 +211,7 @@ class SSDGenerationStage(PipelineStage):
             error_msg = f"Failed to generate SSD: {str(e)}"
             if self.logger:
                 self.logger.log(f"❌ {error_msg}", "ERROR")
-            raise wrap_exception(e, PipelineStageError, "SSD Generation", error_msg)
+            raise create_wrapped_exception(e, PipelineStageError, error_msg)
 
     def _handle_skip(self, ssd_decision: Dict[str, Any]) -> Dict[str, Any]:
         """Handle SSD skip case"""

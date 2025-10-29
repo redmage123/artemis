@@ -1,0 +1,271 @@
+"""
+Content Generation Helper
+
+WHY: Generate domain-specific content by querying RAG/KG before code generation.
+     Fills the gap where agents generate structure but lack actual content.
+
+RESPONSIBILITY:
+- Query RAG for reference implementations
+- Query RAG for domain-specific information (features, architecture, etc.)
+- Extract patterns and content from similar tasks
+- Provide rich context to developers
+
+PATTERNS:
+- Strategy Pattern: Different content strategies for different task types
+- Template Method: Common content generation workflow
+- Repository Pattern: RAG as content repository
+"""
+
+from typing import Dict, List, Optional
+from rag_agent import RAGAgent
+from artemis_logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class ContentGenerationHelper:
+    """
+    Helper for generating domain-specific content using RAG/KG.
+
+    Usage:
+        helper = ContentGenerationHelper(rag_agent)
+        content = helper.generate_content_brief(task_description, requirements)
+        # Pass content to developer as additional context
+    """
+
+    def __init__(self, rag_agent: RAGAgent):
+        """
+        Initialize content generation helper.
+
+        Args:
+            rag_agent: RAGAgent for querying knowledge base
+        """
+        self.rag = rag_agent
+        logger.log("✅ Content Generation Helper initialized", "INFO")
+
+    def find_reference_implementations(
+        self,
+        task_type: str,
+        min_quality: float = 7.0,
+        top_k: int = 3
+    ) -> List[Dict]:
+        """
+        Find high-quality reference implementations.
+
+        Args:
+            task_type: Type of task (presentation, dashboard, api, etc.)
+            min_quality: Minimum quality score
+            top_k: Number of results
+
+        Returns:
+            List of reference implementations with content
+        """
+        query = f"high quality {task_type} reference implementation example best practices"
+
+        results = self.rag.search_code_examples(
+            query=query,
+            top_k=top_k
+        )
+
+        # Filter by quality
+        filtered = [
+            r for r in results
+            if r.get('metadata', {}).get('quality_score', 0) >= min_quality
+        ]
+
+        logger.log(f"🔍 Found {len(filtered)} reference implementations for {task_type}", "INFO")
+
+        return filtered
+
+    def extract_domain_knowledge(self, domain: str, top_k: int = 5) -> Dict:
+        """
+        Extract domain-specific knowledge (features, architecture, etc.).
+
+        Args:
+            domain: Domain name (e.g., "Artemis", "authentication", "dashboard")
+            top_k: Number of results to retrieve
+
+        Returns:
+            Dictionary with extracted knowledge
+        """
+        queries = [
+            f"{domain} features capabilities",
+            f"{domain} architecture components",
+            f"{domain} pipeline stages workflow"
+        ]
+
+        knowledge = {
+            'features': [],
+            'architecture': [],
+            'stages': [],
+            'examples': []
+        }
+
+        for query in queries:
+            results = self.rag.query_similar(
+                query_text=query,
+                top_k=top_k
+            )
+
+            for result in results:
+                content = result.get('content', '')
+                metadata = result.get('metadata', {})
+
+                # Extract features
+                if 'feature' in query.lower():
+                    knowledge['features'].append({
+                        'description': content[:300],
+                        'source': metadata.get('task_title', 'Unknown')
+                    })
+
+                # Extract architecture info
+                if 'architecture' in query.lower():
+                    knowledge['architecture'].append({
+                        'description': content[:300],
+                        'source': metadata.get('task_title', 'Unknown')
+                    })
+
+                # Extract stage/workflow info
+                if 'stage' in query.lower() or 'pipeline' in query.lower():
+                    knowledge['stages'].append({
+                        'description': content[:300],
+                        'source': metadata.get('task_title', 'Unknown')
+                    })
+
+        logger.log(f"📚 Extracted domain knowledge for {domain}:", "INFO")
+        logger.log(f"   Features: {len(knowledge['features'])}", "INFO")
+        logger.log(f"   Architecture: {len(knowledge['architecture'])}", "INFO")
+        logger.log(f"   Stages: {len(knowledge['stages'])}", "INFO")
+
+        return knowledge
+
+    def generate_content_brief(
+        self,
+        task_description: str,
+        requirements: Dict,
+        task_type: Optional[str] = None
+    ) -> str:
+        """
+        Generate content brief for developers.
+
+        This provides rich context beyond just requirements, including:
+        - Reference implementations to learn from
+        - Domain-specific knowledge
+        - Patterns and best practices
+
+        Args:
+            task_description: Task description
+            requirements: Parsed requirements
+            task_type: Type of task (optional, will infer if not provided)
+
+        Returns:
+            Formatted content brief as string
+        """
+        logger.log("📝 Generating content brief...", "INFO")
+
+        # Infer task type if not provided
+        if not task_type:
+            task_type = self._infer_task_type(task_description, requirements)
+
+        # Find reference implementations
+        references = self.find_reference_implementations(task_type, min_quality=7.0, top_k=2)
+
+        # Extract domain knowledge
+        domain = self._extract_domain(task_description)
+        knowledge = self.extract_domain_knowledge(domain, top_k=3) if domain else None
+
+        # Build content brief
+        brief = f"""
+# CONTENT GENERATION BRIEF
+
+## Task Overview
+{task_description}
+
+## Task Type
+{task_type}
+
+"""
+
+        # Add reference implementations
+        if references:
+            brief += "## Reference Implementations\n\n"
+            brief += "Learn from these high-quality examples:\n\n"
+            for i, ref in enumerate(references, 1):
+                metadata = ref.get('metadata', {})
+                brief += f"{i}. **{metadata.get('file_name', 'Unknown')}**\n"
+                brief += f"   - Quality: {metadata.get('quality_score', 'N/A')}/10\n"
+                brief += f"   - Lines: {metadata.get('lines_of_code', 'N/A')}\n"
+                brief += f"   - Description: {metadata.get('description', 'N/A')[:200]}...\n\n"
+
+        # Add domain knowledge
+        if knowledge and (knowledge['features'] or knowledge['architecture'] or knowledge['stages']):
+            brief += f"## Domain Knowledge: {domain}\n\n"
+
+            if knowledge['features']:
+                brief += "### Key Features to Include:\n"
+                for i, feat in enumerate(knowledge['features'][:5], 1):
+                    brief += f"{i}. {feat['description'][:150]}...\n"
+                brief += "\n"
+
+            if knowledge['architecture']:
+                brief += "### Architecture Information:\n"
+                for i, arch in enumerate(knowledge['architecture'][:3], 1):
+                    brief += f"{i}. {arch['description'][:150]}...\n"
+                brief += "\n"
+
+            if knowledge['stages']:
+                brief += "### Pipeline Stages:\n"
+                for i, stage in enumerate(knowledge['stages'][:5], 1):
+                    brief += f"{i}. {stage['description'][:150]}...\n"
+                brief += "\n"
+
+        # Add requirements
+        brief += "## Requirements\n\n"
+        if 'functional' in requirements:
+            brief += f"**Functional Requirements:** {len(requirements['functional'])}\n"
+        if 'non_functional' in requirements:
+            brief += f"**Non-Functional Requirements:** {len(requirements['non_functional'])}\n"
+        if 'acceptance_criteria' in requirements:
+            brief += f"**Acceptance Criteria:** Present\n"
+
+        brief += "\n## Implementation Guidance\n\n"
+        brief += "1. Study the reference implementations above\n"
+        brief += "2. Incorporate domain-specific features and patterns\n"
+        brief += "3. Generate ACTUAL CONTENT, not generic placeholders\n"
+        brief += "4. Aim for similar quality and completeness as references\n"
+        brief += "5. Include ALL required features from domain knowledge\n"
+
+        logger.log("✅ Content brief generated", "INFO")
+
+        return brief
+
+    def _infer_task_type(self, task_description: str, requirements: Dict) -> str:
+        """Infer task type from description and requirements."""
+        desc_lower = task_description.lower()
+
+        if 'presentation' in desc_lower or 'demo' in desc_lower:
+            return 'interactive_presentation'
+        elif 'dashboard' in desc_lower:
+            return 'dashboard'
+        elif 'api' in desc_lower or 'endpoint' in desc_lower:
+            return 'api'
+        elif 'ui' in desc_lower or 'interface' in desc_lower:
+            return 'user_interface'
+        else:
+            return 'general'
+
+    def _extract_domain(self, task_description: str) -> Optional[str]:
+        """Extract domain name from task description."""
+        desc_lower = task_description.lower()
+
+        # Common domain keywords
+        domains = [
+            'artemis', 'authentication', 'authorization', 'dashboard',
+            'presentation', 'api', 'database', 'frontend', 'backend'
+        ]
+
+        for domain in domains:
+            if domain in desc_lower:
+                return domain.title()
+
+        return None

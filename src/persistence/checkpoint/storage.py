@@ -1,36 +1,13 @@
-#!/usr/bin/env python3
-"""
-Checkpoint Storage Backend
-
-WHY: Abstracts checkpoint persistence operations behind a repository interface,
-     enabling different storage backends (filesystem, database, cloud) while
-     maintaining consistent access patterns.
-
-RESPONSIBILITY:
-    - Define storage repository interface
-    - Implement filesystem-based storage
-    - Handle checkpoint serialization/deserialization
-    - Manage checkpoint file operations
-
-PATTERNS:
-    - Repository Pattern: Abstract data access behind interface
-    - Strategy Pattern: Pluggable storage backends
-    - Single Responsibility: Each storage implementation handles one backend type
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('storage')
+'\nCheckpoint Storage Backend\n\nWHY: Abstracts checkpoint persistence operations behind a repository interface,\n     enabling different storage backends (filesystem, database, cloud) while\n     maintaining consistent access patterns.\n\nRESPONSIBILITY:\n    - Define storage repository interface\n    - Implement filesystem-based storage\n    - Handle checkpoint serialization/deserialization\n    - Manage checkpoint file operations\n\nPATTERNS:\n    - Repository Pattern: Abstract data access behind interface\n    - Strategy Pattern: Pluggable storage backends\n    - Single Responsibility: Each storage implementation handles one backend type\n'
 import json
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-
 from .models import PipelineCheckpoint, CheckpointStatus
-
-
-# ============================================================================
-# REPOSITORY INTERFACE
-# ============================================================================
 
 class CheckpointRepository(ABC):
     """
@@ -99,11 +76,6 @@ class CheckpointRepository(ABC):
         """
         pass
 
-
-# ============================================================================
-# FILESYSTEM STORAGE IMPLEMENTATION
-# ============================================================================
-
 class FilesystemCheckpointRepository(CheckpointRepository):
     """
     Filesystem-based checkpoint storage implementation
@@ -112,7 +84,7 @@ class FilesystemCheckpointRepository(CheckpointRepository):
     using card ID as the filename.
     """
 
-    def __init__(self, checkpoint_dir: Optional[str] = None):
+    def __init__(self, checkpoint_dir: Optional[str]=None):
         """
         Initialize filesystem repository
 
@@ -121,11 +93,7 @@ class FilesystemCheckpointRepository(CheckpointRepository):
                           (defaults to env var or repo path)
         """
         if checkpoint_dir is None:
-            checkpoint_dir = os.getenv(
-                "ARTEMIS_CHECKPOINT_DIR",
-                "../../.artemis_data/checkpoints"
-            )
-
+            checkpoint_dir = os.getenv('ARTEMIS_CHECKPOINT_DIR', '../../.artemis_data/checkpoints')
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
@@ -140,12 +108,11 @@ class FilesystemCheckpointRepository(CheckpointRepository):
             IOError: If file write fails
         """
         checkpoint_file = self._get_checkpoint_path(checkpoint.card_id)
-
         try:
             with open(checkpoint_file, 'w') as f:
                 json.dump(checkpoint.to_dict(), f, indent=2)
         except IOError as e:
-            raise IOError(f"Failed to save checkpoint: {e}") from e
+            raise IOError(f'Failed to save checkpoint: {e}') from e
 
     def load(self, card_id: str) -> Optional[PipelineCheckpoint]:
         """
@@ -159,16 +126,14 @@ class FilesystemCheckpointRepository(CheckpointRepository):
         """
         if not self.exists(card_id):
             return None
-
         checkpoint_file = self._get_checkpoint_path(card_id)
-
         try:
             with open(checkpoint_file, 'r') as f:
                 data = json.load(f)
             return PipelineCheckpoint.from_dict(data)
         except (IOError, json.JSONDecodeError, KeyError) as e:
-            # Log error but return None to indicate load failure
-            print(f"Warning: Failed to load checkpoint for {card_id}: {e}")
+            
+            logger.log(f'Warning: Failed to load checkpoint for {card_id}: {e}', 'INFO')
             return None
 
     def exists(self, card_id: str) -> bool:
@@ -196,9 +161,7 @@ class FilesystemCheckpointRepository(CheckpointRepository):
         """
         if not self.exists(card_id):
             return False
-
         checkpoint_file = self._get_checkpoint_path(card_id)
-
         try:
             checkpoint_file.unlink()
             return True
@@ -212,7 +175,7 @@ class FilesystemCheckpointRepository(CheckpointRepository):
         Returns:
             List of card IDs with checkpoints
         """
-        checkpoint_files = self.checkpoint_dir.glob("*.json")
+        checkpoint_files = self.checkpoint_dir.glob('*.json')
         return [f.stem for f in checkpoint_files]
 
     def _get_checkpoint_path(self, card_id: str) -> Path:
@@ -225,12 +188,7 @@ class FilesystemCheckpointRepository(CheckpointRepository):
         Returns:
             Path to checkpoint file
         """
-        return self.checkpoint_dir / f"{card_id}.json"
-
-
-# ============================================================================
-# STORAGE VALIDATION
-# ============================================================================
+        return self.checkpoint_dir / f'{card_id}.json'
 
 class CheckpointValidator:
     """
@@ -252,19 +210,13 @@ class CheckpointValidator:
         Returns:
             True if checkpoint can be resumed
         """
-        # Guard: Checkpoint must not be completed
         if checkpoint.status == CheckpointStatus.COMPLETED:
             return False
-
-        # Guard: Checkpoint must be in resumable state
         resumable_states = [CheckpointStatus.ACTIVE, CheckpointStatus.PAUSED]
         if checkpoint.status not in resumable_states:
             return False
-
-        # Guard: Must have valid card ID
         if not checkpoint.card_id:
             return False
-
         return True
 
     @staticmethod
@@ -278,29 +230,13 @@ class CheckpointValidator:
         Returns:
             True if valid
         """
-        required_fields = [
-            "checkpoint_id",
-            "card_id",
-            "status",
-            "created_at",
-            "updated_at"
-        ]
-
+        required_fields = ['checkpoint_id', 'card_id', 'status', 'created_at', 'updated_at']
         for field in required_fields:
             if field not in data:
                 return False
-
         return True
 
-
-# ============================================================================
-# FACTORY FUNCTION
-# ============================================================================
-
-def create_checkpoint_repository(
-    storage_type: str = "filesystem",
-    **kwargs
-) -> CheckpointRepository:
+def create_checkpoint_repository(storage_type: str='filesystem', **kwargs) -> CheckpointRepository:
     """
     Factory function to create checkpoint repository
 
@@ -314,15 +250,8 @@ def create_checkpoint_repository(
     Raises:
         ValueError: If storage type is unknown
     """
-    storage_types = {
-        "filesystem": lambda: FilesystemCheckpointRepository(
-            checkpoint_dir=kwargs.get("checkpoint_dir")
-        ),
-    }
-
+    storage_types = {'filesystem': lambda: FilesystemCheckpointRepository(checkpoint_dir=kwargs.get('checkpoint_dir'))}
     factory = storage_types.get(storage_type)
-
     if not factory:
-        raise ValueError(f"Unknown storage type: {storage_type}")
-
+        raise ValueError(f'Unknown storage type: {storage_type}')
     return factory()

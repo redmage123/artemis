@@ -1,42 +1,15 @@
-#!/usr/bin/env python3
-"""
-LLM Client - Backward Compatibility Wrapper
-
-WHY: Maintain backward compatibility while using modular implementation.
-RESPONSIBILITY: Re-export all components from llm package.
-PATTERNS: Facade Pattern, Re-export Pattern.
-
-Single Responsibility: Provide backward-compatible interface to refactored code
-Open/Closed: Implementation changes don't affect existing imports
-"""
-
-# Re-export all components from llm package for backward compatibility
-from llm.llm_models import (
-    LLMProvider,
-    LLMMessage,
-    LLMResponse
-)
-
+from artemis_logger import get_logger
+logger = get_logger('llm_client')
+"\nLLM Client - Backward Compatibility Wrapper\n\nWHY: Maintain backward compatibility while using modular implementation.\nRESPONSIBILITY: Re-export all components from llm package.\nPATTERNS: Facade Pattern, Re-export Pattern.\n\nSingle Responsibility: Provide backward-compatible interface to refactored code\nOpen/Closed: Implementation changes don't affect existing imports\n"
+from llm.llm_models import LLMProvider, LLMMessage, LLMResponse
 from llm.llm_interface import LLMClientInterface
-
 from llm.openai_client import OpenAIClient
 from llm.anthropic_client import AnthropicClient
-
 from llm.llm_factory import LLMClientFactory
-
 from llm.stream_processor import StreamProcessor
-
 from typing import Optional
 
-
-# ============================================================================
-# CONVENIENCE FUNCTIONS
-# ============================================================================
-
-def create_llm_client(
-    provider: str = "openai",
-    api_key: Optional[str] = None
-) -> LLMClientInterface:
+def create_llm_client(provider: str='openai', api_key: Optional[str]=None) -> LLMClientInterface:
     """
     Convenience function to create LLM client
 
@@ -61,8 +34,6 @@ def create_llm_client(
     """
     return LLMClientFactory.create_from_string(provider, api_key)
 
-
-# Backwards compatibility wrapper
 class LLMClient:
     """
     Backwards compatibility wrapper
@@ -73,6 +44,7 @@ class LLMClient:
 
     Provides both type compatibility (for isinstance checks) and factory methods
     """
+
     @staticmethod
     def create_from_env() -> LLMClientInterface:
         """
@@ -83,91 +55,70 @@ class LLMClient:
         return LLMClientFactory.create_from_env()
 
     @staticmethod
-    def create(provider: LLMProvider, api_key: Optional[str] = None) -> LLMClientInterface:
+    def create(provider: LLMProvider, api_key: Optional[str]=None) -> LLMClientInterface:
         """
         Create LLM client
 
         WHY: Backward compatibility for existing code.
         """
         return LLMClientFactory.create(provider, api_key)
-
-
-# ============================================================================
-# MAIN - TESTING
-# ============================================================================
-
-if __name__ == "__main__":
-    """Test LLM client backward compatibility"""
+if __name__ == '__main__':
+    'Test LLM client backward compatibility'
     import sys
     from artemis_exceptions import wrap_exception, LLMClientError
-
-    # Test with OpenAI
-    print("Testing OpenAI client...")
+    
+    logger.log('Testing OpenAI client...', 'INFO')
     try:
-        openai_client = create_llm_client("openai")
-        print(f"✅ OpenAI client created")
-        print(f"Available models: {', '.join(openai_client.get_available_models()[:3])}...")
-
-        # Test completion
-        messages = [
-            LLMMessage(role="system", content="You are a helpful assistant."),
-            LLMMessage(role="user", content="Say 'Hello from OpenAI!' and nothing else.")
-        ]
-
+        openai_client = create_llm_client('openai')
+        
+        logger.log(f'✅ OpenAI client created', 'INFO')
+        
+        logger.log(f"Available models: {', '.join(openai_client.get_available_models()[:3])}...", 'INFO')
+        messages = [LLMMessage(role='system', content='You are a helpful assistant.'), LLMMessage(role='user', content="Say 'Hello from OpenAI!' and nothing else.")]
         response = openai_client.complete(messages, max_tokens=100)
-        print(f"✅ Response: {response.content}")
-        print(f"   Model: {response.model}")
-        print(f"   Tokens: {response.usage['total_tokens']}")
+        
+        logger.log(f'✅ Response: {response.content}', 'INFO')
+        
+        logger.log(f'   Model: {response.model}', 'INFO')
+        
+        logger.log(f"   Tokens: {response.usage['total_tokens']}", 'INFO')
     except Exception as e:
-        error = wrap_exception(
-            e,
-            LLMClientError,
-            "OpenAI test failed",
-            {"provider": "openai"}
-        )
-        print(f"❌ OpenAI test failed: {error}")
-
-    print("\n" + "="*60 + "\n")
-
-    # Test with Anthropic
-    print("Testing Anthropic client...")
+        error = wrap_exception(e, LLMClientError, 'OpenAI test failed', {'provider': 'openai'})
+        
+        logger.log(f'❌ OpenAI test failed: {error}', 'INFO')
+    
+    logger.log('\n' + '=' * 60 + '\n', 'INFO')
+    
+    logger.log('Testing Anthropic client...', 'INFO')
     try:
-        anthropic_client = create_llm_client("anthropic")
-        print(f"✅ Anthropic client created")
-        print(f"Available models: {', '.join(anthropic_client.get_available_models()[:3])}...")
-
-        # Test completion
-        messages = [
-            LLMMessage(role="system", content="You are a helpful assistant."),
-            LLMMessage(role="user", content="Say 'Hello from Anthropic!' and nothing else.")
-        ]
-
+        anthropic_client = create_llm_client('anthropic')
+        
+        logger.log(f'✅ Anthropic client created', 'INFO')
+        
+        logger.log(f"Available models: {', '.join(anthropic_client.get_available_models()[:3])}...", 'INFO')
+        messages = [LLMMessage(role='system', content='You are a helpful assistant.'), LLMMessage(role='user', content="Say 'Hello from Anthropic!' and nothing else.")]
         response = anthropic_client.complete(messages, max_tokens=100)
-        print(f"✅ Response: {response.content}")
-        print(f"   Model: {response.model}")
-        print(f"   Tokens: {response.usage['total_tokens']}")
+        
+        logger.log(f'✅ Response: {response.content}', 'INFO')
+        
+        logger.log(f'   Model: {response.model}', 'INFO')
+        
+        logger.log(f"   Tokens: {response.usage['total_tokens']}", 'INFO')
     except Exception as e:
-        error = wrap_exception(
-            e,
-            LLMClientError,
-            "Anthropic test failed",
-            {"provider": "anthropic"}
-        )
-        print(f"❌ Anthropic test failed: {error}")
-
-    print("\n" + "="*60 + "\n")
-
-    # Test backward compatibility with LLMClient class
-    print("Testing backward compatibility (LLMClient.create_from_env())...")
+        error = wrap_exception(e, LLMClientError, 'Anthropic test failed', {'provider': 'anthropic'})
+        
+        logger.log(f'❌ Anthropic test failed: {error}', 'INFO')
+    
+    logger.log('\n' + '=' * 60 + '\n', 'INFO')
+    
+    logger.log('Testing backward compatibility (LLMClient.create_from_env())...', 'INFO')
     try:
         client = LLMClient.create_from_env()
-        print(f"✅ LLMClient.create_from_env() works")
-        print(f"Available models: {', '.join(client.get_available_models()[:3])}...")
+        
+        logger.log(f'✅ LLMClient.create_from_env() works', 'INFO')
+        
+        logger.log(f"Available models: {', '.join(client.get_available_models()[:3])}...", 'INFO')
     except Exception as e:
-        error = wrap_exception(
-            e,
-            LLMClientError,
-            "Backward compatibility test failed",
-            {}
-        )
-        print(f"❌ Backward compatibility test failed: {error}")
+        error = wrap_exception(e, LLMClientError, 'Backward compatibility test failed', {})
+        
+        logger.log(f'❌ Backward compatibility test failed: {error}', 'INFO')

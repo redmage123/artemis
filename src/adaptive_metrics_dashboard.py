@@ -1,0 +1,296 @@
+"""
+Adaptive Pipeline Metrics Dashboard
+
+WHY: Provide visibility into adaptive pipeline performance and time savings
+RESPONSIBILITY: Display metrics, trends, and insights about pipeline selection
+PATTERNS: Command-line dashboard with colored output
+
+USAGE:
+    # Show current metrics
+    python3 adaptive_metrics_dashboard.py
+
+    # Show recent selections
+    python3 adaptive_metrics_dashboard.py --recent 20
+
+    # Show detailed report
+    python3 adaptive_metrics_dashboard.py --detailed
+"""
+import argparse
+import sys
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any
+sys.path.insert(0, str(Path(__file__).parent))
+from artemis_logger import get_logger
+from redis_metrics import get_adaptive_metrics, get_recent_selections
+logger = get_logger(__name__)
+
+
+def print_header(title: str):
+    """Print a formatted header."""
+    logger.log('\n' + '=' * 80, 'INFO')
+    logger.log(f'  {title}', 'INFO')
+    logger.log('=' * 80 + '\n', 'INFO')
+
+
+def print_section(title: str):
+    """Print a section header."""
+    logger.log(f'\n{title}', 'INFO')
+    logger.log('-' * len(title), 'INFO')
+
+
+def format_percentage(value: float) ->str:
+    """Format percentage with color."""
+    return f'{value:.1f}%'
+
+
+def format_duration(minutes: float) ->str:
+    """Format duration in human-readable format."""
+    if minutes < 60:
+        return f'{minutes:.1f} min'
+    else:
+        hours = minutes / 60
+        return f'{hours:.1f} hrs ({minutes:.0f} min)'
+
+
+def _log_fast_path_insights(fast_pct: float):
+    """Log insights about fast path usage percentage."""
+    if fast_pct > 30:
+        logger.log(
+            f'   ✅ Excellent: {fast_pct:.1f}% of tasks use FAST path',
+            'INFO')
+        logger.log("      You're avoiding over-engineering simple tasks!",
+            'INFO')
+        return
+
+    if fast_pct > 15:
+        logger.log(f'   👍 Good: {fast_pct:.1f}% of tasks use FAST path',
+            'INFO')
+        return
+
+    logger.log(f'   ⚠️  Only {fast_pct:.1f}% of tasks use FAST path',
+        'INFO')
+    logger.log(
+        '      Consider breaking down complex tasks or reviewing complexity detection.'
+        , 'INFO')
+
+
+def _log_time_saved_insights(time_saved: float):
+    """Log insights about time saved."""
+    if time_saved <= 0:
+        return
+
+    logger.log(f'\n   💰 Time Saved: {format_duration(time_saved)}', 'INFO')
+
+    if time_saved > 500:
+        logger.log(
+            '      Outstanding time savings! Adaptive pipeline is highly effective.'
+            , 'INFO')
+        return
+
+    if time_saved > 100:
+        logger.log(
+            '      Great time savings! Adaptive pipeline is working well.',
+            'INFO')
+        return
+
+    logger.log(
+        '      Modest time savings. Monitor as more tasks are completed.'
+        , 'INFO')
+
+
+def display_overview(metrics: Dict[str, Any]):
+    """Display overview metrics."""
+    print_header('🎯 ADAPTIVE PIPELINE METRICS DASHBOARD')
+    if not metrics.get('enabled'):
+        logger.log('❌ Redis not available - Metrics tracking disabled', 'ERROR'
+            )
+        logger.log('   Start Redis with: docker run -d -p 6379:6379 redis',
+            'INFO')
+        return
+    if 'error' in metrics:
+        logger.log(f"❌ Error retrieving metrics: {metrics['error']}", 'ERROR')
+        return
+    total = metrics['total_selections']
+    if total == 0:
+        logger.log('📊 No adaptive pipeline selections recorded yet.', 'INFO')
+        logger.log('   Run a pipeline with requirements file to see metrics.\n'
+            , 'INFO')
+        return
+    print_section('📊 OVERALL STATISTICS')
+    logger.log(f'   Total Selections: {total}', 'INFO')
+    logger.log(
+        f"   Total Estimated Time: {format_duration(metrics['total_estimated_duration_minutes'])}"
+        , 'INFO')
+    logger.log(
+        f"   Avg Time Per Task: {format_duration(metrics['avg_estimated_duration_minutes'])}"
+        , 'INFO')
+    logger.log(
+        f"   Time Saved: {format_duration(metrics['time_saved_minutes'])} ({format_duration(metrics['time_saved_hours'])})"
+        , 'INFO')
+    print_section('🚀 PIPELINE PATH DISTRIBUTION')
+    paths = metrics.get('paths', {})
+    if paths:
+        logger.log(
+            f"\n   {'Path':<12} {'Count':<8} {'%':<8} {'Avg Duration':<15} {'Avg Stages'}"
+            , 'INFO')
+        logger.log(f"   {'-' * 12} {'-' * 8} {'-' * 8} {'-' * 15} {'-' * 10}",
+            'INFO')
+        for path_name in ['fast', 'medium', 'full']:
+            if path_name in paths:
+                path_data = paths[path_name]
+                emoji = {'fast': '⚡', 'medium': '⚙️', 'full': '🏗️'}[path_name]
+                logger.log(
+                    f"   {emoji} {path_name.upper():<9} {path_data['count']:<8} {format_percentage(path_data['percentage']):<8} {format_duration(path_data['avg_estimated_duration']):<15} {path_data['avg_stages']:.1f}"
+                    , 'INFO')
+    else:
+        logger.log('   No path data available', 'INFO')
+    print_section('🔍 TASK COMPLEXITY DISTRIBUTION')
+    complexities = metrics.get('complexities', {})
+    if complexities:
+        logger.log(f"\n   {'Complexity':<12} {'Count':<8} {'%'}", 'INFO')
+        logger.log(f"   {'-' * 12} {'-' * 8} {'-' * 8}", 'INFO')
+        for complexity_name in ['simple', 'medium', 'complex']:
+            if complexity_name in complexities:
+                comp_data = complexities[complexity_name]
+                emoji = {'simple': '✨', 'medium': '⚖️', 'complex': '🎯'}[
+                    complexity_name]
+                logger.log(
+                    f"   {emoji} {complexity_name.capitalize():<9} {comp_data['count']:<8} {format_percentage(comp_data['percentage'])}"
+                    , 'INFO')
+    else:
+        logger.log('   No complexity data available', 'INFO')
+    print_section('💡 EFFICIENCY INSIGHTS')
+    if 'fast' in paths and 'full' in paths:
+        fast_pct = paths['fast']['percentage']
+        _log_fast_path_insights(fast_pct)
+    time_saved = metrics['time_saved_minutes']
+    _log_time_saved_insights(time_saved)
+
+
+def display_recent_selections(limit: int=10):
+    """Display recent pipeline selections."""
+    print_section(f'📋 RECENT SELECTIONS (Last {limit})')
+    selections = get_recent_selections(limit=limit)
+    if not selections:
+        logger.log('   No recent selections found.', 'INFO')
+        return
+    logger.log(
+        f"\n   {'Timestamp':<20} {'Task':<30} {'Complexity':<12} {'Path':<8} {'Duration'}"
+        , 'INFO')
+    logger.log(f"   {'-' * 20} {'-' * 30} {'-' * 12} {'-' * 8} {'-' * 10}",
+        'INFO')
+    for selection in selections:
+        timestamp = selection.get('timestamp', 'N/A')[:19]
+        title = selection.get('title', 'Unknown')[:28]
+        complexity = selection.get('complexity', 'N/A')
+        path = selection.get('path', 'N/A')
+        duration = selection.get('estimated_duration_minutes', 0)
+        complexity_emoji = {'simple': '✨', 'medium': '⚖️', 'complex': '🎯'}.get(
+            complexity, '?')
+        path_emoji = {'fast': '⚡', 'medium': '⚙️', 'full': '🏗️'}.get(path, '?')
+        logger.log(
+            f'   {timestamp:<20} {title:<30} {complexity_emoji} {complexity:<9} {path_emoji} {path.upper():<6} {format_duration(duration)}'
+            , 'INFO')
+
+
+def _log_path_recommendations(paths: Dict[str, Any], total: int):
+    """Log recommendations based on path usage patterns."""
+    if not ('fast' in paths and 'full' in paths):
+        return
+
+    fast_count = paths['fast']['count']
+    full_count = paths['full']['count']
+
+    if full_count / total > 0.5:
+        logger.log('   ⚠️  Over 50% of tasks use FULL path', 'INFO')
+        logger.log('      Consider:', 'INFO')
+        logger.log('      1. Breaking down large tasks into smaller ones',
+            'INFO')
+        logger.log('      2. Reviewing complexity detection thresholds',
+            'INFO')
+        logger.log(
+            '      3. Creating separate cards for independent features',
+            'INFO')
+
+    if fast_count / total > 0.4:
+        logger.log('   ✅ Strong adoption of FAST path for simple tasks',
+            'INFO')
+        logger.log(
+            '      Your task breakdown and complexity detection are working well!'
+            , 'INFO')
+
+
+def _log_duration_recommendations(avg_duration: float):
+    """Log recommendations based on average task duration."""
+    if avg_duration < 30:
+        logger.log('\n   ✅ Average task duration is optimal (< 30 min)', 'INFO')
+        logger.log('      Tasks are well-sized for quick iteration.', 'INFO')
+        return
+
+    if avg_duration < 60:
+        logger.log('\n   👍 Average task duration is reasonable (30-60 min)',
+            'INFO')
+        return
+
+    logger.log('\n   ⚠️  Average task duration is high (> 60 min)', 'INFO')
+    logger.log('      Consider breaking tasks into smaller chunks.', 'INFO')
+
+
+def display_detailed_report():
+    """Display detailed metrics report."""
+    display_overview(get_adaptive_metrics())
+    display_recent_selections(limit=20)
+    print_section('📈 RECOMMENDATIONS')
+    metrics = get_adaptive_metrics()
+    if not metrics.get('enabled') or 'error' in metrics:
+        return
+    paths = metrics.get('paths', {})
+    total = metrics['total_selections']
+    _log_path_recommendations(paths, total)
+    avg_duration = metrics.get('avg_estimated_duration_minutes', 0)
+    _log_duration_recommendations(avg_duration)
+    logger.log('\n' + '=' * 80 + '\n', 'INFO')
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(description=
+        'Adaptive Pipeline Metrics Dashboard', formatter_class=argparse.
+        RawDescriptionHelpFormatter, epilog=
+        """
+Examples:
+  # Show overview
+  %(prog)s
+
+  # Show recent selections
+  %(prog)s --recent 20
+
+  # Show detailed report
+  %(prog)s --detailed
+        """
+        )
+    parser.add_argument('--recent', type=int, metavar='N', help=
+        'Show N recent selections')
+    parser.add_argument('--detailed', action='store_true', help=
+        'Show detailed report with recommendations')
+    args = parser.parse_args()
+    try:
+        if args.detailed:
+            display_detailed_report()
+        elif args.recent:
+            print_header('🎯 ADAPTIVE PIPELINE METRICS')
+            display_recent_selections(limit=args.recent)
+            logger.log('\n' + '=' * 80 + '\n', 'INFO')
+        else:
+            display_overview(get_adaptive_metrics())
+            logger.log('\n' + '=' * 80 + '\n', 'INFO')
+    except Exception as e:
+        logger.log(f'❌ Error: {e}', 'ERROR')
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,33 +1,9 @@
-#!/usr/bin/env python3
-"""
-Dependency Management Workflow Handlers
-
-WHY:
-Handles package dependency issues including missing packages,
-version conflicts, and import errors.
-
-RESPONSIBILITY:
-- Install missing dependencies
-- Resolve version conflicts
-- Fix import errors
-- Manage package installations
-
-PATTERNS:
-- Strategy Pattern: Different dependency resolution strategies
-- Guard Clauses: Validate package names before installation
-- Command Builder: Construct pip install commands dynamically
-
-INTEGRATION:
-- Extends: WorkflowHandler base class
-- Used by: WorkflowHandlerFactory for dependency actions
-- Executes: pip for package management
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('dependency_handlers')
+'\nDependency Management Workflow Handlers\n\nWHY:\nHandles package dependency issues including missing packages,\nversion conflicts, and import errors.\n\nRESPONSIBILITY:\n- Install missing dependencies\n- Resolve version conflicts\n- Fix import errors\n- Manage package installations\n\nPATTERNS:\n- Strategy Pattern: Different dependency resolution strategies\n- Guard Clauses: Validate package names before installation\n- Command Builder: Construct pip install commands dynamically\n\nINTEGRATION:\n- Extends: WorkflowHandler base class\n- Used by: WorkflowHandlerFactory for dependency actions\n- Executes: pip for package management\n'
 import subprocess
 from typing import Dict, Any, List
-
 from workflows.handlers.base_handler import WorkflowHandler
-
 
 class InstallMissingDependencyHandler(WorkflowHandler):
     """
@@ -38,23 +14,18 @@ class InstallMissingDependencyHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        package = context.get("package")
+        package = context.get('package')
         if not package:
             return False
-
         try:
-            subprocess.run(
-                ["pip", "install", package],
-                check=True,
-                capture_output=True,
-                timeout=300
-            )
-            print(f"[Workflow] Installed dependency: {package}")
+            subprocess.run(['pip', 'install', package], check=True, capture_output=True, timeout=300)
+            
+            logger.log(f'[Workflow] Installed dependency: {package}', 'INFO')
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to install {package}: {e}")
+            
+            logger.log(f'[Workflow] Failed to install {package}: {e}', 'INFO')
             return False
-
 
 class ResolveVersionConflictHandler(WorkflowHandler):
     """
@@ -66,31 +37,26 @@ class ResolveVersionConflictHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        package = context.get("package")
-        version = context.get("version")
-
+        package = context.get('package')
+        version = context.get('version')
         return self._install_package_version(package, version)
 
     def _install_package_version(self, package: str, version: str) -> bool:
         try:
             install_cmd = self._build_install_command(package, version)
-            subprocess.run(
-                install_cmd,
-                check=True,
-                capture_output=True,
-                timeout=300
-            )
-            print(f"[Workflow] Resolved version conflict for {package}")
+            subprocess.run(install_cmd, check=True, capture_output=True, timeout=300)
+            
+            logger.log(f'[Workflow] Resolved version conflict for {package}', 'INFO')
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to resolve version conflict: {e}")
+            
+            logger.log(f'[Workflow] Failed to resolve version conflict: {e}', 'INFO')
             return False
 
     def _build_install_command(self, package: str, version: str) -> List[str]:
         if version:
-            return ["pip", "install", f"{package}=={version}"]
-        return ["pip", "install", "--upgrade", package]
-
+            return ['pip', 'install', f'{package}=={version}']
+        return ['pip', 'install', '--upgrade', package]
 
 class FixImportErrorHandler(WorkflowHandler):
     """
@@ -101,17 +67,13 @@ class FixImportErrorHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        module_name = context.get("module")
-
+        module_name = context.get('module')
         try:
-            subprocess.run(
-                ["pip", "install", module_name],
-                check=True,
-                capture_output=True,
-                timeout=300
-            )
-            print(f"[Workflow] Fixed import error for {module_name}")
+            subprocess.run(['pip', 'install', module_name], check=True, capture_output=True, timeout=300)
+            
+            logger.log(f'[Workflow] Fixed import error for {module_name}', 'INFO')
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to fix import error: {e}")
+            
+            logger.log(f'[Workflow] Failed to fix import error: {e}', 'INFO')
             return False

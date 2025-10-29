@@ -1,27 +1,9 @@
-#!/usr/bin/env python3
-"""
-Module: Code Transformer - Automated Refactoring Application
-
-WHY: Provides infrastructure for applying automated code transformations.
-     Currently returns suggestions only, but extensible for future AST manipulation.
-
-RESPONSIBILITY:
-    - Define transformation strategy interface
-    - Provide safe transformation execution framework
-    - Handle transformation errors gracefully
-    - Return transformation results with metadata
-    - Support future AST-based transformations
-
-PATTERNS:
-    - Strategy Pattern: Different transformers for different refactoring types
-    - Template Method: Common transformation workflow
-    - Null Object Pattern: Safe no-op transformers
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('transformer')
+'\nModule: Code Transformer - Automated Refactoring Application\n\nWHY: Provides infrastructure for applying automated code transformations.\n     Currently returns suggestions only, but extensible for future AST manipulation.\n\nRESPONSIBILITY:\n    - Define transformation strategy interface\n    - Provide safe transformation execution framework\n    - Handle transformation errors gracefully\n    - Return transformation results with metadata\n    - Support future AST-based transformations\n\nPATTERNS:\n    - Strategy Pattern: Different transformers for different refactoring types\n    - Template Method: Common transformation workflow\n    - Null Object Pattern: Safe no-op transformers\n'
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 from .models import RefactoringAnalysis, PatternType, CodeSmell
-
 
 class TransformationResult:
     """
@@ -36,14 +18,7 @@ class TransformationResult:
         - Preserve original analysis
     """
 
-    def __init__(
-        self,
-        file_path: str,
-        status: str,
-        message: str,
-        analysis: Optional[RefactoringAnalysis] = None,
-        modified: bool = False
-    ):
+    def __init__(self, file_path: str, status: str, message: str, analysis: Optional[RefactoringAnalysis]=None, modified: bool=False):
         """
         Initialize transformation result.
 
@@ -66,17 +41,9 @@ class TransformationResult:
 
         WHY: Maintains backward compatibility with original API.
         """
-        result = {
-            'file': self.file_path,
-            'status': self.status,
-            'message': self.message,
-            'modified': self.modified
-        }
-
-        # Include analysis if available
+        result = {'file': self.file_path, 'status': self.status, 'message': self.message, 'modified': self.modified}
         if self.analysis:
             result['suggestions'] = self.analysis.to_dict()
-
         return result
 
     @property
@@ -88,7 +55,6 @@ class TransformationResult:
     def is_error(self) -> bool:
         """Check if transformation encountered error."""
         return self.status == 'ERROR'
-
 
 class TransformationStrategy:
     """
@@ -134,7 +100,6 @@ class TransformationStrategy:
         """
         return False
 
-
 class SuggestionsOnlyStrategy(TransformationStrategy):
     """
     Null object transformer that returns suggestions without modifying code.
@@ -157,7 +122,6 @@ class SuggestionsOnlyStrategy(TransformationStrategy):
     def transform(self, file_path: Path, smell: CodeSmell) -> bool:
         """No-op transformation - suggestions only."""
         return False
-
 
 class ComprehensionTransformer(TransformationStrategy):
     """
@@ -188,8 +152,7 @@ class ComprehensionTransformer(TransformationStrategy):
         - Must handle edge cases (nested loops, side effects)
         - Needs extensive testing
         """
-        return False  # Not yet implemented
-
+        return False
 
 class DictionaryDispatchTransformer(TransformationStrategy):
     """
@@ -220,8 +183,7 @@ class DictionaryDispatchTransformer(TransformationStrategy):
         - Requires semantic analysis
         - Risk of changing behavior
         """
-        return False  # Not yet implemented
-
+        return False
 
 class CodeTransformer:
     """
@@ -240,7 +202,7 @@ class CodeTransformer:
     PATTERN: Strategy Pattern with dispatch table
     """
 
-    def __init__(self, logger: Optional[Any] = None, verbose: bool = True):
+    def __init__(self, logger: Optional[Any]=None, verbose: bool=True):
         """
         Initialize transformer with transformation strategies.
 
@@ -250,22 +212,10 @@ class CodeTransformer:
         """
         self.logger = logger
         self.verbose = verbose
-
-        # Default to suggestions-only (safe)
         self._default_strategy = SuggestionsOnlyStrategy()
+        self._strategies: List[TransformationStrategy] = [self._default_strategy]
 
-        # Future: Add real transformers when implemented
-        self._strategies: List[TransformationStrategy] = [
-            # ComprehensionTransformer(),  # Not yet implemented
-            # DictionaryDispatchTransformer(),  # Not yet implemented
-            self._default_strategy  # Fallback
-        ]
-
-    def apply_refactoring(
-        self,
-        file_path: Path,
-        analysis: RefactoringAnalysis
-    ) -> TransformationResult:
+    def apply_refactoring(self, file_path: Path, analysis: RefactoringAnalysis) -> TransformationResult:
         """
         Apply automated refactoring to a file.
 
@@ -279,40 +229,14 @@ class CodeTransformer:
         Returns:
             TransformationResult with status and suggestions
         """
-        self._log(f"Applying automated refactoring to {file_path.name}...")
-
-        # Guard: Check for analysis errors
+        self._log(f'Applying automated refactoring to {file_path.name}...')
         if analysis.has_errors:
-            return TransformationResult(
-                file_path=str(file_path),
-                status='ERROR',
-                message=f'Analysis failed: {analysis.error}',
-                analysis=analysis,
-                modified=False
-            )
-
-        # Guard: Check if any transformations would be applied
+            return TransformationResult(file_path=str(file_path), status='ERROR', message=f'Analysis failed: {analysis.error}', analysis=analysis, modified=False)
         transformable_smells = self._get_transformable_smells(analysis)
-
         if not transformable_smells:
-            return TransformationResult(
-                file_path=str(file_path),
-                status='SUGGESTIONS_ONLY',
-                message='No automated transformations available - review suggestions',
-                analysis=analysis,
-                modified=False
-            )
-
-        # Apply transformations (currently no-op)
+            return TransformationResult(file_path=str(file_path), status='SUGGESTIONS_ONLY', message='No automated transformations available - review suggestions', analysis=analysis, modified=False)
         modified = self._apply_transformations(file_path, transformable_smells)
-
-        return TransformationResult(
-            file_path=str(file_path),
-            status='SUGGESTIONS_ONLY',
-            message='Automated refactoring requires LLM or manual intervention',
-            analysis=analysis,
-            modified=modified
-        )
+        return TransformationResult(file_path=str(file_path), status='SUGGESTIONS_ONLY', message='Automated refactoring requires LLM or manual intervention', analysis=analysis, modified=modified)
 
     def _get_transformable_smells(self, analysis: RefactoringAnalysis) -> List[CodeSmell]:
         """
@@ -327,20 +251,14 @@ class CodeTransformer:
             List of transformable code smells
         """
         transformable = []
-
         for smell in analysis.all_smells:
             for strategy in self._strategies:
                 if strategy.can_transform(smell):
                     transformable.append(smell)
                     break
-
         return transformable
 
-    def _apply_transformations(
-        self,
-        file_path: Path,
-        smells: List[CodeSmell]
-    ) -> bool:
+    def _apply_transformations(self, file_path: Path, smells: List[CodeSmell]) -> bool:
         """
         Apply transformations for all smells.
 
@@ -354,21 +272,16 @@ class CodeTransformer:
             True if any transformations were applied
         """
         modified = False
-
         for smell in smells:
             strategy = self._select_strategy(smell)
-
-            # Guard: Skip if no strategy available
             if not strategy:
                 continue
-
             try:
                 if strategy.transform(file_path, smell):
                     modified = True
-                    self._log(f"Transformed {smell.pattern_type.value} at line {smell.line_number}")
+                    self._log(f'Transformed {smell.pattern_type.value} at line {smell.line_number}')
             except Exception as e:
-                self._log(f"Transformation failed: {e}", "ERROR")
-
+                self._log(f'Transformation failed: {e}', 'ERROR')
         return modified
 
     def _select_strategy(self, smell: CodeSmell) -> Optional[TransformationStrategy]:
@@ -386,15 +299,14 @@ class CodeTransformer:
         for strategy in self._strategies:
             if strategy.can_transform(smell):
                 return strategy
-
         return self._default_strategy
 
-    def _log(self, message: str, level: str = "INFO"):
+    def _log(self, message: str, level: str='INFO'):
         """Log message if verbose mode enabled."""
         if not self.verbose:
             return
-
         if self.logger:
             self.logger.log(message, level)
         else:
-            print(f"[Transformer] {message}")
+            
+            logger.log(f'[Transformer] {message}', 'INFO')

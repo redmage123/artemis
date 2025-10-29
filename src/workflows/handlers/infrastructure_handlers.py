@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Infrastructure Workflow Handlers
 
@@ -23,7 +22,6 @@ INTEGRATION:
 - Used by: WorkflowHandlerFactory for infrastructure actions
 - Imported from: artemis_constants for retry configuration
 """
-
 import os
 import psutil
 import shutil
@@ -32,17 +30,10 @@ import gc
 import requests
 from typing import Dict, Any
 from pathlib import Path
-
-from artemis_constants import (
-    MAX_RETRY_ATTEMPTS,
-    DEFAULT_RETRY_INTERVAL_SECONDS,
-    RETRY_BACKOFF_FACTOR
-)
+from artemis_constants import MAX_RETRY_ATTEMPTS, DEFAULT_RETRY_INTERVAL_SECONDS, RETRY_BACKOFF_FACTOR
 from workflows.handlers.base_handler import WorkflowHandler
 from artemis_logger import get_logger
-
-logger = get_logger("workflow.infrastructure_handlers")
-
+logger = get_logger('workflow.infrastructure_handlers')
 
 class KillHangingProcessHandler(WorkflowHandler):
     """
@@ -53,27 +44,25 @@ class KillHangingProcessHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        pid = context.get("pid")
+        pid = context.get('pid')
         if not pid:
             return False
-
         return self._kill_process(pid)
 
     def _kill_process(self, pid: int) -> bool:
         try:
             process = psutil.Process(pid)
             process.terminate()
-            time.sleep(DEFAULT_RETRY_INTERVAL_SECONDS - 3)  # 2 seconds
-
+            time.sleep(DEFAULT_RETRY_INTERVAL_SECONDS - 3)
             if process.is_running():
                 process.kill()
-
-            print(f"[Workflow] Killed hanging process {pid}")
+            
+            logger.log(f'[Workflow] Killed hanging process {pid}', 'INFO')
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to kill process {pid}: {e}")
+            
+            logger.log(f'[Workflow] Failed to kill process {pid}: {e}', 'INFO')
             return False
-
 
 class IncreaseTimeoutHandler(WorkflowHandler):
     """
@@ -84,14 +73,13 @@ class IncreaseTimeoutHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        stage_name = context.get("stage_name")
-        current_timeout = context.get("timeout_seconds", 300)
+        stage_name = context.get('stage_name')
+        current_timeout = context.get('timeout_seconds', 300)
         new_timeout = current_timeout * 2
-
-        context["timeout_seconds"] = new_timeout
-        print(f"[Workflow] Increased timeout for {stage_name}: {current_timeout}s → {new_timeout}s")
+        context['timeout_seconds'] = new_timeout
+        
+        logger.log(f'[Workflow] Increased timeout for {stage_name}: {current_timeout}s → {new_timeout}s', 'INFO')
         return True
-
 
 class FreeMemoryHandler(WorkflowHandler):
     """
@@ -104,12 +92,13 @@ class FreeMemoryHandler(WorkflowHandler):
     def handle(self, context: Dict[str, Any]) -> bool:
         try:
             gc.collect()
-            print("[Workflow] Freed memory")
+            
+            logger.log('[Workflow] Freed memory', 'INFO')
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to free memory: {e}")
+            
+            logger.log(f'[Workflow] Failed to free memory: {e}', 'INFO')
             return False
-
 
 class CleanupTempFilesHandler(WorkflowHandler):
     """
@@ -123,38 +112,30 @@ class CleanupTempFilesHandler(WorkflowHandler):
         try:
             developer_base_dir = self._get_developer_base_dir()
             temp_dirs = self._build_temp_dirs_list(developer_base_dir)
-
             for temp_dir in temp_dirs:
                 self._cleanup_directory(temp_dir)
-
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to cleanup temp files: {e}")
+            
+            logger.log(f'[Workflow] Failed to cleanup temp files: {e}', 'INFO')
             return False
 
     def _get_developer_base_dir(self) -> Path:
-        developer_base_dir = os.getenv("ARTEMIS_DEVELOPER_DIR", "/tmp")
-
+        developer_base_dir = os.getenv('ARTEMIS_DEVELOPER_DIR', '/tmp')
         if os.path.isabs(developer_base_dir):
             return Path(developer_base_dir)
-
         script_dir = Path(__file__).parent.resolve()
         return script_dir / developer_base_dir
 
     def _build_temp_dirs_list(self, developer_base_dir: Path) -> list:
-        return [
-            str(developer_base_dir / "developer-a"),
-            str(developer_base_dir / "developer-b"),
-            "/tmp/adr"  # ADR still uses /tmp (could be made configurable too)
-        ]
+        return [str(developer_base_dir / 'developer-a'), str(developer_base_dir / 'developer-b'), '/tmp/adr']
 
     def _cleanup_directory(self, temp_dir: str) -> None:
         if not Path(temp_dir).exists():
             return
-
         shutil.rmtree(temp_dir, ignore_errors=True)
-        print(f"[Workflow] Cleaned up {temp_dir}")
-
+        
+        logger.log(f'[Workflow] Cleaned up {temp_dir}', 'INFO')
 
 class CheckDiskSpaceHandler(WorkflowHandler):
     """
@@ -166,20 +147,19 @@ class CheckDiskSpaceHandler(WorkflowHandler):
 
     def handle(self, context: Dict[str, Any]) -> bool:
         try:
-            usage = shutil.disk_usage("/")
-            free_gb = usage.free / (1024**3)
-
-            print(f"[Workflow] Disk space: {free_gb:.2f} GB free")
-
+            usage = shutil.disk_usage('/')
+            free_gb = usage.free / 1024 ** 3
+            
+            logger.log(f'[Workflow] Disk space: {free_gb:.2f} GB free', 'INFO')
             if free_gb < 1:
-                print("[Workflow] Low disk space!")
+                
+                logger.log('[Workflow] Low disk space!', 'INFO')
                 return False
-
             return True
         except Exception as e:
-            print(f"[Workflow] Failed to check disk space: {e}")
+            
+            logger.log(f'[Workflow] Failed to check disk space: {e}', 'INFO')
             return False
-
 
 class RetryNetworkRequestHandler(WorkflowHandler):
     """
@@ -198,60 +178,38 @@ class RetryNetworkRequestHandler(WorkflowHandler):
         for attempt in range(MAX_RETRY_ATTEMPTS):
             if self._attempt_network_request(attempt):
                 return True
-
             if attempt == MAX_RETRY_ATTEMPTS - 1:
                 return False
-
         return False
 
     def _attempt_network_request(self, attempt: int) -> bool:
         try:
-            # Get network request details from context
-            url = self.context.get("url")
-            method = self.context.get("method", "GET")
-            timeout = self.context.get("timeout", 30)
-
+            url = self.context.get('url')
+            method = self.context.get('method', 'GET')
+            timeout = self.context.get('timeout', 30)
             if not url:
-                logger.warning("No URL provided for network retry")
+                logger.warning('No URL provided for network retry')
                 return False
-
-            # Wait with exponential backoff before retry (skip on first attempt)
             if attempt > 0:
-                wait_time = DEFAULT_RETRY_INTERVAL_SECONDS * (RETRY_BACKOFF_FACTOR ** attempt)
-                logger.info(f"Waiting {wait_time}s before retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
+                wait_time = DEFAULT_RETRY_INTERVAL_SECONDS * RETRY_BACKOFF_FACTOR ** attempt
+                logger.info(f'Waiting {wait_time}s before retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}')
                 time.sleep(wait_time)
-
-            logger.info(f"Network retry {attempt + 1}/{MAX_RETRY_ATTEMPTS} for {method} {url}")
-
-            # Perform the actual network request
-            response = requests.request(
-                method=method,
-                url=url,
-                timeout=timeout,
-                headers=self.context.get("headers", {}),
-                data=self.context.get("data"),
-                json=self.context.get("json")
-            )
-
-            # Check if request was successful
+            logger.info(f'Network retry {attempt + 1}/{MAX_RETRY_ATTEMPTS} for {method} {url}')
+            response = requests.request(method=method, url=url, timeout=timeout, headers=self.context.get('headers', {}), data=self.context.get('data'), json=self.context.get('json'))
             response.raise_for_status()
-
-            # Store response in context for caller to use
-            self.context["response"] = response
-            self.context["response_status"] = response.status_code
-
-            logger.info(f"Network request succeeded on attempt {attempt + 1}")
+            self.context['response'] = response
+            self.context['response_status'] = response.status_code
+            logger.info(f'Network request succeeded on attempt {attempt + 1}')
             return True
-
         except requests.exceptions.Timeout as e:
-            logger.warning(f"Network request timeout on attempt {attempt + 1}: {e}")
+            logger.warning(f'Network request timeout on attempt {attempt + 1}: {e}')
             return False
         except requests.exceptions.ConnectionError as e:
-            logger.warning(f"Network connection error on attempt {attempt + 1}: {e}")
+            logger.warning(f'Network connection error on attempt {attempt + 1}: {e}')
             return False
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Network request failed on attempt {attempt + 1}: {e}")
+            logger.warning(f'Network request failed on attempt {attempt + 1}: {e}')
             return False
         except Exception as e:
-            logger.error(f"Unexpected error during network retry: {e}")
+            logger.error(f'Unexpected error during network retry: {e}')
             return False

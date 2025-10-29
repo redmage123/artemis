@@ -1,26 +1,12 @@
-"""
-Module: two_pass/pipeline/retry.py
-
-WHY: Encapsulates retry logic for pass execution resilience.
-RESPONSIBILITY: Retry strategies, configuration, and failure handling.
-PATTERNS: Strategy Pattern, Guard Clauses.
-
-This module handles:
-- Retry configuration and policy
-- Execution with exponential backoff
-- Transient failure detection
-- Retry state tracking
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('retry')
+'\nModule: two_pass/pipeline/retry.py\n\nWHY: Encapsulates retry logic for pass execution resilience.\nRESPONSIBILITY: Retry strategies, configuration, and failure handling.\nPATTERNS: Strategy Pattern, Guard Clauses.\n\nThis module handles:\n- Retry configuration and policy\n- Execution with exponential backoff\n- Transient failure detection\n- Retry state tracking\n'
 from typing import Callable, TypeVar, Any
 from dataclasses import dataclass
 import time
-
 from artemis_exceptions import wrap_exception
 from two_pass.exceptions import TwoPassPipelineException
-
 T = TypeVar('T')
-
 
 @dataclass
 class RetryConfig:
@@ -41,7 +27,6 @@ class RetryConfig:
     max_delay: float = 30.0
     exponential_base: float = 2.0
     verbose: bool = False
-
 
 class RetryStrategy:
     """
@@ -74,7 +59,7 @@ class RetryStrategy:
         self.config = config
         self.retry_count = 0
 
-    @wrap_exception(TwoPassPipelineException, "Retry execution failed")
+    @wrap_exception(TwoPassPipelineException, 'Retry execution failed')
     def retry(self, func: Callable[[], T]) -> T:
         """
         Execute callable with retry on failure.
@@ -101,40 +86,22 @@ class RetryStrategy:
         - Logs retry attempts for debugging
         """
         last_exception = None
-
         for attempt in range(self.config.max_retries + 1):
             try:
-                # Guard clause - first attempt (no retry)
                 if attempt == 0:
                     return func()
-
-                # Calculate backoff delay
                 delay = self._calculate_backoff_delay(attempt)
-
-                # Log retry attempt
                 if self.config.verbose:
-                    print(f"Retry attempt {attempt}/{self.config.max_retries} after {delay:.2f}s delay")
-
-                # Wait before retry
+                    
+                    logger.log(f'Retry attempt {attempt}/{self.config.max_retries} after {delay:.2f}s delay', 'INFO')
                 time.sleep(delay)
-
-                # Execute with retry
                 return func()
-
             except Exception as e:
                 last_exception = e
-
-                # Guard clause - last attempt failed
                 if attempt == self.config.max_retries:
                     break
-
-                # Continue to next retry
                 continue
-
-        # All retries exhausted
-        raise TwoPassPipelineException(
-            f"Failed after {self.config.max_retries} retries: {last_exception}"
-        ) from last_exception
+        raise TwoPassPipelineException(f'Failed after {self.config.max_retries} retries: {last_exception}') from last_exception
 
     def _calculate_backoff_delay(self, attempt: int) -> float:
         """
@@ -151,14 +118,9 @@ class RetryStrategy:
         Returns:
             Delay in seconds, capped at max_delay
         """
-        # Guard clause - no delay on first attempt
         if attempt == 0:
             return 0.0
-
-        # Calculate exponential delay
-        delay = self.config.base_delay * (self.config.exponential_base ** (attempt - 1))
-
-        # Cap at max_delay
+        delay = self.config.base_delay * self.config.exponential_base ** (attempt - 1)
         return min(delay, self.config.max_delay)
 
     def reset(self) -> None:
@@ -168,6 +130,4 @@ class RetryStrategy:
         Why: Allows reusing strategy instance for multiple operations.
         """
         self.retry_count = 0
-
-
 __all__ = ['RetryStrategy', 'RetryConfig']

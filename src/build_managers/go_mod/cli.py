@@ -5,15 +5,12 @@ WHY: Separate CLI logic from core manager
 RESPONSIBILITY: Provide command-line interface for Go operations
 PATTERNS: Command pattern, dispatch table, argument parsing
 """
-
 import argparse
 import logging
 import sys
 import json
 from typing import Callable, Dict
-
 from .manager import GoModManager
-
 
 class GoModCLI:
     """
@@ -28,23 +25,8 @@ class GoModCLI:
         RESPONSIBILITY: Set up logging and command dispatch table
         PATTERNS: Dispatch table over elif chains
         """
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-
-        self.command_handlers: Dict[str, Callable] = {
-            "info": self._handle_info,
-            "build": self._handle_build,
-            "test": self._handle_test,
-            "get": self._handle_get,
-            "download": self._handle_download,
-            "tidy": self._handle_tidy,
-            "verify": self._handle_verify,
-            "fmt": self._handle_fmt,
-            "vet": self._handle_vet,
-            "clean": self._handle_clean
-        }
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self.command_handlers: Dict[str, Callable] = {'info': self._handle_info, 'build': self._handle_build, 'test': self._handle_test, 'get': self._handle_get, 'download': self._handle_download, 'tidy': self._handle_tidy, 'verify': self._handle_verify, 'fmt': self._handle_fmt, 'vet': self._handle_vet, 'clean': self._handle_clean}
 
     def run(self, argv=None):
         """
@@ -59,20 +41,16 @@ class GoModCLI:
             Exit code
         """
         args = self._parse_arguments(argv)
-
         try:
             go_mod = GoModManager(project_dir=args.project_dir)
-
             handler = self.command_handlers.get(args.command)
             if not handler:
-                logging.error(f"Unknown command: {args.command}")
+                logging.error(f'Unknown command: {args.command}')
                 return 1
-
             exit_code = handler(go_mod, args)
             return exit_code
-
         except Exception as e:
-            logging.error(f"Error: {e}")
+            logging.error(f'Error: {e}')
             return 1
 
     def _parse_arguments(self, argv=None):
@@ -87,38 +65,17 @@ class GoModCLI:
         Returns:
             Parsed arguments
         """
-        parser = argparse.ArgumentParser(description="Go Modules Manager")
-        parser.add_argument(
-            "--project-dir",
-            default=".",
-            help="Project directory"
-        )
-        parser.add_argument(
-            "command",
-            choices=list(self.command_handlers.keys()),
-            help="Command to execute"
-        )
-        parser.add_argument("--output", help="Output binary name")
-        parser.add_argument("--tags", help="Build tags (comma-separated)")
-        parser.add_argument("--module", help="Module to add")
-        parser.add_argument("--version", help="Module version")
-        parser.add_argument("--package", help="Package to test")
-        parser.add_argument(
-            "--verbose",
-            action="store_true",
-            help="Verbose output"
-        )
-        parser.add_argument(
-            "--race",
-            action="store_true",
-            help="Enable race detector"
-        )
-        parser.add_argument(
-            "--cover",
-            action="store_true",
-            help="Enable coverage"
-        )
-
+        parser = argparse.ArgumentParser(description='Go Modules Manager')
+        parser.add_argument('--project-dir', default='.', help='Project directory')
+        parser.add_argument('command', choices=list(self.command_handlers.keys()), help='Command to execute')
+        parser.add_argument('--output', help='Output binary name')
+        parser.add_argument('--tags', help='Build tags (comma-separated)')
+        parser.add_argument('--module', help='Module to add')
+        parser.add_argument('--version', help='Module version')
+        parser.add_argument('--package', help='Package to test')
+        parser.add_argument('--verbose', action='store_true', help='Verbose output')
+        parser.add_argument('--race', action='store_true', help='Enable race detector')
+        parser.add_argument('--cover', action='store_true', help='Enable coverage')
         return parser.parse_args(argv)
 
     @staticmethod
@@ -129,7 +86,8 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         info = go_mod.get_project_info()
-        print(json.dumps(info, indent=2))
+        
+        logger.log(json.dumps(info, indent=2), 'INFO')
         return 0
 
     @staticmethod
@@ -139,9 +97,10 @@ class GoModCLI:
         RESPONSIBILITY: Execute build with parsed arguments
         PATTERNS: Guard clause for tag parsing
         """
-        tags = args.tags.split(",") if args.tags else None
+        tags = args.tags.split(',') if args.tags else None
         result = go_mod.build(output=args.output, tags=tags, race=args.race)
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -151,13 +110,9 @@ class GoModCLI:
         RESPONSIBILITY: Execute tests with parsed arguments
         PATTERNS: Static method for simple handler
         """
-        result = go_mod.test(
-            package=args.package,
-            verbose=args.verbose,
-            race=args.race,
-            cover=args.cover
-        )
-        print(result)
+        result = go_mod.test(package=args.package, verbose=args.verbose, race=args.race, cover=args.cover)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -168,11 +123,12 @@ class GoModCLI:
         PATTERNS: Guard clause for required argument
         """
         if not args.module:
-            print("Error: --module required for get command")
+            
+            logger.log('Error: --module required for get command', 'INFO')
             return 1
-
         go_mod.install_dependency(args.module, version=args.version)
-        print(f"Added {args.module}")
+        
+        logger.log(f'Added {args.module}', 'INFO')
         return 0
 
     @staticmethod
@@ -183,7 +139,8 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         result = go_mod.download_dependencies()
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -194,7 +151,8 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         result = go_mod.tidy()
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -205,7 +163,8 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         result = go_mod.verify()
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -216,7 +175,8 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         result = go_mod.fmt()
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -227,7 +187,8 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         result = go_mod.vet()
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0 if result.success else 1
 
     @staticmethod
@@ -238,9 +199,9 @@ class GoModCLI:
         PATTERNS: Static method for simple handler
         """
         result = go_mod.clean()
-        print(result)
+        
+        logger.log(result, 'INFO')
         return 0
-
 
 def main():
     """
@@ -250,7 +211,5 @@ def main():
     """
     cli = GoModCLI()
     sys.exit(cli.run())
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

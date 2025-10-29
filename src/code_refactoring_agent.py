@@ -1,99 +1,39 @@
-#!/usr/bin/env python3
-"""
-Module: Code Refactoring Agent - Backward Compatibility Wrapper
-
-WHY: Maintains backward compatibility with existing code that imports
-     from code_refactoring_agent module. Delegates to refactored package.
-
-RESPONSIBILITY:
-    - Re-export public API from agents.refactoring package
-    - Preserve original module interface
-    - Support existing import statements
-    - Provide migration path to new package
-
-PATTERNS:
-    - Facade Pattern: Wraps new implementation with old interface
-    - Adapter Pattern: Adapts new API to old expectations
-
-MIGRATION:
-    Old: from code_refactoring_agent import CodeRefactoringAgent
-    New: from agents.refactoring import CodeRefactoringAgent
-
-    This wrapper allows both styles to work during transition period.
-
-ARCHITECTURE:
-    - Refactored implementation lives in agents/refactoring/
-    - This file is a thin wrapper for backward compatibility
-    - Will be deprecated in future version
-
-DEPRECATION NOTICE:
-    This module is maintained for backward compatibility only.
-    New code should import from agents.refactoring package directly.
-    See agents/refactoring/__init__.py for public API.
-"""
-
-# Import all public API from refactored package
-from agents.refactoring import (
-    CodeRefactoringAgent,
-    create_refactoring_agent,
-    RefactoringRule,
-    RefactoringAnalysis,
-    CodeSmell,
-    LongMethodSmell,
-    SimpleLoopSmell,
-    IfElifChainSmell,
-    PatternType,
-    RefactoringPriority
-)
-
-# Re-export for backward compatibility
-__all__ = [
-    'CodeRefactoringAgent',
-    'create_refactoring_agent',
-    'RefactoringRule',
-    'RefactoringAnalysis',
-    'CodeSmell',
-    'LongMethodSmell',
-    'SimpleLoopSmell',
-    'IfElifChainSmell',
-    'PatternType',
-    'RefactoringPriority',
-]
-
-
-# Preserve original main block for testing
-if __name__ == "__main__":
-    """
-    Example usage demonstrating backward compatibility.
-
-    WHY: Maintains original test behavior for regression testing.
-    """
+from artemis_logger import get_logger
+logger = get_logger('code_refactoring_agent')
+'\nModule: Code Refactoring Agent - Backward Compatibility Wrapper\n\nWHY: Maintains backward compatibility with existing code that imports\n     from code_refactoring_agent module. Delegates to refactored package.\n\nRESPONSIBILITY:\n    - Re-export public API from agents.refactoring package\n    - Preserve original module interface\n    - Support existing import statements\n    - Provide migration path to new package\n\nPATTERNS:\n    - Facade Pattern: Wraps new implementation with old interface\n    - Adapter Pattern: Adapts new API to old expectations\n\nMIGRATION:\n    Old: from code_refactoring_agent import CodeRefactoringAgent\n    New: from agents.refactoring import CodeRefactoringAgent\n\n    This wrapper allows both styles to work during transition period.\n\nARCHITECTURE:\n    - Refactored implementation lives in agents/refactoring/\n    - This file is a thin wrapper for backward compatibility\n    - Will be deprecated in future version\n\nDEPRECATION NOTICE:\n    This module is maintained for backward compatibility only.\n    New code should import from agents.refactoring package directly.\n    See agents/refactoring/__init__.py for public API.\n'
+from agents.refactoring import CodeRefactoringAgent, create_refactoring_agent, RefactoringRule, RefactoringAnalysis, CodeSmell, LongMethodSmell, SimpleLoopSmell, IfElifChainSmell, PatternType, RefactoringPriority
+__all__ = ['CodeRefactoringAgent', 'create_refactoring_agent', 'RefactoringRule', 'RefactoringAnalysis', 'CodeSmell', 'LongMethodSmell', 'SimpleLoopSmell', 'IfElifChainSmell', 'PatternType', 'RefactoringPriority']
+if __name__ == '__main__':
+    '\n    Example usage demonstrating backward compatibility.\n\n    WHY: Maintains original test behavior for regression testing.\n    '
     import sys
     from pathlib import Path
-
-    # Create agent using wrapper
     agent = create_refactoring_agent()
-
-    # Analyze this file (now a wrapper)
     file_path = Path(__file__)
     analysis = agent.analyze_file_for_refactoring(file_path)
-
-    print("\nRefactoring Analysis:")
-    print(f"File: {analysis['file']}")
-    print(f"Total Issues: {analysis['total_issues']}")
-
+    
+    logger.log('\nRefactoring Analysis:', 'INFO')
+    
+    logger.log(f"File: {analysis['file']}", 'INFO')
+    
+    logger.log(f"Total Issues: {analysis['total_issues']}", 'INFO')
     if analysis.get('long_methods'):
-        print(f"\nLong Methods: {len(analysis['long_methods'])}")
+        
+        logger.log(f"\nLong Methods: {len(analysis['long_methods'])}", 'INFO')
         for method in analysis['long_methods']:
-            print(f"  - {method['name']} ({method['length']} lines)")
-
-    # Generate instructions
+            
+            logger.log(f"  - {method['name']} ({method['length']} lines)", 'INFO')
     instructions = agent.generate_refactoring_instructions(analysis)
-    print("\n" + instructions)
-
-    print("\n" + "=" * 60)
-    print("BACKWARD COMPATIBILITY WRAPPER ACTIVE")
-    print("=" * 60)
-    print("This module delegates to agents.refactoring package.")
-    print("Consider migrating to: from agents.refactoring import ...")
-    print("=" * 60)
+    
+    logger.log('\n' + instructions, 'INFO')
+    
+    logger.log('\n' + '=' * 60, 'INFO')
+    
+    logger.log('BACKWARD COMPATIBILITY WRAPPER ACTIVE', 'INFO')
+    
+    logger.log('=' * 60, 'INFO')
+    
+    logger.log('This module delegates to agents.refactoring package.', 'INFO')
+    
+    logger.log('Consider migrating to: from agents.refactoring import ...', 'INFO')
+    
+    logger.log('=' * 60, 'INFO')

@@ -1,26 +1,12 @@
-#!/usr/bin/env python3
-"""
-Configuration Agent Core Module
-
-WHY: Main configuration agent that coordinates loading, validation, and reporting.
-Provides high-level API for configuration management.
-
-RESPONSIBILITY: Coordinate configuration operations and provide unified interface
-
-PATTERNS:
-- Facade pattern - simplifies interaction with loader, validator, generator
-- Singleton pattern - single configuration instance
-- Guard clauses for validation
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('agent_core')
+'\nConfiguration Agent Core Module\n\nWHY: Main configuration agent that coordinates loading, validation, and reporting.\nProvides high-level API for configuration management.\n\nRESPONSIBILITY: Coordinate configuration operations and provide unified interface\n\nPATTERNS:\n- Facade pattern - simplifies interaction with loader, validator, generator\n- Singleton pattern - single configuration instance\n- Guard clauses for validation\n'
 from typing import Dict, Any, Optional
-
 from debug_mixin import DebugMixin
 from agents.config.models import ConfigValidationResult
 from agents.config.loader import ConfigLoader
 from agents.config.validator import ConfigValidator
 from agents.config.generator import ConfigGenerator
-
 
 class ConfigurationAgent(DebugMixin):
     """
@@ -40,18 +26,18 @@ class ConfigurationAgent(DebugMixin):
     - Composition over inheritance: Uses loader, validator, generator
     """
 
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool=True):
         """
         Initialize Configuration Agent
 
         Args:
             verbose: Enable verbose logging
         """
-        DebugMixin.__init__(self, component_name="config")
+        DebugMixin.__init__(self, component_name='config')
         self.verbose = verbose
         self.config: Dict[str, Any] = {}
         self.load_configuration()
-        self.debug_log("ConfigurationAgent initialized", verbose=verbose)
+        self.debug_log('ConfigurationAgent initialized', verbose=verbose)
 
     def load_configuration(self) -> None:
         """
@@ -60,21 +46,13 @@ class ConfigurationAgent(DebugMixin):
         WHY: Entry point for configuration loading.
         Delegates to ConfigLoader for actual loading.
         """
-        self.debug_trace("load_configuration", verbose=self.verbose)
-
-        # Load configuration using loader
-        self.config = ConfigLoader.load_configuration(
-            load_env_file=True,
-            verbose=self.verbose
-        )
-
+        self.debug_trace('load_configuration', verbose=self.verbose)
+        self.config = ConfigLoader.load_configuration(load_env_file=True, verbose=self.verbose)
         if self.verbose:
-            print("Configuration loaded from environment")
+            
+            logger.log('Configuration loaded from environment', 'INFO')
 
-    def validate_configuration(
-        self,
-        require_llm_key: bool = True
-    ) -> ConfigValidationResult:
+    def validate_configuration(self, require_llm_key: bool=True) -> ConfigValidationResult:
         """
         Validate current configuration
 
@@ -86,26 +64,12 @@ class ConfigurationAgent(DebugMixin):
         Returns:
             ConfigValidationResult with validation status
         """
-        self.debug_trace("validate_configuration", require_llm_key=require_llm_key)
-
-        # Validate using validator
-        result = ConfigValidator.validate_configuration(
-            self.config,
-            require_llm_key=require_llm_key
-        )
-
-        self.debug_if_enabled(
-            "validation_results",
-            "Configuration validation completed",
-            is_valid=result.is_valid,
-            missing=len(result.missing_keys),
-            invalid=len(result.invalid_keys),
-            warnings=len(result.warnings)
-        )
-
+        self.debug_trace('validate_configuration', require_llm_key=require_llm_key)
+        result = ConfigValidator.validate_configuration(self.config, require_llm_key=require_llm_key)
+        self.debug_if_enabled('validation_results', 'Configuration validation completed', is_valid=result.is_valid, missing=len(result.missing_keys), invalid=len(result.invalid_keys), warnings=len(result.warnings))
         return result
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: Any=None) -> Any:
         """
         Get configuration value
 
@@ -141,13 +105,10 @@ class ConfigurationAgent(DebugMixin):
         WHY: Entry point for report generation.
         Delegates to ConfigGenerator.
         """
-        # Validate first (without requiring API key for report)
         validation = self.validate_configuration(require_llm_key=False)
-
-        # Generate report using generator
         ConfigGenerator.print_configuration_report(self.config, validation)
 
-    def export_to_dict(self, mask_sensitive: bool = True) -> Dict[str, Any]:
+    def export_to_dict(self, mask_sensitive: bool=True) -> Dict[str, Any]:
         """
         Export configuration as dictionary
 
@@ -162,7 +123,7 @@ class ConfigurationAgent(DebugMixin):
         """
         return ConfigLoader.export_config(self.config, mask_sensitive)
 
-    def export_to_json(self, mask_sensitive: bool = True) -> str:
+    def export_to_json(self, mask_sensitive: bool=True) -> str:
         """
         Export configuration as JSON string
 
@@ -183,9 +144,9 @@ class ConfigurationAgent(DebugMixin):
         WHY: Provides predictable test configuration without API calls.
         """
         ConfigLoader.set_test_defaults(self.config)
-
         if self.verbose:
-            print("Test mode enabled - using mock LLM provider")
+            
+            logger.log('Test mode enabled - using mock LLM provider', 'INFO')
 
     def reload_configuration(self) -> None:
         """
@@ -194,15 +155,11 @@ class ConfigurationAgent(DebugMixin):
         WHY: Allows configuration refresh without recreating agent.
         Useful for testing and dynamic configuration updates.
         """
-        self.debug_trace("reload_configuration", verbose=self.verbose)
+        self.debug_trace('reload_configuration', verbose=self.verbose)
         self.load_configuration()
-
-
-# Singleton instance
 _config_instance: Optional[ConfigurationAgent] = None
 
-
-def get_config(verbose: bool = True) -> ConfigurationAgent:
+def get_config(verbose: bool=True) -> ConfigurationAgent:
     """
     Get singleton configuration agent instance
 
@@ -216,15 +173,10 @@ def get_config(verbose: bool = True) -> ConfigurationAgent:
         ConfigurationAgent instance
     """
     global _config_instance
-
-    # Guard clause: return existing instance
     if _config_instance is not None:
         return _config_instance
-
-    # Create new instance
     _config_instance = ConfigurationAgent(verbose=verbose)
     return _config_instance
-
 
 def reset_config() -> None:
     """

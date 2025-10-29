@@ -1,22 +1,11 @@
-#!/usr/bin/env python3
-"""
-WHY: Manage message queuing, filtering, and priority ordering.
-RESPONSIBILITY: Handle message retrieval, filtering, and sorting operations.
-PATTERNS: Queue Pattern, Filter Chain, Strategy Pattern for filtering.
-
-This module provides:
-- Message queue filtering
-- Priority-based sorting
-- Message retrieval with filters
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('message_queue')
+'\nWHY: Manage message queuing, filtering, and priority ordering.\nRESPONSIBILITY: Handle message retrieval, filtering, and sorting operations.\nPATTERNS: Queue Pattern, Filter Chain, Strategy Pattern for filtering.\n\nThis module provides:\n- Message queue filtering\n- Priority-based sorting\n- Message retrieval with filters\n'
 from typing import List, Optional, Callable, Dict, Any
 from pathlib import Path
 import json
-
 from messenger_interface import Message
 from messaging.agent.models import get_priority_order
-
 
 class MessageFilter:
     """
@@ -44,7 +33,6 @@ class MessageFilter:
         """Filter by card ID"""
         return message.card_id == card_id
 
-
 class MessageQueue:
     """
     WHY: Manage message queue operations with filtering and sorting.
@@ -55,11 +43,7 @@ class MessageQueue:
         """Initialize message queue"""
         self.filters: List[Callable[[Message], bool]] = []
 
-    def add_filter(
-        self,
-        filter_type: str,
-        filter_value: Any
-    ) -> None:
+    def add_filter(self, filter_type: str, filter_value: Any) -> None:
         """
         WHY: Add filter to the filter chain.
         RESPONSIBILITY: Build composite filter from individual criteria.
@@ -68,18 +52,9 @@ class MessageQueue:
             filter_type: Type of filter (message_type, from_agent, priority, card_id)
             filter_value: Value to filter by
         """
-        # Guard clause: no filter value
         if not filter_value:
             return
-
-        # Dispatch table for filter types
-        filter_map = {
-            "message_type": lambda m: MessageFilter.by_message_type(m, filter_value),
-            "from_agent": lambda m: MessageFilter.by_from_agent(m, filter_value),
-            "priority": lambda m: MessageFilter.by_priority(m, filter_value),
-            "card_id": lambda m: MessageFilter.by_card_id(m, filter_value),
-        }
-
+        filter_map = {'message_type': lambda m: MessageFilter.by_message_type(m, filter_value), 'from_agent': lambda m: MessageFilter.by_from_agent(m, filter_value), 'priority': lambda m: MessageFilter.by_priority(m, filter_value), 'card_id': lambda m: MessageFilter.by_card_id(m, filter_value)}
         filter_func = filter_map.get(filter_type)
         if filter_func:
             self.filters.append(filter_func)
@@ -95,14 +70,11 @@ class MessageQueue:
         Returns:
             Filtered list of messages
         """
-        # Guard clause: no filters
         if not self.filters:
             return messages
-
         filtered_messages = messages
         for filter_func in self.filters:
             filtered_messages = [m for m in filtered_messages if filter_func(m)]
-
         return filtered_messages
 
     def sort_by_priority(self, messages: List[Message]) -> List[Message]:
@@ -116,10 +88,8 @@ class MessageQueue:
         Returns:
             Sorted list of messages
         """
-        # Guard clause: empty list
         if not messages:
             return messages
-
         return sorted(messages, key=lambda m: get_priority_order(m.priority))
 
     def clear_filters(self) -> None:
@@ -128,7 +98,6 @@ class MessageQueue:
         RESPONSIBILITY: Clear all active filters.
         """
         self.filters.clear()
-
 
 class MessageReader:
     """
@@ -140,14 +109,7 @@ class MessageReader:
         """Initialize message reader"""
         self.queue = MessageQueue()
 
-    def read_messages_from_files(
-        self,
-        message_files: List[Path],
-        message_type: Optional[str] = None,
-        from_agent: Optional[str] = None,
-        priority: Optional[str] = None,
-        card_id: Optional[str] = None
-    ) -> List[Message]:
+    def read_messages_from_files(self, message_files: List[Path], message_type: Optional[str]=None, from_agent: Optional[str]=None, priority: Optional[str]=None, card_id: Optional[str]=None) -> List[Message]:
         """
         WHY: Load messages from files with filtering.
         RESPONSIBILITY: Read JSON files, parse messages, apply filters.
@@ -162,32 +124,23 @@ class MessageReader:
         Returns:
             List of filtered messages
         """
-        # Guard clause: no files
         if not message_files:
             return []
-
-        # Build filter chain
         self.queue.clear_filters()
         if message_type:
-            self.queue.add_filter("message_type", message_type)
+            self.queue.add_filter('message_type', message_type)
         if from_agent:
-            self.queue.add_filter("from_agent", from_agent)
+            self.queue.add_filter('from_agent', from_agent)
         if priority:
-            self.queue.add_filter("priority", priority)
+            self.queue.add_filter('priority', priority)
         if card_id:
-            self.queue.add_filter("card_id", card_id)
-
-        # Load messages
+            self.queue.add_filter('card_id', card_id)
         messages = []
         for filepath in message_files:
             message = self._load_message_from_file(filepath)
             if message:
                 messages.append(message)
-
-        # Apply filters
         filtered_messages = self.queue.apply_filters(messages)
-
-        # Sort by priority
         return self.queue.sort_by_priority(filtered_messages)
 
     def _load_message_from_file(self, filepath: Path) -> Optional[Message]:
@@ -206,9 +159,9 @@ class MessageReader:
                 message_data = json.load(f)
             return Message.from_dict(message_data)
         except (json.JSONDecodeError, IOError, KeyError) as e:
-            print(f"Error reading message {filepath}: {e}")
+            
+            logger.log(f'Error reading message {filepath}: {e}', 'INFO')
             return None
-
 
 class BroadcastQueue:
     """
@@ -237,11 +190,6 @@ class BroadcastQueue:
             List of recipient agent names
         """
         agents = self.registry_data.get('agents', {})
-
-        # Guard clause: no registered agents
         if not agents:
             return []
-
-        # Filter out sender
-        return [agent_name for agent_name in agents.keys()
-                if agent_name != sender_agent]
+        return [agent_name for agent_name in agents.keys() if agent_name != sender_agent]

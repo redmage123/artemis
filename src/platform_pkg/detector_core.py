@@ -1,26 +1,12 @@
-#!/usr/bin/env python3
-"""
-Platform Detector Core
-
-WHY: Orchestrates platform detection and resource allocation calculation.
-RESPONSIBILITY: Coordinate detection modules and provide unified platform detection API.
-PATTERNS: Facade pattern - provides simple interface to complex subsystems.
-
-This module provides:
-- PlatformDetector: Main platform detection coordinator
-- Resource allocation calculation
-- Platform hash calculation
-- Platform comparison
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('detector_core')
+'\nPlatform Detector Core\n\nWHY: Orchestrates platform detection and resource allocation calculation.\nRESPONSIBILITY: Coordinate detection modules and provide unified platform detection API.\nPATTERNS: Facade pattern - provides simple interface to complex subsystems.\n\nThis module provides:\n- PlatformDetector: Main platform detection coordinator\n- Resource allocation calculation\n- Platform hash calculation\n- Platform comparison\n'
 import hashlib
 from typing import Any, Optional, Tuple, List
-
 from platform_pkg.models import PlatformInfo, ResourceAllocation
 from platform_pkg.os_detector import OSDetector
 from platform_pkg.arch_detector import ArchDetector, MemoryDetector
 from platform_pkg.env_detector import DiskDetector, PythonDetector, HostnameDetector
-
 
 class PlatformDetector:
     """
@@ -31,7 +17,7 @@ class PlatformDetector:
     PATTERNS: Facade pattern - coordinates multiple detection subsystems.
     """
 
-    def __init__(self, logger: Optional[Any] = None):
+    def __init__(self, logger: Optional[Any]=None):
         """
         Initialize platform detector.
 
@@ -39,8 +25,6 @@ class PlatformDetector:
             logger: Optional logger instance
         """
         self.logger = logger
-
-        # Initialize detection subsystems
         self._os_detector = OSDetector()
         self._arch_detector = ArchDetector()
         self._memory_detector = MemoryDetector()
@@ -58,48 +42,14 @@ class PlatformDetector:
         Returns:
             Complete platform information
         """
-        # OS Information
         os_info = self._os_detector.detect_os_info()
-
-        # CPU Information
         cpu_info = self._arch_detector.detect_all()
-
-        # Memory Information
         memory_info = self._memory_detector.detect_all()
-
-        # Disk Information
         disk_info = self._disk_detector.detect_all()
-
-        # Python Information
         python_info = self._python_detector.detect_all()
-
-        # Hostname
         hostname = self._hostname_detector.detect_hostname()
-
-        # Create platform info
-        info = PlatformInfo(
-            os_type=os_info['os_type'],
-            os_name=os_info['os_name'],
-            os_version=os_info['os_version'],
-            os_release=os_info['os_release'],
-            cpu_count_physical=cpu_info['cpu_count_physical'],
-            cpu_count_logical=cpu_info['cpu_count_logical'],
-            cpu_frequency_mhz=cpu_info['cpu_frequency_mhz'],
-            cpu_architecture=cpu_info['cpu_architecture'],
-            total_memory_gb=memory_info['total_memory_gb'],
-            available_memory_gb=memory_info['available_memory_gb'],
-            total_disk_gb=disk_info['total_disk_gb'],
-            available_disk_gb=disk_info['available_disk_gb'],
-            disk_type=disk_info['disk_type'],
-            python_version=python_info['python_version'],
-            python_implementation=python_info['python_implementation'],
-            hostname=hostname,
-            platform_hash=""  # Will be calculated
-        )
-
-        # Calculate platform hash
+        info = PlatformInfo(os_type=os_info['os_type'], os_name=os_info['os_name'], os_version=os_info['os_version'], os_release=os_info['os_release'], cpu_count_physical=cpu_info['cpu_count_physical'], cpu_count_logical=cpu_info['cpu_count_logical'], cpu_frequency_mhz=cpu_info['cpu_frequency_mhz'], cpu_architecture=cpu_info['cpu_architecture'], total_memory_gb=memory_info['total_memory_gb'], available_memory_gb=memory_info['available_memory_gb'], total_disk_gb=disk_info['total_disk_gb'], available_disk_gb=disk_info['available_disk_gb'], disk_type=disk_info['disk_type'], python_version=python_info['python_version'], python_implementation=python_info['python_implementation'], hostname=hostname, platform_hash='')
         info.platform_hash = self._calculate_platform_hash(info)
-
         return info
 
     def calculate_resource_allocation(self, platform_info: PlatformInfo) -> ResourceAllocation:
@@ -116,44 +66,15 @@ class PlatformDetector:
             Resource allocation recommendations
         """
         reasoning_parts = []
-
-        # Calculate parallel developers
         max_developers = self._calculate_max_developers(platform_info, reasoning_parts)
-
-        # Calculate parallel tests
         max_tests = self._calculate_max_tests(platform_info, reasoning_parts)
-
-        # Calculate parallel stages
         max_stages = self._calculate_max_stages(reasoning_parts)
-
-        # Calculate memory per agent
-        max_memory_per_agent = self._calculate_memory_per_agent(
-            platform_info, max_developers, max_tests, reasoning_parts
-        )
-
-        # Calculate batch size
+        max_memory_per_agent = self._calculate_memory_per_agent(platform_info, max_developers, max_tests, reasoning_parts)
         batch_size = self._calculate_batch_size(platform_info, reasoning_parts)
-
-        # Determine async I/O support
         use_async = self._should_use_async_io(platform_info, reasoning_parts)
-
-        # Determine caching strategy
         enable_caching = self._should_enable_caching(platform_info, reasoning_parts)
-
-        # Calculate thread pool size
         thread_pool_size = self._calculate_thread_pool_size(platform_info, reasoning_parts)
-
-        return ResourceAllocation(
-            max_parallel_developers=max_developers,
-            max_parallel_tests=max_tests,
-            max_parallel_stages=max_stages,
-            max_memory_per_agent_gb=max_memory_per_agent,
-            recommended_batch_size=batch_size,
-            use_async_io=use_async,
-            enable_caching=enable_caching,
-            thread_pool_size=thread_pool_size,
-            reasoning=" | ".join(reasoning_parts)
-        )
+        return ResourceAllocation(max_parallel_developers=max_developers, max_parallel_tests=max_tests, max_parallel_stages=max_stages, max_memory_per_agent_gb=max_memory_per_agent, recommended_batch_size=batch_size, use_async_io=use_async, enable_caching=enable_caching, thread_pool_size=thread_pool_size, reasoning=' | '.join(reasoning_parts))
 
     def platforms_match(self, info1: PlatformInfo, info2: PlatformInfo) -> bool:
         """
@@ -170,7 +91,7 @@ class PlatformDetector:
         """
         return info1.platform_hash == info2.platform_hash
 
-    def log(self, message: str, level: str = "INFO"):
+    def log(self, message: str, level: str='INFO'):
         """
         Log a message with fallback to print.
 
@@ -181,17 +102,13 @@ class PlatformDetector:
             message: Message to log
             level: Log level (INFO, WARNING, ERROR)
         """
-        # Early return: Use logger if available
         if self.logger:
             self.logger.log(message, level)
             return
+        
+        logger.log(f'[{level}] {message}', 'INFO')
 
-        # Fallback: Print to stdout
-        print(f"[{level}] {message}")
-
-    def _calculate_max_developers(
-        self, platform_info: PlatformInfo, reasoning_parts: List[str]
-    ) -> int:
+    def _calculate_max_developers(self, platform_info: PlatformInfo, reasoning_parts: List[str]) -> int:
         """
         Calculate maximum parallel developers.
 
@@ -204,18 +121,11 @@ class PlatformDetector:
         Returns:
             Maximum parallel developers
         """
-        max_developers = min(
-            max(1, platform_info.cpu_count_logical // 2),
-            4
-        )
-        reasoning_parts.append(
-            f"Developers: {max_developers} (CPU cores: {platform_info.cpu_count_logical})"
-        )
+        max_developers = min(max(1, platform_info.cpu_count_logical // 2), 4)
+        reasoning_parts.append(f'Developers: {max_developers} (CPU cores: {platform_info.cpu_count_logical})')
         return max_developers
 
-    def _calculate_max_tests(
-        self, platform_info: PlatformInfo, reasoning_parts: List[str]
-    ) -> int:
+    def _calculate_max_tests(self, platform_info: PlatformInfo, reasoning_parts: List[str]) -> int:
         """
         Calculate maximum parallel test runners.
 
@@ -229,9 +139,7 @@ class PlatformDetector:
             Maximum parallel test runners
         """
         max_tests = min(platform_info.cpu_count_logical, 8)
-        reasoning_parts.append(
-            f"Test runners: {max_tests} (CPU cores: {platform_info.cpu_count_logical})"
-        )
+        reasoning_parts.append(f'Test runners: {max_tests} (CPU cores: {platform_info.cpu_count_logical})')
         return max_tests
 
     def _calculate_max_stages(self, reasoning_parts: List[str]) -> int:
@@ -247,16 +155,10 @@ class PlatformDetector:
             Maximum parallel stages
         """
         max_stages = 2
-        reasoning_parts.append(f"Parallel stages: {max_stages}")
+        reasoning_parts.append(f'Parallel stages: {max_stages}')
         return max_stages
 
-    def _calculate_memory_per_agent(
-        self,
-        platform_info: PlatformInfo,
-        max_developers: int,
-        max_tests: int,
-        reasoning_parts: List[str]
-    ) -> float:
+    def _calculate_memory_per_agent(self, platform_info: PlatformInfo, max_developers: int, max_tests: int, reasoning_parts: List[str]) -> float:
         """
         Calculate memory allocation per agent.
 
@@ -273,19 +175,11 @@ class PlatformDetector:
         """
         reserved_memory = 2.0
         total_agents = max_developers + max_tests
-        max_memory_per_agent = max(
-            1.0,  # Minimum 1GB per agent
-            (platform_info.available_memory_gb - reserved_memory) / total_agents
-        )
-        reasoning_parts.append(
-            f"Memory per agent: {max_memory_per_agent:.1f}GB "
-            f"(Available: {platform_info.available_memory_gb:.1f}GB)"
-        )
+        max_memory_per_agent = max(1.0, (platform_info.available_memory_gb - reserved_memory) / total_agents)
+        reasoning_parts.append(f'Memory per agent: {max_memory_per_agent:.1f}GB (Available: {platform_info.available_memory_gb:.1f}GB)')
         return max_memory_per_agent
 
-    def _calculate_batch_size(
-        self, platform_info: PlatformInfo, reasoning_parts: List[str]
-    ) -> int:
+    def _calculate_batch_size(self, platform_info: PlatformInfo, reasoning_parts: List[str]) -> int:
         """
         Calculate batch size based on available memory.
 
@@ -299,25 +193,12 @@ class PlatformDetector:
         Returns:
             Recommended batch size
         """
-        # Dispatch table: memory threshold -> batch size
-        memory_to_batch_size: List[Tuple[float, int]] = [
-            (16, 100),  # High memory: large batches
-            (8, 50),    # Medium memory: medium batches
-            (0, 25)     # Low memory: small batches
-        ]
-
-        # Find appropriate batch size (early match returns)
-        batch_size = next(
-            (size for threshold, size in memory_to_batch_size
-             if platform_info.total_memory_gb >= threshold),
-            25  # Default fallback
-        )
-        reasoning_parts.append(f"Batch size: {batch_size}")
+        memory_to_batch_size: List[Tuple[float, int]] = [(16, 100), (8, 50), (0, 25)]
+        batch_size = next((size for threshold, size in memory_to_batch_size if platform_info.total_memory_gb >= threshold), 25)
+        reasoning_parts.append(f'Batch size: {batch_size}')
         return batch_size
 
-    def _should_use_async_io(
-        self, platform_info: PlatformInfo, reasoning_parts: List[str]
-    ) -> bool:
+    def _should_use_async_io(self, platform_info: PlatformInfo, reasoning_parts: List[str]) -> bool:
         """
         Determine if async I/O should be enabled.
 
@@ -331,12 +212,10 @@ class PlatformDetector:
             True if async I/O should be enabled
         """
         use_async = platform_info.os_type in ['linux', 'darwin']
-        reasoning_parts.append(f"Async I/O: {use_async}")
+        reasoning_parts.append(f'Async I/O: {use_async}')
         return use_async
 
-    def _should_enable_caching(
-        self, platform_info: PlatformInfo, reasoning_parts: List[str]
-    ) -> bool:
+    def _should_enable_caching(self, platform_info: PlatformInfo, reasoning_parts: List[str]) -> bool:
         """
         Determine if caching should be enabled.
 
@@ -350,12 +229,10 @@ class PlatformDetector:
             True if caching should be enabled
         """
         enable_caching = platform_info.available_memory_gb >= 4.0
-        reasoning_parts.append(f"Caching: {enable_caching}")
+        reasoning_parts.append(f'Caching: {enable_caching}')
         return enable_caching
 
-    def _calculate_thread_pool_size(
-        self, platform_info: PlatformInfo, reasoning_parts: List[str]
-    ) -> int:
+    def _calculate_thread_pool_size(self, platform_info: PlatformInfo, reasoning_parts: List[str]) -> int:
         """
         Calculate thread pool size for I/O operations.
 
@@ -369,7 +246,7 @@ class PlatformDetector:
             Thread pool size
         """
         thread_pool_size = min(platform_info.cpu_count_logical * 2, 16)
-        reasoning_parts.append(f"Thread pool: {thread_pool_size}")
+        reasoning_parts.append(f'Thread pool: {thread_pool_size}')
         return thread_pool_size
 
     def _calculate_platform_hash(self, info: PlatformInfo) -> str:
@@ -384,19 +261,8 @@ class PlatformDetector:
         Returns:
             SHA256 hash of key platform characteristics
         """
-        # Include key characteristics that shouldn't change
-        key_data = (
-            f"{info.os_type}|"
-            f"{info.os_name}|"
-            f"{info.cpu_count_physical}|"
-            f"{info.cpu_count_logical}|"
-            f"{info.cpu_architecture}|"
-            f"{info.total_memory_gb:.0f}|"  # Round to avoid minor variations
-            f"{info.hostname}"
-        )
-
+        key_data = f'{info.os_type}|{info.os_name}|{info.cpu_count_physical}|{info.cpu_count_logical}|{info.cpu_architecture}|{info.total_memory_gb:.0f}|{info.hostname}'
         return hashlib.sha256(key_data.encode()).hexdigest()[:16]
-
 
 def get_platform_summary(info: PlatformInfo, allocation: ResourceAllocation) -> str:
     """
@@ -411,43 +277,4 @@ def get_platform_summary(info: PlatformInfo, allocation: ResourceAllocation) -> 
     Returns:
         Formatted summary string
     """
-    return f"""
-======================================================================
-ARTEMIS PLATFORM DETECTION
-======================================================================
-
-Operating System:
-  Type:         {info.os_type}
-  Name:         {info.os_name}
-  Version:      {info.os_version}
-  Release:      {info.os_release}
-  Architecture: {info.cpu_architecture}
-
-Hardware:
-  CPU Cores:    {info.cpu_count_physical} physical, {info.cpu_count_logical} logical
-  CPU Speed:    {info.cpu_frequency_mhz:.0f} MHz
-  Total Memory: {info.total_memory_gb:.1f} GB
-  Free Memory:  {info.available_memory_gb:.1f} GB
-  Disk Space:   {info.available_disk_gb:.1f} GB / {info.total_disk_gb:.1f} GB
-  Disk Type:    {info.disk_type}
-
-Python:
-  Version:      {info.python_version}
-  Implementation: {info.python_implementation}
-
-Resource Allocation:
-  Max Parallel Developers: {allocation.max_parallel_developers}
-  Max Parallel Tests:      {allocation.max_parallel_tests}
-  Max Parallel Stages:     {allocation.max_parallel_stages}
-  Memory per Agent:        {allocation.max_memory_per_agent_gb:.1f} GB
-  Batch Size:              {allocation.recommended_batch_size}
-  Async I/O:               {'Enabled' if allocation.use_async_io else 'Disabled'}
-  Caching:                 {'Enabled' if allocation.enable_caching else 'Disabled'}
-  Thread Pool Size:        {allocation.thread_pool_size}
-
-Reasoning: {allocation.reasoning}
-
-Platform Hash: {info.platform_hash}
-
-======================================================================
-"""
+    return f"\n======================================================================\nARTEMIS PLATFORM DETECTION\n======================================================================\n\nOperating System:\n  Type:         {info.os_type}\n  Name:         {info.os_name}\n  Version:      {info.os_version}\n  Release:      {info.os_release}\n  Architecture: {info.cpu_architecture}\n\nHardware:\n  CPU Cores:    {info.cpu_count_physical} physical, {info.cpu_count_logical} logical\n  CPU Speed:    {info.cpu_frequency_mhz:.0f} MHz\n  Total Memory: {info.total_memory_gb:.1f} GB\n  Free Memory:  {info.available_memory_gb:.1f} GB\n  Disk Space:   {info.available_disk_gb:.1f} GB / {info.total_disk_gb:.1f} GB\n  Disk Type:    {info.disk_type}\n\nPython:\n  Version:      {info.python_version}\n  Implementation: {info.python_implementation}\n\nResource Allocation:\n  Max Parallel Developers: {allocation.max_parallel_developers}\n  Max Parallel Tests:      {allocation.max_parallel_tests}\n  Max Parallel Stages:     {allocation.max_parallel_stages}\n  Memory per Agent:        {allocation.max_memory_per_agent_gb:.1f} GB\n  Batch Size:              {allocation.recommended_batch_size}\n  Async I/O:               {('Enabled' if allocation.use_async_io else 'Disabled')}\n  Caching:                 {('Enabled' if allocation.enable_caching else 'Disabled')}\n  Thread Pool Size:        {allocation.thread_pool_size}\n\nReasoning: {allocation.reasoning}\n\nPlatform Hash: {info.platform_hash}\n\n======================================================================\n"

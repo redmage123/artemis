@@ -1,19 +1,6 @@
-#!/usr/bin/env python3
-"""
-Automated Nested If Refactoring Tool
-
-Transforms deeply nested if statements into early return patterns
-following claude.md coding standards.
-
-Strategy:
-1. Parse Python file to AST
-2. Identify nested if blocks (depth >= 2)
-3. Transform to early returns using guard clauses
-4. Generate refactored code
-5. Verify compilation
-6. Optionally run tests
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('auto_refactor_nested_ifs')
+'\nAutomated Nested If Refactoring Tool\n\nTransforms deeply nested if statements into early return patterns\nfollowing claude.md coding standards.\n\nStrategy:\n1. Parse Python file to AST\n2. Identify nested if blocks (depth >= 2)\n3. Transform to early returns using guard clauses\n4. Generate refactored code\n5. Verify compilation\n6. Optionally run tests\n'
 import ast
 import astor
 import sys
@@ -21,7 +8,6 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 import subprocess
-
 
 @dataclass
 class RefactoringResult:
@@ -31,8 +17,7 @@ class RefactoringResult:
     violations_before: int
     violations_after: int
     compilation_ok: bool
-    error_message: str = ""
-
+    error_message: str = ''
 
 class NestedIfRefactorer(ast.NodeTransformer):
     """
@@ -53,47 +38,33 @@ class NestedIfRefactorer(ast.NodeTransformer):
         """Track when we're inside a function"""
         old_in_function = self.in_function
         old_returns_value = self.function_returns_value
-
         self.in_function = True
         self.function_returns_value = self._function_has_return_value(node)
-
-        # Transform function body
         new_node = self.generic_visit(node)
-
         self.in_function = old_in_function
         self.function_returns_value = old_returns_value
-
         return new_node
 
     def visit_If(self, node):
         """Transform nested if statements"""
-        # Only transform if we're in a function
         if not self.in_function:
             return self.generic_visit(node)
-
-        # Check if this is a nested if (depth >= 2)
         depth = self._get_nesting_depth(node)
-
         if depth >= 2:
-            # Attempt to refactor using early return pattern
             refactored = self._refactor_to_early_return(node)
             if refactored:
                 self.transformations += 1
                 return refactored
-
-        # Recursively process children
         return self.generic_visit(node)
 
     def _get_nesting_depth(self, node):
         """Calculate nesting depth of an if statement"""
         depth = 0
         parent = getattr(node, 'parent', None)
-
         while parent:
             if isinstance(parent, ast.If):
                 depth += 1
             parent = getattr(parent, 'parent', None)
-
         return depth
 
     def _refactor_to_early_return(self, node):
@@ -115,57 +86,32 @@ class NestedIfRefactorer(ast.NodeTransformer):
             return default
         return result
         """
-        # For now, use a simplified transformation
-        # More complex transformations can be added incrementally
-
-        # Strategy: Extract nested ifs and flatten them
         flattened_statements = []
         current = node
-
-        # Walk down the nested if chain
         while isinstance(current, ast.If):
-            # Check if this if has a simple structure we can flatten
             if self._can_flatten(current):
-                # Create inverted guard clause
                 guard = self._create_guard_clause(current)
                 if guard:
                     flattened_statements.append(guard)
-
-                # Move to next level
                 if len(current.body) == 1 and isinstance(current.body[0], ast.If):
                     current = current.body[0]
                 else:
-                    # Add remaining body statements
                     flattened_statements.extend(current.body)
                     break
             else:
-                # Can't flatten this structure, abort
                 return None
-
-        # Return the flattened statements
         if len(flattened_statements) > 1:
             return flattened_statements
-
         return None
 
     def _can_flatten(self, node):
         """Check if an if statement can be safely flattened"""
-        # Simple heuristic: Can flatten if:
-        # 1. No else clause (or simple else)
-        # 2. Body is either single nested if or simple statements
-        # 3. Condition is invertible
-
-        # Check for complex else clauses
-        if node.orelse and not self._is_simple_else(node.orelse):
+        if node.orelse and (not self._is_simple_else(node.orelse)):
             return False
-
-        # Check body structure
         if len(node.body) == 1 and isinstance(node.body[0], ast.If):
-            return True  # Nested if, can flatten
-
+            return True
         if len(node.body) <= 3:
-            return True  # Simple body, can flatten
-
+            return True
         return False
 
     def _is_simple_else(self, orelse):
@@ -176,38 +122,20 @@ class NestedIfRefactorer(ast.NodeTransformer):
 
     def _create_guard_clause(self, if_node):
         """Create an inverted guard clause from an if statement"""
-        # Invert the condition
-        inverted_condition = ast.UnaryOp(
-            op=ast.Not(),
-            operand=if_node.test
-        )
-
-        # Determine what to return
+        inverted_condition = ast.UnaryOp(op=ast.Not(), operand=if_node.test)
         return_value = self._get_early_return_value(if_node)
-
-        # Create guard clause: if not condition: return value
-        guard = ast.If(
-            test=inverted_condition,
-            body=[ast.Return(value=return_value)],
-            orelse=[]
-        )
-
+        guard = ast.If(test=inverted_condition, body=[ast.Return(value=return_value)], orelse=[])
         return guard
 
     def _get_early_return_value(self, if_node):
         """Determine appropriate return value for early return"""
-        # Check if there's an else clause with a return
         if if_node.orelse:
             for stmt in if_node.orelse:
                 if isinstance(stmt, ast.Return):
                     return stmt.value
-
-        # Default returns based on context
         if self.function_returns_value:
-            # Return None as safe default
             return ast.Constant(value=None)
         else:
-            # Void function, return nothing
             return None
 
     def _function_has_return_value(self, func_node):
@@ -217,11 +145,10 @@ class NestedIfRefactorer(ast.NodeTransformer):
                 return True
         return False
 
-
 class AutoRefactorEngine:
     """Main refactoring engine"""
 
-    def __init__(self, verify_compilation: bool = True, dry_run: bool = False):
+    def __init__(self, verify_compilation: bool=True, dry_run: bool=False):
         self.verify_compilation = verify_compilation
         self.dry_run = dry_run
         self.results: List[RefactoringResult] = []
@@ -229,98 +156,39 @@ class AutoRefactorEngine:
     def refactor_file(self, file_path: Path) -> RefactoringResult:
         """Refactor a single file"""
         try:
-            # Read source
             source = file_path.read_text()
-
-            # Count violations before
             violations_before = self._count_nested_ifs(source)
-
             if violations_before == 0:
-                return RefactoringResult(
-                    file_path=str(file_path),
-                    success=True,
-                    violations_before=0,
-                    violations_after=0,
-                    compilation_ok=True,
-                    error_message="No violations found"
-                )
-
-            # Parse to AST
+                return RefactoringResult(file_path=str(file_path), success=True, violations_before=0, violations_after=0, compilation_ok=True, error_message='No violations found')
             tree = ast.parse(source)
-
-            # Add parent references
             self._add_parent_refs(tree)
-
-            # Apply transformations
             refactorer = NestedIfRefactorer()
             new_tree = refactorer.visit(tree)
-
-            # Generate refactored code
             try:
                 refactored_code = astor.to_source(new_tree)
             except Exception as e:
-                return RefactoringResult(
-                    file_path=str(file_path),
-                    success=False,
-                    violations_before=violations_before,
-                    violations_after=violations_before,
-                    compilation_ok=False,
-                    error_message=f"Code generation failed: {e}"
-                )
-
-            # Count violations after
+                return RefactoringResult(file_path=str(file_path), success=False, violations_before=violations_before, violations_after=violations_before, compilation_ok=False, error_message=f'Code generation failed: {e}')
             violations_after = self._count_nested_ifs(refactored_code)
-
-            # Verify compilation
             compilation_ok = True
             if self.verify_compilation:
                 try:
                     compile(refactored_code, str(file_path), 'exec')
                 except SyntaxError as e:
                     compilation_ok = False
-                    return RefactoringResult(
-                        file_path=str(file_path),
-                        success=False,
-                        violations_before=violations_before,
-                        violations_after=violations_after,
-                        compilation_ok=False,
-                        error_message=f"Refactored code has syntax error: {e}"
-                    )
-
-            # Write refactored code (if not dry run)
+                    return RefactoringResult(file_path=str(file_path), success=False, violations_before=violations_before, violations_after=violations_after, compilation_ok=False, error_message=f'Refactored code has syntax error: {e}')
             if not self.dry_run:
-                # Backup original
                 backup_path = file_path.with_suffix('.py.bak')
                 file_path.rename(backup_path)
-
-                # Write refactored
                 file_path.write_text(refactored_code)
-
-            return RefactoringResult(
-                file_path=str(file_path),
-                success=True,
-                violations_before=violations_before,
-                violations_after=violations_after,
-                compilation_ok=compilation_ok,
-                error_message=""
-            )
-
+            return RefactoringResult(file_path=str(file_path), success=True, violations_before=violations_before, violations_after=violations_after, compilation_ok=compilation_ok, error_message='')
         except Exception as e:
-            return RefactoringResult(
-                file_path=str(file_path),
-                success=False,
-                violations_before=0,
-                violations_after=0,
-                compilation_ok=False,
-                error_message=f"Unexpected error: {e}"
-            )
+            return RefactoringResult(file_path=str(file_path), success=False, violations_before=0, violations_after=0, compilation_ok=False, error_message=f'Unexpected error: {e}')
 
     def _count_nested_ifs(self, source: str) -> int:
         """Count nested if violations in source code"""
         try:
             tree = ast.parse(source)
             self._add_parent_refs(tree)
-
             count = 0
             for node in ast.walk(tree):
                 if isinstance(node, ast.If):
@@ -330,10 +198,8 @@ class AutoRefactorEngine:
                         if isinstance(parent, ast.If):
                             depth += 1
                         parent = getattr(parent, 'parent', None)
-
                     if depth >= 2:
                         count += 1
-
             return count
         except:
             return 0
@@ -344,83 +210,78 @@ class AutoRefactorEngine:
             for child in ast.iter_child_nodes(parent):
                 child.parent = parent
 
-    def refactor_directory(self, directory: Path, pattern: str = "*.py") -> List[RefactoringResult]:
+    def refactor_directory(self, directory: Path, pattern: str='*.py') -> List[RefactoringResult]:
         """Refactor all Python files in directory"""
         results = []
-
         for file_path in directory.rglob(pattern):
-            # Skip __pycache__, .venv, etc.
-            if any(excluded in file_path.parts for excluded in ['.venv', '__pycache__', '.git']):
+            if any((excluded in file_path.parts for excluded in ['.venv', '__pycache__', '.git'])):
                 continue
-
-            print(f"Refactoring {file_path}...")
+            
+            logger.log(f'Refactoring {file_path}...', 'INFO')
             result = self.refactor_file(file_path)
             results.append(result)
-
             if result.success:
                 improvement = result.violations_before - result.violations_after
-                print(f"  ✅ {result.violations_before} → {result.violations_after} violations ({improvement} fixed)")
+                
+                logger.log(f'  ✅ {result.violations_before} → {result.violations_after} violations ({improvement} fixed)', 'INFO')
             else:
-                print(f"  ❌ Failed: {result.error_message}")
-
+                
+                logger.log(f'  ❌ Failed: {result.error_message}', 'INFO')
         return results
 
     def print_summary(self, results: List[RefactoringResult]):
         """Print refactoring summary"""
-        print("\n" + "="*70)
-        print("REFACTORING SUMMARY")
-        print("="*70)
-
+        
+        logger.log('\n' + '=' * 70, 'INFO')
+        
+        logger.log('REFACTORING SUMMARY', 'INFO')
+        
+        logger.log('=' * 70, 'INFO')
         total_files = len(results)
-        successful = sum(1 for r in results if r.success)
+        successful = sum((1 for r in results if r.success))
         failed = total_files - successful
-
-        total_violations_before = sum(r.violations_before for r in results)
-        total_violations_after = sum(r.violations_after for r in results)
+        total_violations_before = sum((r.violations_before for r in results))
+        total_violations_after = sum((r.violations_after for r in results))
         total_fixed = total_violations_before - total_violations_after
-
-        print(f"Files processed: {total_files}")
-        print(f"Successful: {successful}")
-        print(f"Failed: {failed}")
-        print()
-        print(f"Violations before: {total_violations_before}")
-        print(f"Violations after: {total_violations_after}")
-        print(f"Total fixed: {total_fixed} ({total_fixed/total_violations_before*100:.1f}%)")
-
+        
+        logger.log(f'Files processed: {total_files}', 'INFO')
+        
+        logger.log(f'Successful: {successful}', 'INFO')
+        
+        logger.log(f'Failed: {failed}', 'INFO')
+        
+        pass
+        
+        logger.log(f'Violations before: {total_violations_before}', 'INFO')
+        
+        logger.log(f'Violations after: {total_violations_after}', 'INFO')
+        
+        logger.log(f'Total fixed: {total_fixed} ({total_fixed / total_violations_before * 100:.1f}%)', 'INFO')
         if failed > 0:
-            print("\n❌ Failed files:")
+            
+            logger.log('\n❌ Failed files:', 'INFO')
             for r in results:
                 if not r.success:
-                    print(f"  - {r.file_path}: {r.error_message}")
-
-        print("="*70)
-
+                    
+                    logger.log(f'  - {r.file_path}: {r.error_message}', 'INFO')
+        
+        logger.log('=' * 70, 'INFO')
 
 def main():
     """Main entry point"""
     import argparse
-
     parser = argparse.ArgumentParser(description='Auto-refactor nested if statements')
     parser.add_argument('path', help='File or directory to refactor')
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without modifying files')
     parser.add_argument('--no-verify', action='store_true', help='Skip compilation verification')
-
     args = parser.parse_args()
-
     path = Path(args.path)
-
-    engine = AutoRefactorEngine(
-        verify_compilation=not args.no_verify,
-        dry_run=args.dry_run
-    )
-
+    engine = AutoRefactorEngine(verify_compilation=not args.no_verify, dry_run=args.dry_run)
     if path.is_file():
         result = engine.refactor_file(path)
         engine.print_summary([result])
     else:
         results = engine.refactor_directory(path)
         engine.print_summary(results)
-
-
 if __name__ == '__main__':
     main()

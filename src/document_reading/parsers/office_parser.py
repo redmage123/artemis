@@ -1,13 +1,8 @@
-#!/usr/bin/env python3
-"""
-WHY: Microsoft Office and LibreOffice document parsing.
-RESPONSIBILITY: Extract text from Word, Excel, ODT, and ODS files.
-PATTERNS: Strategy pattern for different office formats, Guard clauses for library checks.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('office_parser')
+'\nWHY: Microsoft Office and LibreOffice document parsing.\nRESPONSIBILITY: Extract text from Word, Excel, ODT, and ODS files.\nPATTERNS: Strategy pattern for different office formats, Guard clauses for library checks.\n'
 from typing import List, Optional
 from artemis_exceptions import DocumentReadError
-
 
 class WordParser:
     """
@@ -15,7 +10,7 @@ class WordParser:
     RESPONSIBILITY: Extract text from paragraphs and tables.
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         WHY: Initialize parser with library detection.
         RESPONSIBILITY: Check if python-docx is available.
@@ -39,7 +34,8 @@ class WordParser:
             return True
         except ImportError:
             if self.verbose:
-                print("[WordParser] Word document support not available. Install: pip install python-docx")
+                
+                logger.log('[WordParser] Word document support not available. Install: pip install python-docx', 'INFO')
             return False
 
     def is_available(self) -> bool:
@@ -60,40 +56,23 @@ class WordParser:
         Raises:
             DocumentReadError: If library not available or parsing fails
         """
-        # Guard: Check library availability
         if not self.has_docx:
-            raise DocumentReadError(
-                "Word document support not available. Install: pip install python-docx",
-                context={"file_path": file_path}
-            )
-
+            raise DocumentReadError('Word document support not available. Install: pip install python-docx', context={'file_path': file_path})
         import docx
-
         try:
             doc = docx.Document(file_path)
             text_content: List[str] = []
-
-            # Extract paragraphs
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
                     text_content.append(paragraph.text)
-
-            # Extract tables
             for table in doc.tables:
                 for row in table.rows:
-                    row_text = " | ".join([cell.text for cell in row.cells])
+                    row_text = ' | '.join([cell.text for cell in row.cells])
                     if row_text.strip():
                         text_content.append(row_text)
-
-            return "\n".join(text_content)
-
+            return '\n'.join(text_content)
         except Exception as e:
-            raise DocumentReadError(
-                f"Error parsing Word document: {str(e)}",
-                context={"file_path": file_path},
-                original_exception=e
-            )
-
+            raise DocumentReadError(f'Error parsing Word document: {str(e)}', context={'file_path': file_path}, original_exception=e)
 
 class ExcelParser:
     """
@@ -101,7 +80,7 @@ class ExcelParser:
     RESPONSIBILITY: Extract text from all sheets and cells.
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         WHY: Initialize parser with library detection.
         RESPONSIBILITY: Check if openpyxl is available.
@@ -125,7 +104,8 @@ class ExcelParser:
             return True
         except ImportError:
             if self.verbose:
-                print("[ExcelParser] Excel support not available. Install: pip install openpyxl")
+                
+                logger.log('[ExcelParser] Excel support not available. Install: pip install openpyxl', 'INFO')
             return False
 
     def is_available(self) -> bool:
@@ -146,38 +126,22 @@ class ExcelParser:
         Raises:
             DocumentReadError: If library not available or parsing fails
         """
-        # Guard: Check library availability
         if not self.has_openpyxl:
-            raise DocumentReadError(
-                "Excel support not available. Install: pip install openpyxl",
-                context={"file_path": file_path}
-            )
-
+            raise DocumentReadError('Excel support not available. Install: pip install openpyxl', context={'file_path': file_path})
         import openpyxl
-
         try:
             workbook = openpyxl.load_workbook(file_path, data_only=True)
             text_content: List[str] = []
-
             for sheet_name in workbook.sheetnames:
                 sheet = workbook[sheet_name]
-                text_content.append(f"\n=== Sheet: {sheet_name} ===\n")
-
+                text_content.append(f'\n=== Sheet: {sheet_name} ===\n')
                 for row in sheet.iter_rows(values_only=True):
-                    # Filter out None values and convert to strings
                     row_values = [str(cell) for cell in row if cell is not None]
                     if row_values:
-                        text_content.append(" | ".join(row_values))
-
-            return "\n".join(text_content)
-
+                        text_content.append(' | '.join(row_values))
+            return '\n'.join(text_content)
         except Exception as e:
-            raise DocumentReadError(
-                f"Error parsing Excel file: {str(e)}",
-                context={"file_path": file_path},
-                original_exception=e
-            )
-
+            raise DocumentReadError(f'Error parsing Excel file: {str(e)}', context={'file_path': file_path}, original_exception=e)
 
 class ODTParser:
     """
@@ -185,7 +149,7 @@ class ODTParser:
     RESPONSIBILITY: Extract text from ODF text documents.
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         WHY: Initialize parser with library detection.
         RESPONSIBILITY: Check if odfpy is available.
@@ -210,7 +174,8 @@ class ODTParser:
             return True
         except ImportError:
             if self.verbose:
-                print("[ODTParser] LibreOffice support not available. Install: pip install odfpy")
+                
+                logger.log('[ODTParser] LibreOffice support not available. Install: pip install odfpy', 'INFO')
             return False
 
     def is_available(self) -> bool:
@@ -231,35 +196,20 @@ class ODTParser:
         Raises:
             DocumentReadError: If library not available or parsing fails
         """
-        # Guard: Check library availability
         if not self.has_odf:
-            raise DocumentReadError(
-                "LibreOffice support not available. Install: pip install odfpy",
-                context={"file_path": file_path}
-            )
-
+            raise DocumentReadError('LibreOffice support not available. Install: pip install odfpy', context={'file_path': file_path})
         from odf import text, teletype
         from odf.opendocument import load
-
         try:
             doc = load(file_path)
             text_content: List[str] = []
-
-            # Extract all text elements
             for element in doc.getElementsByType(text.P):
                 paragraph_text = teletype.extractText(element)
                 if paragraph_text.strip():
                     text_content.append(paragraph_text)
-
-            return "\n".join(text_content)
-
+            return '\n'.join(text_content)
         except Exception as e:
-            raise DocumentReadError(
-                f"Error parsing ODT file: {str(e)}",
-                context={"file_path": file_path},
-                original_exception=e
-            )
-
+            raise DocumentReadError(f'Error parsing ODT file: {str(e)}', context={'file_path': file_path}, original_exception=e)
 
 class ODSParser:
     """
@@ -267,7 +217,7 @@ class ODSParser:
     RESPONSIBILITY: Extract text from ODF spreadsheet tables.
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         WHY: Initialize parser with library detection.
         RESPONSIBILITY: Check if odfpy is available.
@@ -293,7 +243,8 @@ class ODSParser:
             return True
         except ImportError:
             if self.verbose:
-                print("[ODSParser] LibreOffice support not available. Install: pip install odfpy")
+                
+                logger.log('[ODSParser] LibreOffice support not available. Install: pip install odfpy', 'INFO')
             return False
 
     def is_available(self) -> bool:
@@ -314,41 +265,25 @@ class ODSParser:
         Raises:
             DocumentReadError: If library not available or parsing fails
         """
-        # Guard: Check library availability
         if not self.has_odf:
-            raise DocumentReadError(
-                "LibreOffice support not available. Install: pip install odfpy",
-                context={"file_path": file_path}
-            )
-
+            raise DocumentReadError('LibreOffice support not available. Install: pip install odfpy', context={'file_path': file_path})
         from odf.opendocument import load
         from odf.table import Table, TableRow, TableCell
         from odf import teletype
-
         try:
             doc = load(file_path)
             text_content: List[str] = []
-
-            # Extract all tables
             for table in doc.spreadsheet.getElementsByType(Table):
                 table_name = table.getAttribute('name')
-                text_content.append(f"\n=== Sheet: {table_name} ===\n")
-
+                text_content.append(f'\n=== Sheet: {table_name} ===\n')
                 for row in table.getElementsByType(TableRow):
                     row_values: List[str] = []
                     for cell in row.getElementsByType(TableCell):
                         cell_text = teletype.extractText(cell)
                         if cell_text:
                             row_values.append(cell_text)
-
                     if row_values:
-                        text_content.append(" | ".join(row_values))
-
-            return "\n".join(text_content)
-
+                        text_content.append(' | '.join(row_values))
+            return '\n'.join(text_content)
         except Exception as e:
-            raise DocumentReadError(
-                f"Error parsing ODS file: {str(e)}",
-                context={"file_path": file_path},
-                original_exception=e
-            )
+            raise DocumentReadError(f'Error parsing ODS file: {str(e)}', context={'file_path': file_path}, original_exception=e)

@@ -1,30 +1,14 @@
-#!/usr/bin/env python3
-"""
-Configuration Loader Module
-
-WHY: Handles loading configuration from environment variables and files.
-Separates loading logic from validation and generation.
-
-RESPONSIBILITY: Load configuration from various sources (env, .env files, etc.)
-
-PATTERNS:
-- Strategy pattern for different loading sources
-- Guard clauses for early returns
-- Type conversion using dispatch tables
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('loader')
+'\nConfiguration Loader Module\n\nWHY: Handles loading configuration from environment variables and files.\nSeparates loading logic from validation and generation.\n\nRESPONSIBILITY: Load configuration from various sources (env, .env files, etc.)\n\nPATTERNS:\n- Strategy pattern for different loading sources\n- Guard clauses for early returns\n- Type conversion using dispatch tables\n'
 import os
 from typing import Dict, Any, Optional
-
-# Try to load dotenv if available
 try:
     from dotenv import load_dotenv
     DOTENV_AVAILABLE = True
 except ImportError:
     DOTENV_AVAILABLE = False
-
 from agents.config.models import ConfigSchema, BOOL_STRING_MAP
-
 
 class ConfigLoader:
     """
@@ -37,7 +21,7 @@ class ConfigLoader:
     """
 
     @staticmethod
-    def load_dotenv(override: bool = True) -> bool:
+    def load_dotenv(override: bool=True) -> bool:
         """
         Load .env file if dotenv is available
 
@@ -49,7 +33,6 @@ class ConfigLoader:
         """
         if not DOTENV_AVAILABLE:
             return False
-
         try:
             load_dotenv(override=override)
             return True
@@ -70,10 +53,8 @@ class ConfigLoader:
         Returns:
             Boolean if string matches map, original value otherwise
         """
-        # Guard clause: only convert if string
         if not isinstance(value, str):
             return value
-
         return BOOL_STRING_MAP.get(value, value)
 
     @staticmethod
@@ -91,20 +72,14 @@ class ConfigLoader:
             Configuration dictionary
         """
         config: Dict[str, Any] = {}
-
         for key, key_schema in schema.items():
-            # Read from environment or use default
             value = os.getenv(key, key_schema.get('default'))
-
-            # Convert boolean strings using strategy pattern
             value = ConfigLoader.convert_boolean_string(value)
-
             config[key] = value
-
         return config
 
     @staticmethod
-    def load_configuration(load_env_file: bool = True, verbose: bool = False) -> Dict[str, Any]:
+    def load_configuration(load_env_file: bool=True, verbose: bool=False) -> Dict[str, Any]:
         """
         Load complete configuration
 
@@ -118,23 +93,20 @@ class ConfigLoader:
         Returns:
             Complete configuration dictionary
         """
-        # Load .env file if requested
         if load_env_file:
             loaded = ConfigLoader.load_dotenv(override=True)
             if verbose and loaded:
-                print("Loaded configuration from .env file")
-
-        # Load from environment using schema
+                
+                logger.log('Loaded configuration from .env file', 'INFO')
         schema = ConfigSchema.get_schema()
         config = ConfigLoader.load_from_environment(schema)
-
         if verbose:
-            print("Configuration loaded from environment")
-
+            
+            logger.log('Configuration loaded from environment', 'INFO')
         return config
 
     @staticmethod
-    def get_value(config: Dict[str, Any], key: str, default: Any = None) -> Any:
+    def get_value(config: Dict[str, Any], key: str, default: Any=None) -> Any:
         """
         Get configuration value with optional default
 
@@ -163,23 +135,17 @@ class ConfigLoader:
         Returns:
             Masked value string
         """
-        # Guard clause: missing value
         if not value:
-            return "NOT_SET"
-
-        # Guard clause: not sensitive
+            return 'NOT_SET'
         if not ConfigSchema.is_sensitive(key):
             return str(value)
-
-        # Mask API keys: show first 6 and last 4 chars
         value_str = str(value)
         if len(value_str) > 10:
-            return f"{value_str[:6]}...{value_str[-4:]}"
-
-        return "***"
+            return f'{value_str[:6]}...{value_str[-4:]}'
+        return '***'
 
     @staticmethod
-    def export_config(config: Dict[str, Any], mask_sensitive: bool = True) -> Dict[str, Any]:
+    def export_config(config: Dict[str, Any], mask_sensitive: bool=True) -> Dict[str, Any]:
         """
         Export configuration with optional masking
 
@@ -193,15 +159,9 @@ class ConfigLoader:
         Returns:
             Exported configuration dictionary
         """
-        # Guard clause: no masking needed
         if not mask_sensitive:
             return config.copy()
-
-        # Return masked configuration
-        return {
-            key: ConfigLoader.mask_sensitive_value(key, value)
-            for key, value in config.items()
-        }
+        return {key: ConfigLoader.mask_sensitive_value(key, value) for key, value in config.items()}
 
     @staticmethod
     def set_test_defaults(config: Dict[str, Any]) -> None:

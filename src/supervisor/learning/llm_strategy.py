@@ -1,16 +1,10 @@
-#!/usr/bin/env python3
-"""
-WHY: Use LLM to generate solutions for novel failure modes
-RESPONSIBILITY: LLM consultation, prompt building, response parsing
-PATTERNS: Strategy (learning strategy), Template Method (prompt building)
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('llm_strategy')
+'\nWHY: Use LLM to generate solutions for novel failure modes\nRESPONSIBILITY: LLM consultation, prompt building, response parsing\nPATTERNS: Strategy (learning strategy), Template Method (prompt building)\n'
 import json
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-
 from .models import UnexpectedState, LearnedSolution, LearningStrategy
-
 
 class LLMPromptBuilder:
     """
@@ -26,61 +20,8 @@ class LLMPromptBuilder:
         RESPONSIBILITY: Format unexpected state into actionable LLM query
         PATTERNS: Template Method
         """
-        prompt = f"""You are an expert DevOps/SRE engineer helping debug an autonomous AI development pipeline called Artemis.
-
-UNEXPECTED STATE DETECTED:
-
-Current State: {unexpected_state.current_state}
-Expected States: {', '.join(unexpected_state.expected_states)}
-Severity: {unexpected_state.severity}
-
-CONTEXT:
-Card ID: {unexpected_state.card_id}
-Stage: {unexpected_state.stage_name or 'Unknown'}
-Previous State: {unexpected_state.previous_state or 'Unknown'}
-
-ERROR INFORMATION:
-{unexpected_state.error_message or 'No error message'}
-
-ADDITIONAL CONTEXT:
-{json.dumps(unexpected_state.context, indent=2)}
-
-TASK:
-Analyze this unexpected state and provide a step-by-step recovery workflow to fix the problem.
-
-Your response MUST be in the following JSON format:
-
-{{
-  "problem_analysis": "Brief analysis of what went wrong",
-  "root_cause": "Most likely root cause",
-  "solution_description": "High-level description of the fix",
-  "workflow_steps": [
-    {{
-      "step": 1,
-      "action": "action_type",
-      "description": "What this step does",
-      "parameters": {{"key": "value"}}
-    }},
-    ...
-  ],
-  "confidence": "high|medium|low",
-  "risks": ["potential risk 1", "potential risk 2"],
-  "alternative_approaches": ["alternative 1", "alternative 2"]
-}}
-
-AVAILABLE ACTIONS:
-- "retry_stage": Retry the failed stage
-- "rollback_to_state": Rollback to a previous state
-- "skip_stage": Skip the current stage
-- "reset_state": Reset to a clean state
-- "cleanup_resources": Clean up stuck resources
-- "restart_process": Restart a stuck process
-- "manual_intervention": Request human intervention
-
-Provide a practical, actionable recovery workflow.
-"""
+        prompt = f"""You are an expert DevOps/SRE engineer helping debug an autonomous AI development pipeline called Artemis.\n\nUNEXPECTED STATE DETECTED:\n\nCurrent State: {unexpected_state.current_state}\nExpected States: {', '.join(unexpected_state.expected_states)}\nSeverity: {unexpected_state.severity}\n\nCONTEXT:\nCard ID: {unexpected_state.card_id}\nStage: {unexpected_state.stage_name or 'Unknown'}\nPrevious State: {unexpected_state.previous_state or 'Unknown'}\n\nERROR INFORMATION:\n{unexpected_state.error_message or 'No error message'}\n\nADDITIONAL CONTEXT:\n{json.dumps(unexpected_state.context, indent=2)}\n\nTASK:\nAnalyze this unexpected state and provide a step-by-step recovery workflow to fix the problem.\n\nYour response MUST be in the following JSON format:\n\n{{\n  "problem_analysis": "Brief analysis of what went wrong",\n  "root_cause": "Most likely root cause",\n  "solution_description": "High-level description of the fix",\n  "workflow_steps": [\n    {{\n      "step": 1,\n      "action": "action_type",\n      "description": "What this step does",\n      "parameters": {{"key": "value"}}\n    }},\n    ...\n  ],\n  "confidence": "high|medium|low",\n  "risks": ["potential risk 1", "potential risk 2"],\n  "alternative_approaches": ["alternative 1", "alternative 2"]\n}}\n\nAVAILABLE ACTIONS:\n- "retry_stage": Retry the failed stage\n- "rollback_to_state": Rollback to a previous state\n- "skip_stage": Skip the current stage\n- "reset_state": Reset to a clean state\n- "cleanup_resources": Clean up stuck resources\n- "restart_process": Restart a stuck process\n- "manual_intervention": Request human intervention\n\nProvide a practical, actionable recovery workflow.\n"""
         return prompt
-
 
 class LLMResponseParser:
     """
@@ -97,18 +38,11 @@ class LLMResponseParser:
         PATTERNS: Guard Clause (JSON parsing), fallback strategy
         """
         try:
-            # Try to parse as JSON
             response_data = json.loads(llm_response)
-
-            # Guard: Has workflow_steps field
-            if "workflow_steps" in response_data:
-                return response_data["workflow_steps"]
-
-            # Fallback to text extraction
+            if 'workflow_steps' in response_data:
+                return response_data['workflow_steps']
             return LLMResponseParser._extract_workflow_from_text(llm_response)
-
         except json.JSONDecodeError:
-            # Not JSON, extract from text
             return LLMResponseParser._extract_workflow_from_text(llm_response)
 
     @staticmethod
@@ -120,28 +54,11 @@ class LLMResponseParser:
         """
         steps = []
         lines = text.split('\n')
-
         for line in lines:
-            # Look for patterns like "1. ", "2. ", "Step 1:", etc.
-            if any(pattern in line.lower() for pattern in ["1.", "2.", "3.", "step 1", "step 2"]):
-                steps.append({
-                    "step": len(steps) + 1,
-                    "action": "manual_intervention",  # Default to manual
-                    "description": line.strip(),
-                    "parameters": {}
-                })
-
-        # Guard: No steps found, create default manual intervention
+            if any((pattern in line.lower() for pattern in ['1.', '2.', '3.', 'step 1', 'step 2'])):
+                steps.append({'step': len(steps) + 1, 'action': 'manual_intervention', 'description': line.strip(), 'parameters': {}})
         if not steps:
-            return [
-                {
-                    "step": 1,
-                    "action": "manual_intervention",
-                    "description": "Consult LLM response for guidance",
-                    "parameters": {"llm_response": text[:500]}
-                }
-            ]
-
+            return [{'step': 1, 'action': 'manual_intervention', 'description': 'Consult LLM response for guidance', 'parameters': {'llm_response': text[:500]}}]
         return steps
 
     @staticmethod
@@ -152,11 +69,9 @@ class LLMResponseParser:
         """
         try:
             data = json.loads(llm_response)
-            return data.get("solution_description", "LLM-generated solution")
+            return data.get('solution_description', 'LLM-generated solution')
         except json.JSONDecodeError:
-            # Extract first sentence or first 100 chars
             return llm_response.split('.')[0][:100]
-
 
 class LLMConsultationStrategy:
     """
@@ -165,15 +80,12 @@ class LLMConsultationStrategy:
     PATTERNS: Strategy (learning approach), Template Method (consultation flow)
     """
 
-    def __init__(self, llm_client: Optional[Any], verbose: bool = True):
+    def __init__(self, llm_client: Optional[Any], verbose: bool=True):
         self.llm_client = llm_client
         self.verbose = verbose
         self.consultation_count = 0
 
-    def consult_llm_for_solution(
-        self,
-        unexpected_state: UnexpectedState
-    ) -> Optional[LearnedSolution]:
+    def consult_llm_for_solution(self, unexpected_state: UnexpectedState) -> Optional[LearnedSolution]:
         """
         WHY: Generate novel solutions using LLM reasoning
         RESPONSIBILITY: Query LLM, parse response, create LearnedSolution
@@ -185,61 +97,35 @@ class LLMConsultationStrategy:
         Returns:
             LearnedSolution from LLM or None if failed
         """
-        # Guard: No LLM client available
         if not self.llm_client:
             if self.verbose:
-                print(f"[Learning] ⚠️  No LLM client available for consultation")
+                
+                logger.log(f'[Learning] ⚠️  No LLM client available for consultation', 'INFO')
             return None
-
         self.consultation_count += 1
-
-        # Build prompt
         prompt = LLMPromptBuilder.build_recovery_prompt(unexpected_state)
-
         if self.verbose:
-            print(f"[Learning] 💬 Consulting LLM for solution...")
-
+            
+            logger.log(f'[Learning] 💬 Consulting LLM for solution...', 'INFO')
         try:
-            # Query LLM
             from llm_client import LLMMessage
-            messages = [LLMMessage(role="user", content=prompt)]
+            messages = [LLMMessage(role='user', content=prompt)]
             response = self.llm_client.complete(messages, max_tokens=2000, temperature=0.7)
-
-            # Parse response
             workflow_steps = LLMResponseParser.parse_llm_response(response.content)
             solution_description = LLMResponseParser.extract_solution_description(response.content)
-
-            # Create learned solution
-            solution = LearnedSolution(
-                solution_id=f"learned-{unexpected_state.state_id}",
-                timestamp=datetime.utcnow().isoformat() + 'Z',
-                unexpected_state_id=unexpected_state.state_id,
-                problem_description=self._describe_problem(unexpected_state),
-                solution_description=solution_description,
-                workflow_steps=workflow_steps,
-                success_rate=0.0,  # Unknown yet
-                times_applied=0,
-                times_successful=0,
-                learning_strategy=LearningStrategy.LLM_CONSULTATION.value,
-                llm_model_used=getattr(response, 'model', 'unknown'),
-                human_validated=False,
-                metadata={
-                    "llm_tokens_input": getattr(response.usage, 'prompt_tokens', 0),
-                    "llm_tokens_output": getattr(response.usage, 'completion_tokens', 0),
-                    "llm_response_raw": response.content
-                }
-            )
-
+            solution = LearnedSolution(solution_id=f'learned-{unexpected_state.state_id}', timestamp=datetime.utcnow().isoformat() + 'Z', unexpected_state_id=unexpected_state.state_id, problem_description=self._describe_problem(unexpected_state), solution_description=solution_description, workflow_steps=workflow_steps, success_rate=0.0, times_applied=0, times_successful=0, learning_strategy=LearningStrategy.LLM_CONSULTATION.value, llm_model_used=getattr(response, 'model', 'unknown'), human_validated=False, metadata={'llm_tokens_input': getattr(response.usage, 'prompt_tokens', 0), 'llm_tokens_output': getattr(response.usage, 'completion_tokens', 0), 'llm_response_raw': response.content})
             if self.verbose:
-                print(f"[Learning] ✅ Solution learned from LLM!")
-                print(f"[Learning]    Solution ID: {solution.solution_id}")
-                print(f"[Learning]    Workflow steps: {len(solution.workflow_steps)}")
-
+                
+                logger.log(f'[Learning] ✅ Solution learned from LLM!', 'INFO')
+                
+                logger.log(f'[Learning]    Solution ID: {solution.solution_id}', 'INFO')
+                
+                logger.log(f'[Learning]    Workflow steps: {len(solution.workflow_steps)}', 'INFO')
             return solution
-
         except Exception as e:
             if self.verbose:
-                print(f"[Learning] ❌ LLM consultation failed: {e}")
+                
+                logger.log(f'[Learning] ❌ LLM consultation failed: {e}', 'INFO')
             return None
 
     def _describe_problem(self, unexpected_state: UnexpectedState) -> str:

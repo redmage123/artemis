@@ -1,22 +1,9 @@
-#!/usr/bin/env python3
-"""
-Knowledge Graph Factory - Singleton Pattern for Artemis
-
-Provides centralized access to the Knowledge Graph across all agents.
-Ensures single instance with graceful fallback if Memgraph unavailable.
-
-Usage:
-    from knowledge_graph_factory import get_knowledge_graph
-
-    kg = get_knowledge_graph()
-    if kg:
-        kg.add_file("auth.py", "python")
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('knowledge_graph_factory')
+'\nKnowledge Graph Factory - Singleton Pattern for Artemis\n\nProvides centralized access to the Knowledge Graph across all agents.\nEnsures single instance with graceful fallback if Memgraph unavailable.\n\nUsage:\n    from knowledge_graph_factory import get_knowledge_graph\n\n    kg = get_knowledge_graph()\n    if kg:\n        kg.add_file("auth.py", "python")\n'
 import os
 from typing import Optional
 from knowledge_graph import KnowledgeGraph, MEMGRAPH_AVAILABLE
-
 
 class KnowledgeGraphFactory:
     """
@@ -35,13 +22,12 @@ class KnowledgeGraphFactory:
     Graceful degradation: If Memgraph unavailable, returns None and logs warning
     rather than crashing, allowing Artemis to continue without KG features.
     """
-
     _instance: Optional[KnowledgeGraph] = None
     _initialization_attempted: bool = False
     _initialization_successful: bool = False
 
     @classmethod
-    def get_instance(cls, host: Optional[str] = None, port: Optional[int] = None) -> Optional[KnowledgeGraph]:
+    def get_instance(cls, host: Optional[str]=None, port: Optional[int]=None) -> Optional[KnowledgeGraph]:
         """
         Get or create singleton Knowledge Graph instance
 
@@ -52,43 +38,40 @@ class KnowledgeGraphFactory:
         Returns:
             KnowledgeGraph instance or None if unavailable
         """
-        # Return existing instance if available
         if cls._instance is not None:
             return cls._instance
-
-        # Don't retry if previous initialization failed
-        if cls._initialization_attempted and not cls._initialization_successful:
+        if cls._initialization_attempted and (not cls._initialization_successful):
             return None
-
-        # Attempt initialization
         cls._initialization_attempted = True
-
-        # Check if Memgraph library available
         if not MEMGRAPH_AVAILABLE:
-            print("⚠️  Knowledge Graph unavailable: gqlalchemy not installed")
-            print("   Install with: pip install gqlalchemy")
-            print("   Agents will continue without knowledge graph integration")
+            
+            logger.log('⚠️  Knowledge Graph unavailable: gqlalchemy not installed', 'INFO')
+            
+            logger.log('   Install with: pip install gqlalchemy', 'INFO')
+            
+            logger.log('   Agents will continue without knowledge graph integration', 'INFO')
             return None
-
-        # Get connection parameters
         if host is None:
-            host = os.getenv("MEMGRAPH_HOST", "localhost")
+            host = os.getenv('MEMGRAPH_HOST', 'localhost')
         if port is None:
-            port = int(os.getenv("MEMGRAPH_PORT", "7687"))
-
-        # Try to connect
+            port = int(os.getenv('MEMGRAPH_PORT', '7687'))
         try:
             cls._instance = KnowledgeGraph(host=host, port=port)
             cls._initialization_successful = True
-            print(f"✅ Knowledge Graph connected: {host}:{port}")
+            
+            logger.log(f'✅ Knowledge Graph connected: {host}:{port}', 'INFO')
             return cls._instance
-
         except Exception as e:
-            print(f"⚠️  Knowledge Graph connection failed: {e}")
-            print(f"   Host: {host}, Port: {port}")
-            print("   Agents will continue without knowledge graph integration")
-            print("   To enable, ensure Memgraph is running:")
-            print("     docker run -p 7687:7687 memgraph/memgraph")
+            
+            logger.log(f'⚠️  Knowledge Graph connection failed: {e}', 'INFO')
+            
+            logger.log(f'   Host: {host}, Port: {port}', 'INFO')
+            
+            logger.log('   Agents will continue without knowledge graph integration', 'INFO')
+            
+            logger.log('   To enable, ensure Memgraph is running:', 'INFO')
+            
+            logger.log('     docker run -p 7687:7687 memgraph/memgraph', 'INFO')
             cls._initialization_successful = False
             return None
 
@@ -104,9 +87,7 @@ class KnowledgeGraphFactory:
         """Check if Knowledge Graph is available"""
         return cls._initialization_successful and cls._instance is not None
 
-
-# Convenience function for agents
-def get_knowledge_graph(host: Optional[str] = None, port: Optional[int] = None) -> Optional[KnowledgeGraph]:
+def get_knowledge_graph(host: Optional[str]=None, port: Optional[int]=None) -> Optional[KnowledgeGraph]:
     """
     Get Knowledge Graph instance (convenience function)
 
@@ -119,8 +100,6 @@ def get_knowledge_graph(host: Optional[str] = None, port: Optional[int] = None) 
     """
     return KnowledgeGraphFactory.get_instance(host=host, port=port)
 
-
-# Convenience function to check availability
 def is_knowledge_graph_available() -> bool:
     """
     Check if Knowledge Graph is available

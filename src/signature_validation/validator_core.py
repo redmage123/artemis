@@ -1,19 +1,12 @@
-#!/usr/bin/env python3
-"""
-Signature Validator Core Orchestration
-
-WHY: Main validation orchestration and coordination
-RESPONSIBILITY: Coordinate all validation stages and provide public API
-PATTERNS: Facade pattern, template method pattern
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('validator_core')
+'\nSignature Validator Core Orchestration\n\nWHY: Main validation orchestration and coordination\nRESPONSIBILITY: Coordinate all validation stages and provide public API\nPATTERNS: Facade pattern, template method pattern\n'
 import ast
 from pathlib import Path
 from typing import List, Dict, Set, Optional
 from signature_validation.models import SignatureIssue, FunctionInfo
 from signature_validation.signature_extractor import SignatureExtractor
 from signature_validation.parameter_validator import ParameterValidator, ReturnTypeValidator
-
 
 class EnhancedSignatureValidator:
     """
@@ -29,7 +22,7 @@ class EnhancedSignatureValidator:
     PATTERNS: Facade pattern, template method pattern
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         Initialize the enhanced validator
 
@@ -56,38 +49,25 @@ class EnhancedSignatureValidator:
         """
         self.issues = []
         self.function_info = {}
-
-        # Guard clause: file doesn't exist
         if not Path(file_path).exists():
             return self.issues
-
         try:
             source = self._read_file(file_path)
             tree = ast.parse(source, filename=file_path)
-
-            # Pass 1: Collect function definitions with type hints
             self._collect_function_signatures(tree)
-
-            # Pass 2: Validate function calls
             self._validate_function_calls(tree, file_path)
-
-            # Pass 3: Validate return types
             self._validate_return_types(file_path)
-
         except SyntaxError as e:
             if self.verbose:
-                print(f"Syntax error in {file_path}: {e}")
+                
+                logger.log(f'Syntax error in {file_path}: {e}', 'INFO')
         except Exception as e:
             if self.verbose:
-                print(f"Error validating {file_path}: {e}")
-
+                
+                logger.log(f'Error validating {file_path}: {e}', 'INFO')
         return self.issues
 
-    def validate_directory(
-        self,
-        dir_path: str,
-        exclude_dirs: Optional[Set[str]] = None
-    ) -> List[SignatureIssue]:
+    def validate_directory(self, dir_path: str, exclude_dirs: Optional[Set[str]]=None) -> List[SignatureIssue]:
         """
         Validate all Python files in a directory
 
@@ -104,17 +84,12 @@ class EnhancedSignatureValidator:
         """
         if exclude_dirs is None:
             exclude_dirs = {'.venv', '__pycache__', '.git', 'node_modules', '.artemis_data'}
-
         all_issues = []
-
         for py_file in Path(dir_path).rglob('*.py'):
-            # Skip excluded directories
-            if any(excluded in py_file.parts for excluded in exclude_dirs):
+            if any((excluded in py_file.parts for excluded in exclude_dirs)):
                 continue
-
             issues = self.validate_file(str(py_file))
             all_issues.extend(issues)
-
         return all_issues
 
     def _read_file(self, file_path: str) -> str:
@@ -161,7 +136,6 @@ class EnhancedSignatureValidator:
             file_path: Source file path
         """
         validator = ParameterValidator(self.function_info, self.verbose)
-
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 issues = validator.validate_call(node, file_path)

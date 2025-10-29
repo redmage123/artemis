@@ -52,4 +52,22 @@ Analyze the following task BEFORE implementation across these dimensions:
 }
 ```
 
-Return ONLY valid JSON, no markdown, no explanations.
+**CRITICAL JSON FORMATTING REQUIREMENTS:**
+- Start your response with the opening brace { (NO whitespace, NO markdown, NO explanations before)
+- End your response with the closing brace } (NO text after)
+- NO markdown code fences (no ```json or ``` wrappers)
+- NO trailing commas in arrays or objects
+- Use double quotes for all strings
+- Validate your JSON is parseable before responding
+
+**Example of CORRECT response:**
+{"issues": [], "recommendations": ["recommendation 1"], "overall_assessment": "Summary here", "recommendation_action": "APPROVE_ALL"}
+
+**Example of INCORRECT response:**
+```json
+{
+  "issues": [],
+}
+```
+
+Your response must start with { and end with } with NO other text.

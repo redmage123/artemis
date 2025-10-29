@@ -1,13 +1,8 @@
-#!/usr/bin/env python3
-"""
-WHY: HTML document parsing with BeautifulSoup.
-RESPONSIBILITY: Extract clean text from HTML files, removing scripts and styles.
-PATTERNS: Strategy pattern for fallback handling, Guard clauses for library detection.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('html_parser')
+'\nWHY: HTML document parsing with BeautifulSoup.\nRESPONSIBILITY: Extract clean text from HTML files, removing scripts and styles.\nPATTERNS: Strategy pattern for fallback handling, Guard clauses for library detection.\n'
 from typing import Optional
 from artemis_exceptions import DocumentReadError
-
 
 class HTMLParser:
     """
@@ -15,7 +10,7 @@ class HTMLParser:
     RESPONSIBILITY: Remove HTML tags, scripts, and styles to get readable text.
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         WHY: Initialize parser with library detection.
         RESPONSIBILITY: Check if BeautifulSoup is available.
@@ -39,7 +34,8 @@ class HTMLParser:
             return True
         except ImportError:
             if self.verbose:
-                print("[HTMLParser] BeautifulSoup not available. Reading raw HTML. Install: pip install beautifulsoup4")
+                
+                logger.log('[HTMLParser] BeautifulSoup not available. Reading raw HTML. Install: pip install beautifulsoup4', 'INFO')
             return False
 
     def is_available(self) -> bool:
@@ -66,11 +62,8 @@ class HTMLParser:
         Raises:
             DocumentReadError: If file cannot be read
         """
-        # Guard: Use BeautifulSoup if available
         if self.has_bs4:
             return self._parse_with_beautifulsoup(file_path)
-
-        # Fallback: Read raw HTML
         return self._parse_raw(file_path)
 
     def _parse_with_beautifulsoup(self, file_path: str) -> str:
@@ -85,35 +78,19 @@ class HTMLParser:
             Clean text without HTML tags
         """
         from bs4 import BeautifulSoup
-
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
-
             soup = BeautifulSoup(html_content, 'html.parser')
-
-            # Remove script and style elements
-            for script in soup(["script", "style"]):
+            for script in soup(['script', 'style']):
                 script.decompose()
-
-            # Get text
             text = soup.get_text()
-
-            # Break into lines and remove leading/trailing space
             lines = (line.strip() for line in text.splitlines())
-
-            # Drop blank lines and collapse multiple spaces
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = '\n'.join(chunk for chunk in chunks if chunk)
-
+            chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
+            text = '\n'.join((chunk for chunk in chunks if chunk))
             return text
-
         except Exception as e:
-            raise DocumentReadError(
-                f"Error parsing HTML with BeautifulSoup: {str(e)}",
-                context={"file_path": file_path},
-                original_exception=e
-            )
+            raise DocumentReadError(f'Error parsing HTML with BeautifulSoup: {str(e)}', context={'file_path': file_path}, original_exception=e)
 
     def _parse_raw(self, file_path: str) -> str:
         """
@@ -130,8 +107,4 @@ class HTMLParser:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:
-            raise DocumentReadError(
-                f"Error reading HTML file: {str(e)}",
-                context={"file_path": file_path},
-                original_exception=e
-            )
+            raise DocumentReadError(f'Error reading HTML file: {str(e)}', context={'file_path': file_path}, original_exception=e)

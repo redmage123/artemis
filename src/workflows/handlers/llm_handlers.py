@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 LLM API Workflow Handlers
 
@@ -22,18 +21,14 @@ INTEGRATION:
 - Used by: WorkflowHandlerFactory for LLM actions
 - Imported from: artemis_constants for retry configuration
 """
-
 import time
 import json
 import re
 from typing import Dict, Any
-
 from artemis_constants import MAX_RETRY_ATTEMPTS, RETRY_BACKOFF_FACTOR
 from workflows.handlers.base_handler import WorkflowHandler
 from artemis_logger import get_logger
-
-logger = get_logger("workflow.llm_handlers")
-
+logger = get_logger('workflow.llm_handlers')
 
 class SwitchLLMProviderHandler(WorkflowHandler):
     """
@@ -44,17 +39,16 @@ class SwitchLLMProviderHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        current_provider = context.get("current_provider", "openai")
-
-        if current_provider == "openai":
-            context["llm_provider"] = "anthropic"
-            print("[Workflow] Switched from OpenAI to Anthropic")
+        current_provider = context.get('current_provider', 'openai')
+        if current_provider == 'openai':
+            context['llm_provider'] = 'anthropic'
+            
+            logger.log('[Workflow] Switched from OpenAI to Anthropic', 'INFO')
         else:
-            context["llm_provider"] = "openai"
-            print("[Workflow] Switched from Anthropic to OpenAI")
-
+            context['llm_provider'] = 'openai'
+            
+            logger.log('[Workflow] Switched from Anthropic to OpenAI', 'INFO')
         return True
-
 
 class RetryLLMRequestHandler(WorkflowHandler):
     """
@@ -73,47 +67,34 @@ class RetryLLMRequestHandler(WorkflowHandler):
         for attempt in range(MAX_RETRY_ATTEMPTS):
             if self._attempt_llm_request(attempt):
                 return True
-
             if attempt == MAX_RETRY_ATTEMPTS - 1:
                 return False
-
         return False
 
     def _attempt_llm_request(self, attempt: int) -> bool:
         try:
-            # Wait with exponential backoff before retry (skip on first attempt)
             if attempt > 0:
                 wait_time = RETRY_BACKOFF_FACTOR ** attempt
-                logger.info(f"Waiting {wait_time}s before LLM retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
+                logger.info(f'Waiting {wait_time}s before LLM retry {attempt + 1}/{MAX_RETRY_ATTEMPTS}')
                 time.sleep(wait_time)
-
-            logger.info(f"LLM retry attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS}")
-
-            # Get LLM client and request parameters from context
-            llm_client = self.context.get("llm_client")
-            prompt = self.context.get("prompt")
-            model = self.context.get("model")
-
+            logger.info(f'LLM retry attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS}')
+            llm_client = self.context.get('llm_client')
+            prompt = self.context.get('prompt')
+            model = self.context.get('model')
             if not llm_client:
-                logger.warning("No LLM client provided in context for retry")
+                logger.warning('No LLM client provided in context for retry')
                 return False
-
             if not prompt:
-                logger.warning("No prompt provided in context for LLM retry")
+                logger.warning('No prompt provided in context for LLM retry')
                 return False
-
-            # Attempt to call the LLM
             response = self._call_llm_client(llm_client, prompt, model)
             if response is None:
                 return False
-
-            # Store response in context
-            self.context["llm_response"] = response
-            logger.info(f"LLM request succeeded on attempt {attempt + 1}")
+            self.context['llm_response'] = response
+            logger.info(f'LLM request succeeded on attempt {attempt + 1}')
             return True
-
         except Exception as e:
-            logger.warning(f"LLM request failed on attempt {attempt + 1}: {e}")
+            logger.warning(f'LLM request failed on attempt {attempt + 1}: {e}')
             return False
 
     @staticmethod
@@ -125,22 +106,14 @@ class RetryLLMRequestHandler(WorkflowHandler):
         RESPONSIBILITY: Dispatch to appropriate LLM client method
         PATTERNS: Dispatch strategy with guard clauses
         """
-        # Try query method
-        if hasattr(llm_client, "query"):
+        if hasattr(llm_client, 'query'):
             return llm_client.query(prompt, model=model)
-
-        # Try generate method
-        if hasattr(llm_client, "generate"):
+        if hasattr(llm_client, 'generate'):
             return llm_client.generate(prompt, model=model)
-
-        # Try chat_completion method
-        if hasattr(llm_client, "chat_completion"):
+        if hasattr(llm_client, 'chat_completion'):
             return llm_client.chat_completion(prompt, model=model)
-
-        # No supported method found
-        logger.error("LLM client does not have a supported method (query/generate/chat_completion)")
+        logger.error('LLM client does not have a supported method (query/generate/chat_completion)')
         return None
-
 
 class HandleRateLimitHandler(WorkflowHandler):
     """
@@ -151,13 +124,11 @@ class HandleRateLimitHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        wait_time = context.get("wait_time", 60)
-
-        print(f"[Workflow] Rate limited, waiting {wait_time}s...")
+        wait_time = context.get('wait_time', 60)
+        
+        logger.log(f'[Workflow] Rate limited, waiting {wait_time}s...', 'INFO')
         time.sleep(wait_time)
-
         return True
-
 
 class ValidateLLMResponseHandler(WorkflowHandler):
     """
@@ -169,58 +140,34 @@ class ValidateLLMResponseHandler(WorkflowHandler):
     """
 
     def handle(self, context: Dict[str, Any]) -> bool:
-        response = context.get("llm_response", "")
-
-        # Basic validation checks
+        response = context.get('llm_response', '')
         if not response or len(response) == 0:
-            logger.error("Invalid LLM response: empty response")
+            logger.error('Invalid LLM response: empty response')
             return False
-
-        # Check minimum length
-        min_length = context.get("min_response_length", 10)
+        min_length = context.get('min_response_length', 10)
         if len(response) < min_length:
-            logger.error(f"Invalid LLM response: too short (length={len(response)}, min={min_length})")
+            logger.error(f'Invalid LLM response: too short (length={len(response)}, min={min_length})')
             return False
-
-        # Check for common error patterns
-        error_patterns = [
-            r"error",
-            r"failed",
-            r"unable to",
-            r"cannot",
-            r"invalid",
-            r"timeout",
-            r"rate limit",
-        ]
-
-        # Only fail if error appears in first 100 chars (likely an error message)
+        error_patterns = ['error', 'failed', 'unable to', 'cannot', 'invalid', 'timeout', 'rate limit']
         response_start = response[:100].lower()
         for pattern in error_patterns:
             if re.search(pattern, response_start, re.IGNORECASE):
-                logger.warning(f"LLM response may contain error (pattern: {pattern})")
-                # Don't fail - just warn, as these words might appear in valid responses
-
-        # Check for required format if specified
-        required_format = context.get("required_format")
-        if required_format == "json":
+                logger.warning(f'LLM response may contain error (pattern: {pattern})')
+        required_format = context.get('required_format')
+        if required_format == 'json':
             try:
                 json.loads(response)
-                logger.info("LLM response validated: valid JSON")
+                logger.info('LLM response validated: valid JSON')
             except json.JSONDecodeError as e:
-                logger.error(f"Invalid LLM response: expected JSON but got parse error: {e}")
+                logger.error(f'Invalid LLM response: expected JSON but got parse error: {e}')
                 return False
-
-        elif required_format == "markdown":
-            # Basic markdown validation - check for common markdown elements
+        elif required_format == 'markdown':
             self._validate_markdown_response(response)
-
-        # Check for truncation indicators
-        truncation_indicators = ["...", "[truncated]", "[cut off]"]
+        truncation_indicators = ['...', '[truncated]', '[cut off]']
         for indicator in truncation_indicators:
             if indicator in response[-50:]:
-                logger.warning(f"LLM response appears truncated (found: {indicator})")
-
-        logger.info("LLM response validated successfully")
+                logger.warning(f'LLM response appears truncated (found: {indicator})')
+        logger.info('LLM response validated successfully')
         return True
 
     @staticmethod
@@ -232,9 +179,6 @@ class ValidateLLMResponseHandler(WorkflowHandler):
         RESPONSIBILITY: Check for common markdown markers
         PATTERNS: Guard clause
         """
-        # Guard: Has markdown markers
-        if any(marker in response for marker in ["#", "**", "*", "-", "`", "```"]):
+        if any((marker in response for marker in ['#', '**', '*', '-', '`', '```'])):
             return
-
-        # No markdown markers found - just warn
-        logger.warning("LLM response may not be valid markdown (no markdown markers found)")
+        logger.warning('LLM response may not be valid markdown (no markdown markers found)')

@@ -16015,6 +16015,1676 @@
             "requires_visualization": true,
             "has_code_examples": true
           }
+        },
+        {
+          "task_id": "auto-20251029064606",
+          "title": "HTML Presentation Structure",
+          "description": "The project involves creating an interactive HTML presentation to introduce the Artemis AI software development pipeline to both technical and non-technical audiences. It aims to deliver a professional and engaging experience through responsive design, smooth transitions, and interactive data visualizations.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029044606",
+          "created_at": "2025-10-29T04:46:06.201721Z",
+          "moved_to_current_column_at": "2025-10-29T04:46:06.201745Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T04:46:06.201761Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029064949",
+          "title": "HTML Presentation Structure",
+          "description": "The project aims to develop a professional, interactive HTML presentation to introduce the Artemis AI software development pipeline. It targets both technical and non-technical audiences, providing an engaging overview of Artemis's features and capabilities.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029044949",
+          "created_at": "2025-10-29T04:49:49.161728Z",
+          "moved_to_current_column_at": "2025-10-29T04:49:49.161752Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T04:49:49.161768Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029071315",
+          "title": "Create HTML Presentation",
+          "description": "The project is to create a professional, interactive HTML presentation introducing the Artemis AI software development pipeline. It targets both technical and non-technical audiences, using HTML5, CSS3, and vanilla JavaScript, with interactive data visualizations facilitated by Chart.js.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029051315",
+          "created_at": "2025-10-29T05:13:15.464002Z",
+          "moved_to_current_column_at": "2025-10-29T05:13:15.464042Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T05:13:15.464070Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029051315-sprint-1",
+          "title": "Sprint 1",
+          "description": "2 features, 16 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "Integrate Data Visualizations with Chart.js",
+                "description": "Incorporate interactive data visualizations using Chart.js to effectively communicate data insights.",
+                "business_value": 10,
+                "acceptance_criteria": [
+                  "Data visualizations are clear and accurately represent the data.",
+                  "Charts are interactive and update dynamically based on user interactions.",
+                  "The integration of Chart.js does not degrade performance."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 5.800000000000001
+              },
+              {
+                "title": "Implement Interactive Elements with JavaScript",
+                "description": "Use vanilla JavaScript to add interactivity to the presentation, enhancing user engagement.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Interactive elements respond to user inputs without errors.",
+                  "JavaScript code is modular and well-documented.",
+                  "The presentation works smoothly across different browsers."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7,
+                "priority_score": 5.7
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029051315"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029051315-sprint-2",
+          "title": "Sprint 2",
+          "description": "2 features, 16 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Adapt Presentation for Technical and Non-Technical Audiences",
+                "description": "Ensure the presentation content is suitable for both technical and non-technical audiences.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Content is clearly segmented for technical and non-technical audiences.",
+                  "Technical details are accurate and understandable.",
+                  "Non-technical explanations are clear and engaging."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7166666666666667,
+                "priority_score": 5.3
+              },
+              {
+                "title": "Design Presentation with CSS3",
+                "description": "Apply CSS3 styles to the HTML presentation to ensure a professional and visually appealing design.",
+                "business_value": 7,
+                "acceptance_criteria": [
+                  "The presentation has a consistent and professional design theme.",
+                  "CSS styles are responsive and adapt to various screen sizes.",
+                  "The design is compatible with major web browsers."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 4.6000000000000005
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029051315"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029051315-sprint-3",
+          "title": "Sprint 3",
+          "description": "1 features, 5 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Create HTML Presentation Structure",
+                "description": "Develop the basic HTML structure for the presentation to ensure it is professional and accessible.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "The HTML structure is semantic and follows best practices.",
+                  "The presentation is accessible and responsive on different devices.",
+                  "The HTML file is well-organized and easy to maintain."
+                ],
+                "story_points": 5,
+                "estimated_hours": 10.0,
+                "risk_level": "low",
+                "confidence": 0.7666666666666667,
+                "priority_score": 4.4
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029051315"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029081132",
+          "title": "Single HTML File or Directory Structure",
+          "description": "The project aims to create an interactive HTML presentation that effectively introduces the Artemis AI software development pipeline. This presentation will cater to both technical and non-technical audiences, showcasing the features and benefits of Artemis through engaging visualizations and responsive design.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029061132",
+          "created_at": "2025-10-29T06:11:32.883397Z",
+          "moved_to_current_column_at": "2025-10-29T06:11:32.883420Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T06:11:32.883434Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029084138",
+          "title": "HTML Presentation Structure",
+          "description": "The project entails creating a professional, interactive HTML presentation to introduce the Artemis AI software development pipeline. It targets both technical and non-technical audiences, utilizing HTML5, CSS3, vanilla JavaScript, and Chart.js for data visualizations.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029064138",
+          "created_at": "2025-10-29T06:41:38.602173Z",
+          "moved_to_current_column_at": "2025-10-29T06:41:38.602212Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T06:41:38.602237Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029090348",
+          "title": "HTML Presentation Structure",
+          "description": "The project aims to develop a professional, interactive HTML presentation to introduce the Artemis AI software development pipeline to both technical and non-technical audiences. The presentation will feature smooth animations, interactive data visualizations, and will be fully responsive, ensuring accessibility on tablets and desktops.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029070348",
+          "created_at": "2025-10-29T07:03:48.434383Z",
+          "moved_to_current_column_at": "2025-10-29T07:03:48.434421Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T07:03:48.434435Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029070348-sprint-1",
+          "title": "Sprint 1",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "Interactive Data Visualizations",
+                "description": "Create interactive data visualizations to engage users and illustrate key points.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Data visualizations are interactive and respond to user inputs",
+                  "Visualizations are clear and accurately represent the data",
+                  "Visualizations are accessible on both tablets and desktops"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 6.9
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029070348"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029070348-sprint-2",
+          "title": "Sprint 2",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Smooth Animations",
+                "description": "Develop smooth animations to enhance the presentation experience.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Animations load without lag on both tablets and desktops",
+                  "Animations are consistent across different browsers",
+                  "Animations enhance the understanding of the presentation content"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 6.5
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029070348"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029070348-sprint-3",
+          "title": "Sprint 3",
+          "description": "1 features, 8 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Responsive Design",
+                "description": "Ensure the presentation is fully responsive for accessibility on various devices.",
+                "business_value": 10,
+                "acceptance_criteria": [
+                  "Presentation layout adjusts seamlessly between tablet and desktop views",
+                  "All features are functional on both tablets and desktops",
+                  "Content remains readable and visually appealing across devices"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 5.800000000000001
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029070348"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029091120",
+          "title": "Create Interactive HTML Presentation",
+          "description": "The Interactive Artemis AI Development Pipeline Demo is an HTML presentation designed to illustrate the capabilities, architecture, and workflow of the Artemis autonomous AI development pipeline. The presentation aims to engage both technical and non-technical audiences through interactive and visually appealing content.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029071120",
+          "created_at": "2025-10-29T07:11:20.920260Z",
+          "moved_to_current_column_at": "2025-10-29T07:11:20.920283Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T07:11:20.920298Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029071120-sprint-1",
+          "title": "Sprint 1",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "Interactive Content",
+                "description": "Develop interactive elements within the presentation to engage users.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Users can interact with elements to reveal additional information.",
+                  "Interactive elements are responsive and work on various devices.",
+                  "Feedback is provided to users upon interaction."
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.5
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029071120"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029071120-sprint-2",
+          "title": "Sprint 2",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Responsive Design",
+                "description": "Ensure the presentation is accessible on various devices and screen sizes.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Presentation layout adjusts seamlessly across different screen sizes.",
+                  "All interactive elements function correctly on mobile devices.",
+                  "Navigation is intuitive on both desktop and mobile."
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.5
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029071120"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029071120-sprint-3",
+          "title": "Sprint 3",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Visual Appeal",
+                "description": "Create visually appealing designs to enhance user engagement.",
+                "business_value": 7,
+                "acceptance_criteria": [
+                  "Presentation includes high-quality graphics and animations.",
+                  "Design is consistent with the Artemis brand guidelines.",
+                  "Visuals are optimized for fast loading times."
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 6.1000000000000005
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029071120"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029071120-sprint-4",
+          "title": "Sprint 4",
+          "description": "2 features, 16 points",
+          "metadata": {
+            "sprint_number": 4,
+            "features": [
+              {
+                "title": "Technical Content Display",
+                "description": "Present technical information about the Artemis AI pipeline in an understandable format.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Technical diagrams are included to illustrate the AI pipeline architecture.",
+                  "Content is accessible to both technical and non-technical audiences.",
+                  "Information is accurate and up-to-date."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 5.4
+              },
+              {
+                "title": "Non-Technical Content Display",
+                "description": "Provide explanations suitable for non-technical audiences.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Simplified explanations accompany technical content.",
+                  "Glossary of terms is available for non-technical users.",
+                  "Content is engaging and easy to understand."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7,
+                "priority_score": 5.3
+              }
+            ],
+            "start_date": "2025-12-10",
+            "end_date": "2025-12-24",
+            "parent_card_id": "card-20251029071120"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029093437",
+          "title": "Create Interactive HTML Presentation",
+          "description": "The project involves creating an interactive HTML presentation to demonstrate the Artemis AI development pipeline. The demo will highlight Artemis's capabilities, architecture, and workflow, tailored for both technical and non-technical audiences, with an emphasis on visual engagement and responsiveness.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029073437",
+          "created_at": "2025-10-29T07:34:37.529178Z",
+          "moved_to_current_column_at": "2025-10-29T07:34:37.529215Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T07:34:37.529230Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029073437-sprint-1",
+          "title": "Sprint 1",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "Responsive Design",
+                "description": "Ensure the presentation is responsive and accessible on various devices.",
+                "business_value": 10,
+                "acceptance_criteria": [
+                  "Presentation adjusts layout for mobile, tablet, and desktop views",
+                  "All interactive elements remain functional across devices",
+                  "Text and visuals are legible and clear on all screen sizes"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 7.300000000000001
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029073437"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029073437-sprint-2",
+          "title": "Sprint 2",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Technical and Non-Technical Content",
+                "description": "Create content suitable for both technical and non-technical audiences.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Content is divided into technical and non-technical sections",
+                  "Technical details are presented with diagrams and code snippets",
+                  "Non-technical sections use simplified language and visuals"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.9
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029073437"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029073437-sprint-3",
+          "title": "Sprint 3",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Interactive Slides",
+                "description": "Develop interactive slides to showcase Artemis AI's capabilities and architecture.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Slides are navigable with next and previous buttons",
+                  "Each slide contains interactive elements such as clickable diagrams or videos",
+                  "Slides are responsive and adjust to different screen sizes"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.5
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029073437"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029073437-sprint-4",
+          "title": "Sprint 4",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 4,
+            "features": [
+              {
+                "title": "Visual Engagement Elements",
+                "description": "Incorporate visual elements to enhance user engagement.",
+                "business_value": 7,
+                "acceptance_criteria": [
+                  "Includes animations to demonstrate workflow processes",
+                  "Utilizes high-quality graphics and icons",
+                  "Visuals are optimized for fast loading times"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6333333333333333,
+                "priority_score": 6.1000000000000005
+              }
+            ],
+            "start_date": "2025-12-10",
+            "end_date": "2025-12-24",
+            "parent_card_id": "card-20251029073437"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029073437-sprint-5",
+          "title": "Sprint 5",
+          "description": "1 features, 8 points",
+          "metadata": {
+            "sprint_number": 5,
+            "features": [
+              {
+                "title": "User Feedback Mechanism",
+                "description": "Implement a system for users to provide feedback on the presentation.",
+                "business_value": 6,
+                "acceptance_criteria": [
+                  "Users can submit feedback through a form at the end of the presentation",
+                  "Feedback is stored and accessible for review",
+                  "Feedback form is easy to use and submit"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7666666666666667,
+                "priority_score": 4.500000000000001
+              }
+            ],
+            "start_date": "2025-12-24",
+            "end_date": "2026-01-07",
+            "parent_card_id": "card-20251029073437"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029095847",
+          "title": "Create Interactive Presentation",
+          "description": "The Interactive Artemis AI Development Pipeline Demo is a professional HTML presentation designed to showcase Artemis's autonomous AI development capabilities. The demo targets both technical and non-technical audiences, featuring interactive and visually engaging content to demonstrate the AI pipeline's features, architecture, and workflow.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029075847",
+          "created_at": "2025-10-29T07:58:47.301640Z",
+          "moved_to_current_column_at": "2025-10-29T07:58:47.301663Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T07:58:47.301677Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029075847-sprint-1",
+          "title": "Sprint 1",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "AI Pipeline Feature Demonstration",
+                "description": "Showcase the specific features of the Artemis AI development pipeline.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Each feature of the AI pipeline is clearly explained with supporting visuals.",
+                  "Users can navigate through different features easily.",
+                  "Feature demonstrations include real-world use cases."
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 6.9
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029075847"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029075847-sprint-2",
+          "title": "Sprint 2",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Interactive Content Display",
+                "description": "Develop interactive elements to engage users with the AI pipeline's features and workflow.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Users can interact with visual elements to explore different parts of the AI pipeline.",
+                  "Interactive elements respond to user inputs such as clicks and hovers.",
+                  "Content adjusts dynamically based on user interactions."
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.5
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029075847"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029075847-sprint-3",
+          "title": "Sprint 3",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Technical and Non-Technical Audience Segmentation",
+                "description": "Create content tailored for both technical and non-technical audiences within the presentation.",
+                "business_value": 7,
+                "acceptance_criteria": [
+                  "Users can select their audience type at the start of the presentation.",
+                  "Technical content includes detailed architecture and workflow information.",
+                  "Non-technical content focuses on high-level features and benefits."
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.1000000000000005
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029075847"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029075847-sprint-4",
+          "title": "Sprint 4",
+          "description": "2 features, 16 points",
+          "metadata": {
+            "sprint_number": 4,
+            "features": [
+              {
+                "title": "Architecture Overview",
+                "description": "Provide an overview of the AI pipeline's architecture in the presentation.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Architecture diagrams are included to illustrate the system's structure.",
+                  "Descriptions accompany diagrams to explain each component's role.",
+                  "Users can zoom in on diagrams for more detailed views."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7,
+                "priority_score": 5.3
+              },
+              {
+                "title": "Visual Engagement",
+                "description": "Incorporate visually engaging elements to enhance the presentation's appeal.",
+                "business_value": 6,
+                "acceptance_criteria": [
+                  "Presentation includes animations and transitions to highlight key points.",
+                  "Visuals are consistent with the brand's style and color scheme.",
+                  "Graphics and animations load smoothly without lag."
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 4.200000000000001
+              }
+            ],
+            "start_date": "2025-12-10",
+            "end_date": "2025-12-24",
+            "parent_card_id": "card-20251029075847"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029102856",
+          "title": "Hero Section Creation",
+          "description": "The Interactive Artemis AI Development Pipeline Demo project aims to create a professional HTML presentation that showcases the capabilities, architecture, and workflow of the Artemis autonomous AI pipeline. The presentation is designed to be visually engaging and accessible to both technical and non-technical audiences, featuring live data visualizations and responsive design.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029082856",
+          "created_at": "2025-10-29T08:28:56.817596Z",
+          "moved_to_current_column_at": "2025-10-29T08:28:56.817624Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T08:28:56.817643Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029082856-sprint-1",
+          "title": "Sprint 1",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "Live Data Visualizations",
+                "description": "Integrate live data visualizations to demonstrate the AI pipeline's capabilities.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Data visualizations update in real-time",
+                  "Visualizations are interactive and user-friendly",
+                  "Visualizations accurately represent AI pipeline data"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 6.9
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029082856"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029082856-sprint-2",
+          "title": "Sprint 2",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Responsive Design Implementation",
+                "description": "Ensure the presentation is accessible and visually appealing on all devices.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Presentation adjusts layout based on screen size",
+                  "All elements are readable on mobile devices",
+                  "No horizontal scrolling required on any device"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.7,
+                "priority_score": 6.5
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029082856"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029082856-sprint-3",
+          "title": "Sprint 3",
+          "description": "2 features, 16 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Professional HTML Presentation",
+                "description": "Develop a polished HTML presentation to showcase the Artemis AI pipeline.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Presentation follows a consistent and professional design theme",
+                  "All sections of the presentation are fully functional",
+                  "HTML code is clean and well-documented"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7166666666666667,
+                "priority_score": 5.3
+              },
+              {
+                "title": "Technical and Non-Technical Accessibility",
+                "description": "Design the presentation to be understandable by both technical and non-technical audiences.",
+                "business_value": 7,
+                "acceptance_criteria": [
+                  "Content is jargon-free and easy to understand",
+                  "Technical details are available for those interested",
+                  "Visual aids are used to simplify complex concepts"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 4.6000000000000005
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029082856"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029105209",
+          "title": "Hero Section Display",
+          "description": "The Interactive Artemis AI Development Pipeline Demo project aims to create an engaging HTML presentation that showcases the Artemis autonomous AI development pipeline. This presentation will highlight Artemis's capabilities, architecture, and workflow to both technical and non-technical audiences through visually engaging and responsive design, including live data visualizations.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 13,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029085209",
+          "created_at": "2025-10-29T08:52:09.074495Z",
+          "moved_to_current_column_at": "2025-10-29T08:52:09.074525Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T08:52:09.074546Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "card_id": "card-20251029085209-sprint-1",
+          "title": "Sprint 1",
+          "description": "1 features, 13 points",
+          "metadata": {
+            "sprint_number": 1,
+            "features": [
+              {
+                "title": "Live Data Visualizations",
+                "description": "Integrate live data visualizations to demonstrate Artemis's AI capabilities.",
+                "business_value": 10,
+                "acceptance_criteria": [
+                  "Data visualizations update in real-time",
+                  "Visualizations are clear and easy to understand",
+                  "Users can interact with visualizations to explore data"
+                ],
+                "story_points": 13,
+                "estimated_hours": 26.0,
+                "risk_level": "medium",
+                "confidence": 0.6666666666666666,
+                "priority_score": 7.300000000000001
+              }
+            ],
+            "start_date": "2025-10-29",
+            "end_date": "2025-11-12",
+            "parent_card_id": "card-20251029085209"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029085209-sprint-2",
+          "title": "Sprint 2",
+          "description": "2 features, 16 points",
+          "metadata": {
+            "sprint_number": 2,
+            "features": [
+              {
+                "title": "Responsive Design",
+                "description": "Ensure the presentation is responsive and adapts to different screen sizes and devices.",
+                "business_value": 9,
+                "acceptance_criteria": [
+                  "Presentation layout adjusts seamlessly on desktops, tablets, and smartphones",
+                  "No horizontal scrolling is required on any device",
+                  "All interactive elements remain functional across devices"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7,
+                "priority_score": 5.7
+              },
+              {
+                "title": "Engaging HTML Presentation",
+                "description": "Develop an HTML presentation to showcase the Artemis AI development pipeline.",
+                "business_value": 8,
+                "acceptance_criteria": [
+                  "Presentation is accessible via a web browser",
+                  "Content is structured to highlight Artemis's capabilities, architecture, and workflow",
+                  "Presentation is visually engaging with a consistent design theme"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7,
+                "priority_score": 5.3
+              }
+            ],
+            "start_date": "2025-11-12",
+            "end_date": "2025-11-26",
+            "parent_card_id": "card-20251029085209"
+          },
+          "column": "backlog"
+        },
+        {
+          "card_id": "card-20251029085209-sprint-3",
+          "title": "Sprint 3",
+          "description": "1 features, 8 points",
+          "metadata": {
+            "sprint_number": 3,
+            "features": [
+              {
+                "title": "Technical and Non-Technical Audience Engagement",
+                "description": "Design the presentation to cater to both technical and non-technical audiences.",
+                "business_value": 7,
+                "acceptance_criteria": [
+                  "Content includes simplified explanations for non-technical users",
+                  "Technical details are available for users seeking in-depth information",
+                  "Users can easily switch between technical and non-technical views"
+                ],
+                "story_points": 8,
+                "estimated_hours": 16.0,
+                "risk_level": "low",
+                "confidence": 0.7,
+                "priority_score": 4.9
+              }
+            ],
+            "start_date": "2025-11-26",
+            "end_date": "2025-12-10",
+            "parent_card_id": "card-20251029085209"
+          },
+          "column": "backlog"
+        },
+        {
+          "task_id": "auto-20251029114715",
+          "title": "HTML Presentation Page",
+          "description": "The project aims to develop a single HTML presentation page to demonstrate Artemis's features using real metrics and interactive Chart.js visualizations. This initiative focuses on providing a professional and responsive design without requiring a backend, ensuring compatibility across modern browsers.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029094715",
+          "created_at": "2025-10-29T09:47:15.941286Z",
+          "moved_to_current_column_at": "2025-10-29T09:47:15.941380Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T09:47:15.941445Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029114933",
+          "title": "HTML Presentation Page",
+          "description": "The project aims to develop a single HTML presentation page to highlight Artemis features, utilizing real metrics and Chart.js visualizations. The page will be responsive, professionally styled, and function without a backend.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029094933",
+          "created_at": "2025-10-29T09:49:33.715311Z",
+          "moved_to_current_column_at": "2025-10-29T09:49:33.715325Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T09:49:33.715332Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029124451",
+          "title": "HTML Presentation Page",
+          "description": "The project involves creating a single HTML presentation page to showcase Artemis features using real metrics and Chart.js visualizations. The page should be professional, responsive, and compatible with modern browsers without requiring a backend.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029104451",
+          "created_at": "2025-10-29T10:44:51.797115Z",
+          "moved_to_current_column_at": "2025-10-29T10:44:51.797133Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T10:44:51.797145Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029125705",
+          "title": "Create HTML Presentation Page",
+          "description": "The project aims to develop a single HTML presentation page to demonstrate Artemis features using real metrics and Chart.js visualizations. The page will be a professional, responsive, and interactive representation of Artemis data without requiring a backend.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029105705",
+          "created_at": "2025-10-29T10:57:05.278974Z",
+          "moved_to_current_column_at": "2025-10-29T10:57:05.278994Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T10:57:05.279006Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029130235",
+          "title": "HTML Presentation Page",
+          "description": "This document outlines the requirements for creating an HTML presentation page to showcase Artemis features. The page will include real metrics and interactive Chart.js visualizations, with a focus on performance and browser compatibility.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029110235",
+          "created_at": "2025-10-29T11:02:35.575981Z",
+          "moved_to_current_column_at": "2025-10-29T11:02:35.576000Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T11:02:35.576014Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029131121",
+          "title": "HTML Presentation Page",
+          "description": "The project aims to develop a single HTML presentation page to demonstrate Artemis features using real metrics and visualizations created with Chart.js. The page will be clean, professionally styled, and responsive, with no backend requirements.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029111121",
+          "created_at": "2025-10-29T11:11:21.571760Z",
+          "moved_to_current_column_at": "2025-10-29T11:11:21.571778Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T11:11:21.571791Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029132821",
+          "title": "HTML Presentation Page",
+          "description": "The project aims to create a single HTML presentation page to showcase Artemis features using real metrics and interactive Chart.js visualizations. The page will be clean, professional, and responsive, incorporating real-time data from Artemis runs.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029112821",
+          "created_at": "2025-10-29T11:28:21.399611Z",
+          "moved_to_current_column_at": "2025-10-29T11:28:21.399627Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T11:28:21.399638Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
+        },
+        {
+          "task_id": "auto-20251029134017",
+          "title": "HTML Presentation Page",
+          "description": "The project involves creating a single HTML presentation page to demonstrate Artemis features using real metrics and interactive charts. The page will include responsive design and professional styling without requiring a backend.",
+          "priority": "high",
+          "labels": [],
+          "size": "medium",
+          "story_points": 5,
+          "assigned_agents": [],
+          "acceptance_criteria": [],
+          "blocked": false,
+          "blocked_reason": null,
+          "card_id": "card-20251029114017",
+          "created_at": "2025-10-29T11:40:17.514274Z",
+          "moved_to_current_column_at": "2025-10-29T11:40:17.514288Z",
+          "current_column": "backlog",
+          "test_status": {
+            "unit_tests_written": false,
+            "unit_tests_passing": false,
+            "integration_tests_written": false,
+            "integration_tests_passing": false,
+            "test_coverage_percent": 0
+          },
+          "definition_of_done": {
+            "code_complete": false,
+            "tests_passing": false,
+            "code_reviewed": false,
+            "documentation_updated": false,
+            "deployed_to_production": false
+          },
+          "history": [
+            {
+              "timestamp": "2025-10-29T11:40:17.514297Z",
+              "action": "created",
+              "column": "backlog",
+              "agent": "system",
+              "comment": "Card created via CardBuilder"
+            }
+          ],
+          "requirements_file": "/tmp/artemis_html_demo_requirements.txt",
+          "metadata": {
+            "auto_created": true,
+            "created_from": "/tmp/artemis_html_demo_requirements.txt"
+          }
         }
       ]
     },
@@ -17065,7 +18735,7 @@
     }
   },
   "history": [],
-  "last_updated": "2025-10-25T22:07:57.922130Z",
+  "last_updated": "2025-10-29T11:40:17.514329Z",
   "metrics": {
     "cycle_time_avg_hours": 0,
     "cycle_time_min_hours": 0,

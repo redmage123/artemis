@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Composer Build Manager (PHP)
 
@@ -9,49 +8,38 @@ Design Patterns:
 - Exception Wrapper: All errors properly wrapped
 - Strategy Pattern: Different installation and update modes
 """
-
 from pathlib import Path
 from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, field
 from enum import Enum
 import re
 import json as json_lib
-
 from artemis_exceptions import wrap_exception
-from build_system_exceptions import (
-    BuildSystemNotFoundError,
-    ProjectConfigurationError,
-    BuildExecutionError,
-    TestExecutionError,
-    DependencyInstallError
-)
+from build_system_exceptions import BuildSystemNotFoundError, ProjectConfigurationError, BuildExecutionError, TestExecutionError, DependencyInstallError
 from build_manager_base import BuildManagerBase, BuildResult
 from build_manager_factory import register_build_manager, BuildSystem
 
-
 class DependencyType(Enum):
     """Composer dependency types"""
-    REQUIRE = "require"
-    REQUIRE_DEV = "require-dev"
-
+    REQUIRE = 'require'
+    REQUIRE_DEV = 'require-dev'
 
 class StabilityFlag(Enum):
     """Package stability flags"""
-    STABLE = "stable"
-    RC = "RC"
-    BETA = "beta"
-    ALPHA = "alpha"
-    DEV = "dev"
-
+    STABLE = 'stable'
+    RC = 'RC'
+    BETA = 'beta'
+    ALPHA = 'alpha'
+    DEV = 'dev'
 
 @dataclass
 class ComposerProjectInfo:
     """composer.json project information"""
     name: str
     description: Optional[str] = None
-    type: str = "library"
+    type: str = 'library'
     license: Optional[str] = None
-    php_version: str = ">=7.0"
+    php_version: str = '>=7.0'
     require: Dict[str, str] = field(default_factory=dict)
     require_dev: Dict[str, str] = field(default_factory=dict)
     autoload: Dict[str, Any] = field(default_factory=dict)
@@ -60,19 +48,7 @@ class ComposerProjectInfo:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "type": self.type,
-            "license": self.license,
-            "phpVersion": self.php_version,
-            "require": self.require,
-            "requireDev": self.require_dev,
-            "autoload": self.autoload,
-            "scripts": self.scripts,
-            "hasLockFile": self.has_lock_file
-        }
-
+        return {'name': self.name, 'description': self.description, 'type': self.type, 'license': self.license, 'phpVersion': self.php_version, 'require': self.require, 'requireDev': self.require_dev, 'autoload': self.autoload, 'scripts': self.scripts, 'hasLockFile': self.has_lock_file}
 
 @register_build_manager(BuildSystem.COMPOSER)
 class ComposerManager(BuildManagerBase):
@@ -85,11 +61,7 @@ class ComposerManager(BuildManagerBase):
         test_result = composer.test()
     """
 
-    def __init__(
-        self,
-        project_dir: Optional[Path] = None,
-        logger: Optional['logging.Logger'] = None
-    ):
+    def __init__(self, project_dir: Optional[Path]=None, logger: Optional['logging.Logger']=None):
         """
         Initialize Composer manager.
 
@@ -103,12 +75,10 @@ class ComposerManager(BuildManagerBase):
         """
         self.composer_json_path = None
         self.composer_lock_path = None
-
         super().__init__(project_dir, logger)
+        self.composer_lock_path = self.project_dir / 'composer.lock'
 
-        self.composer_lock_path = self.project_dir / "composer.lock"
-
-    @wrap_exception(BuildSystemNotFoundError, "Composer not found")
+    @wrap_exception(BuildSystemNotFoundError, 'Composer not found')
     def _validate_installation(self) -> None:
         """
         Validate Composer is installed.
@@ -116,20 +86,13 @@ class ComposerManager(BuildManagerBase):
         Raises:
             BuildSystemNotFoundError: If Composer not in PATH
         """
-        result = self._execute_command(
-            ["composer", "--version"],
-            timeout=10,
-            error_type=BuildSystemNotFoundError,
-            error_message="Composer not installed or not in PATH"
-        )
-
-        # Extract version
-        version_match = re.search(r"Composer version ([\d.]+)", result.output)
+        result = self._execute_command(['composer', '--version'], timeout=10, error_type=BuildSystemNotFoundError, error_message='Composer not installed or not in PATH')
+        version_match = re.search('Composer version ([\\d.]+)', result.output)
         if version_match:
             version = version_match.group(1)
-            self.logger.info(f"Using Composer version: {version}")
+            self.logger.info(f'Using Composer version: {version}')
 
-    @wrap_exception(ProjectConfigurationError, "Invalid Composer project")
+    @wrap_exception(ProjectConfigurationError, 'Invalid Composer project')
     def _validate_project(self) -> None:
         """
         Validate composer.json exists.
@@ -137,15 +100,11 @@ class ComposerManager(BuildManagerBase):
         Raises:
             ProjectConfigurationError: If composer.json missing
         """
-        self.composer_json_path = self.project_dir / "composer.json"
-
+        self.composer_json_path = self.project_dir / 'composer.json'
         if not self.composer_json_path.exists():
-            raise ProjectConfigurationError(
-                "composer.json not found",
-                {"project_dir": str(self.project_dir)}
-            )
+            raise ProjectConfigurationError('composer.json not found', {'project_dir': str(self.project_dir)})
 
-    @wrap_exception(ProjectConfigurationError, "Failed to parse composer.json")
+    @wrap_exception(ProjectConfigurationError, 'Failed to parse composer.json')
     def get_project_info(self) -> Dict[str, Any]:
         """
         Parse composer.json for project information.
@@ -158,26 +117,11 @@ class ComposerManager(BuildManagerBase):
         """
         with open(self.composer_json_path, 'r') as f:
             data = json_lib.load(f)
-
-        # Extract PHP version from require
-        php_version = data.get("require", {}).get("php", ">=7.0")
-
-        info = ComposerProjectInfo(
-            name=data.get("name", ""),
-            description=data.get("description"),
-            type=data.get("type", "library"),
-            license=data.get("license"),
-            php_version=php_version,
-            require=data.get("require", {}),
-            require_dev=data.get("require-dev", {}),
-            autoload=data.get("autoload", {}),
-            scripts=data.get("scripts", {}),
-            has_lock_file=self.composer_lock_path.exists()
-        )
-
+        php_version = data.get('require', {}).get('php', '>=7.0')
+        info = ComposerProjectInfo(name=data.get('name', ''), description=data.get('description'), type=data.get('type', 'library'), license=data.get('license'), php_version=php_version, require=data.get('require', {}), require_dev=data.get('require-dev', {}), autoload=data.get('autoload', {}), scripts=data.get('scripts', {}), has_lock_file=self.composer_lock_path.exists())
         return info.to_dict()
 
-    @wrap_exception(BuildExecutionError, "Composer install failed")
+    @wrap_exception(BuildExecutionError, 'Composer install failed')
     def build(self, **kwargs) -> BuildResult:
         """
         Install dependencies (alias for install).
@@ -193,14 +137,8 @@ class ComposerManager(BuildManagerBase):
         """
         return self.install()
 
-    @wrap_exception(DependencyInstallError, "Failed to install dependencies")
-    def install(
-        self,
-        no_dev: bool = False,
-        optimize_autoloader: bool = False,
-        prefer_dist: bool = False,
-        **kwargs
-    ) -> BuildResult:
+    @wrap_exception(DependencyInstallError, 'Failed to install dependencies')
+    def install(self, no_dev: bool=False, optimize_autoloader: bool=False, prefer_dist: bool=False, **kwargs) -> BuildResult:
         """
         Install all dependencies from composer.json.
 
@@ -218,31 +156,17 @@ class ComposerManager(BuildManagerBase):
         Example:
             composer.install(no_dev=True, optimize_autoloader=True)
         """
-        cmd = ["composer", "install"]
-
+        cmd = ['composer', 'install']
         if no_dev:
-            cmd.append("--no-dev")
-
+            cmd.append('--no-dev')
         if optimize_autoloader:
-            cmd.append("--optimize-autoloader")
-
+            cmd.append('--optimize-autoloader')
         if prefer_dist:
-            cmd.append("--prefer-dist")
+            cmd.append('--prefer-dist')
+        return self._execute_command(cmd, timeout=300, error_type=DependencyInstallError, error_message='Dependency installation failed')
 
-        return self._execute_command(
-            cmd,
-            timeout=300,
-            error_type=DependencyInstallError,
-            error_message="Dependency installation failed"
-        )
-
-    @wrap_exception(TestExecutionError, "Tests failed")
-    def test(
-        self,
-        test_path: Optional[str] = None,
-        verbose: bool = False,
-        **kwargs
-    ) -> BuildResult:
+    @wrap_exception(TestExecutionError, 'Tests failed')
+    def test(self, test_path: Optional[str]=None, verbose: bool=False, **kwargs) -> BuildResult:
         """
         Run tests with PHPUnit via composer.
 
@@ -259,35 +183,19 @@ class ComposerManager(BuildManagerBase):
         Example:
             result = composer.test(verbose=True)
         """
-        # Check if there's a test script defined
         info = self.get_project_info()
-        if "test" in info.get("scripts", {}):
-            cmd = ["composer", "test"]
+        if 'test' in info.get('scripts', {}):
+            cmd = ['composer', 'test']
         else:
-            # Fall back to direct PHPUnit call
-            cmd = ["./vendor/bin/phpunit"]
-
+            cmd = ['./vendor/bin/phpunit']
         if verbose:
-            cmd.append("--verbose")
-
+            cmd.append('--verbose')
         if test_path:
             cmd.append(test_path)
+        return self._execute_command(cmd, timeout=300, error_type=TestExecutionError, error_message='Test execution failed')
 
-        return self._execute_command(
-            cmd,
-            timeout=300,
-            error_type=TestExecutionError,
-            error_message="Test execution failed"
-        )
-
-    @wrap_exception(DependencyInstallError, "Failed to add package")
-    def install_dependency(
-        self,
-        package: str,
-        version: Optional[str] = None,
-        dev: bool = False,
-        **kwargs
-    ) -> bool:
+    @wrap_exception(DependencyInstallError, 'Failed to add package')
+    def install_dependency(self, package: str, version: Optional[str]=None, dev: bool=False, **kwargs) -> bool:
         """
         Add a package to composer.json.
 
@@ -306,30 +214,16 @@ class ComposerManager(BuildManagerBase):
             composer.install_dependency("symfony/console", version="^6.0")
             composer.install_dependency("phpunit/phpunit", dev=True)
         """
-        package_spec = f"{package}:{version}" if version else package
-
-        cmd = ["composer", "require", package_spec]
-
+        package_spec = f'{package}:{version}' if version else package
+        cmd = ['composer', 'require', package_spec]
         if dev:
-            cmd.append("--dev")
-
-        result = self._execute_command(
-            cmd,
-            timeout=120,
-            error_type=DependencyInstallError,
-            error_message=f"Failed to add package {package}"
-        )
-
-        self.logger.info(f"Added package {package}")
+            cmd.append('--dev')
+        result = self._execute_command(cmd, timeout=120, error_type=DependencyInstallError, error_message=f'Failed to add package {package}')
+        self.logger.info(f'Added package {package}')
         return True
 
-    @wrap_exception(BuildExecutionError, "Failed to update dependencies")
-    def update(
-        self,
-        package: Optional[str] = None,
-        with_dependencies: bool = True,
-        **kwargs
-    ) -> BuildResult:
+    @wrap_exception(BuildExecutionError, 'Failed to update dependencies')
+    def update(self, package: Optional[str]=None, with_dependencies: bool=True, **kwargs) -> BuildResult:
         """
         Update dependencies.
 
@@ -347,22 +241,14 @@ class ComposerManager(BuildManagerBase):
             composer.update()  # Update all
             composer.update(package="symfony/console")  # Update specific
         """
-        cmd = ["composer", "update"]
-
+        cmd = ['composer', 'update']
         if package:
             cmd.append(package)
-
         if not with_dependencies and package:
-            cmd.append("--no-update-with-dependencies")
+            cmd.append('--no-update-with-dependencies')
+        return self._execute_command(cmd, timeout=300, error_type=BuildExecutionError, error_message='Dependency update failed')
 
-        return self._execute_command(
-            cmd,
-            timeout=300,
-            error_type=BuildExecutionError,
-            error_message="Dependency update failed"
-        )
-
-    @wrap_exception(BuildExecutionError, "Failed to run script")
+    @wrap_exception(BuildExecutionError, 'Failed to run script')
     def run_script(self, script_name: str) -> BuildResult:
         """
         Run a script defined in composer.json.
@@ -379,21 +265,11 @@ class ComposerManager(BuildManagerBase):
         Example:
             composer.run_script("post-install-cmd")
         """
-        cmd = ["composer", "run-script", script_name]
+        cmd = ['composer', 'run-script', script_name]
+        return self._execute_command(cmd, timeout=600, error_type=BuildExecutionError, error_message=f"Script '{script_name}' failed")
 
-        return self._execute_command(
-            cmd,
-            timeout=600,
-            error_type=BuildExecutionError,
-            error_message=f"Script '{script_name}' failed"
-        )
-
-    @wrap_exception(BuildExecutionError, "Failed to show package info")
-    def show(
-        self,
-        package: Optional[str] = None,
-        installed: bool = False
-    ) -> BuildResult:
+    @wrap_exception(BuildExecutionError, 'Failed to show package info')
+    def show(self, package: Optional[str]=None, installed: bool=False) -> BuildResult:
         """
         Show information about packages.
 
@@ -410,22 +286,14 @@ class ComposerManager(BuildManagerBase):
         Example:
             result = composer.show("symfony/console")
         """
-        cmd = ["composer", "show"]
-
+        cmd = ['composer', 'show']
         if installed:
-            cmd.append("--installed")
-
+            cmd.append('--installed')
         if package:
             cmd.append(package)
+        return self._execute_command(cmd, timeout=30, error_type=BuildExecutionError, error_message=f'Failed to show package info')
 
-        return self._execute_command(
-            cmd,
-            timeout=30,
-            error_type=BuildExecutionError,
-            error_message=f"Failed to show package info"
-        )
-
-    @wrap_exception(BuildExecutionError, "Failed to validate")
+    @wrap_exception(BuildExecutionError, 'Failed to validate')
     def validate(self) -> BuildResult:
         """
         Validate composer.json and composer.lock.
@@ -439,17 +307,11 @@ class ComposerManager(BuildManagerBase):
         Example:
             composer.validate()
         """
-        cmd = ["composer", "validate"]
+        cmd = ['composer', 'validate']
+        return self._execute_command(cmd, timeout=30, error_type=BuildExecutionError, error_message='Validation failed')
 
-        return self._execute_command(
-            cmd,
-            timeout=30,
-            error_type=BuildExecutionError,
-            error_message="Validation failed"
-        )
-
-    @wrap_exception(BuildExecutionError, "Failed to dump autoload")
-    def dump_autoload(self, optimize: bool = False) -> BuildResult:
+    @wrap_exception(BuildExecutionError, 'Failed to dump autoload')
+    def dump_autoload(self, optimize: bool=False) -> BuildResult:
         """
         Regenerate autoloader.
 
@@ -465,19 +327,12 @@ class ComposerManager(BuildManagerBase):
         Example:
             composer.dump_autoload(optimize=True)
         """
-        cmd = ["composer", "dump-autoload"]
-
+        cmd = ['composer', 'dump-autoload']
         if optimize:
-            cmd.append("--optimize")
+            cmd.append('--optimize')
+        return self._execute_command(cmd, timeout=60, error_type=BuildExecutionError, error_message='dump-autoload failed')
 
-        return self._execute_command(
-            cmd,
-            timeout=60,
-            error_type=BuildExecutionError,
-            error_message="dump-autoload failed"
-        )
-
-    @wrap_exception(BuildExecutionError, "Failed to diagnose")
+    @wrap_exception(BuildExecutionError, 'Failed to diagnose')
     def diagnose(self) -> BuildResult:
         """
         Run diagnostics.
@@ -488,14 +343,8 @@ class ComposerManager(BuildManagerBase):
         Raises:
             BuildExecutionError: If diagnose fails
         """
-        cmd = ["composer", "diagnose"]
-
-        return self._execute_command(
-            cmd,
-            timeout=60,
-            error_type=BuildExecutionError,
-            error_message="Diagnose failed"
-        )
+        cmd = ['composer', 'diagnose']
+        return self._execute_command(cmd, timeout=60, error_type=BuildExecutionError, error_message='Diagnose failed')
 
     def clean(self) -> BuildResult:
         """
@@ -504,24 +353,12 @@ class ComposerManager(BuildManagerBase):
         Returns:
             BuildResult
         """
-        cmd = ["composer", "clear-cache"]
-
+        cmd = ['composer', 'clear-cache']
         try:
-            return self._execute_command(
-                cmd,
-                timeout=30,
-                error_type=BuildExecutionError,
-                error_message="Clear cache failed"
-            )
+            return self._execute_command(cmd, timeout=30, error_type=BuildExecutionError, error_message='Clear cache failed')
         except BuildExecutionError as e:
-            self.logger.warning(f"Clean failed: {e}")
-            return BuildResult(
-                success=False,
-                exit_code=1,
-                duration=0.0,
-                output=str(e),
-                build_system="composer"
-            )
+            self.logger.warning(f'Clean failed: {e}')
+            return BuildResult(success=False, exit_code=1, duration=0.0, output=str(e), build_system='composer')
 
     def _extract_test_stats(self, output: str) -> Dict[str, int]:
         """
@@ -533,119 +370,98 @@ class ComposerManager(BuildManagerBase):
         Returns:
             Dict with test statistics
         """
-        stats = {
-            'tests_run': 0,
-            'tests_passed': 0,
-            'tests_failed': 0,
-            'tests_skipped': 0
-        }
-
-        # PHPUnit: "Tests: 15, Assertions: 42, Failures: 2, Skipped: 1"
-        # Or: "OK (15 tests, 42 assertions)"
-        summary_match = re.search(
-            r'Tests:\s+(\d+),\s+Assertions:\s+\d+(?:,\s+Failures:\s+(\d+))?(?:,\s+(?:Skipped|Incomplete):\s+(\d+))?',
-            output
-        )
-
+        stats = {'tests_run': 0, 'tests_passed': 0, 'tests_failed': 0, 'tests_skipped': 0}
+        summary_match = re.search('Tests:\\s+(\\d+),\\s+Assertions:\\s+\\d+(?:,\\s+Failures:\\s+(\\d+))?(?:,\\s+(?:Skipped|Incomplete):\\s+(\\d+))?', output)
         if summary_match:
             total = int(summary_match.group(1))
             failures = int(summary_match.group(2) or 0)
             skipped = int(summary_match.group(3) or 0)
-
             stats['tests_run'] = total - skipped
             stats['tests_failed'] = failures
             stats['tests_passed'] = total - failures - skipped
             stats['tests_skipped'] = skipped
             return stats
-
-        # Alternative format: "OK (15 tests, 42 assertions)"
-        ok_match = re.search(r'OK\s+\((\d+)\s+tests?,', output)
+        ok_match = re.search('OK\\s+\\((\\d+)\\s+tests?,', output)
         if ok_match:
             total = int(ok_match.group(1))
             stats['tests_run'] = total
             stats['tests_passed'] = total
-
         return stats
 
-
-# CLI Command Handlers
 def _handle_info_command(composer: ComposerManager) -> int:
     """Handle info command."""
     import json
     info = composer.get_project_info()
-    print(json.dumps(info, indent=2))
+    
+    logger.log(json.dumps(info, indent=2), 'INFO')
     return 0
-
 
 def _handle_install_command(composer: ComposerManager, args) -> int:
     """Handle install command."""
-    result = composer.install(
-        no_dev=args.no_dev,
-        optimize_autoloader=args.optimize
-    )
-    print(result)
+    result = composer.install(no_dev=args.no_dev, optimize_autoloader=args.optimize)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_test_command(composer: ComposerManager, args) -> int:
     """Handle test command."""
     result = composer.test(verbose=args.verbose)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_update_command(composer: ComposerManager, args) -> int:
     """Handle update command."""
     result = composer.update(package=args.package)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_require_command(composer: ComposerManager, args) -> int:
     """Handle require command."""
     if not args.package:
-        print("Error: --package required for require command")
+        
+        logger.log('Error: --package required for require command', 'INFO')
         return 1
-
     composer.install_dependency(args.package, version=args.version, dev=args.dev)
-    print(f"Added {args.package}")
+    
+    logger.log(f'Added {args.package}', 'INFO')
     return 0
-
 
 def _handle_show_command(composer: ComposerManager, args) -> int:
     """Handle show command."""
     result = composer.show(package=args.package)
-    print(result.output)
+    
+    logger.log(result.output, 'INFO')
     return 0
-
 
 def _handle_validate_command(composer: ComposerManager) -> int:
     """Handle validate command."""
     result = composer.validate()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_dump_autoload_command(composer: ComposerManager, args) -> int:
     """Handle dump-autoload command."""
     result = composer.dump_autoload(optimize=args.optimize)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_diagnose_command(composer: ComposerManager) -> int:
     """Handle diagnose command."""
     result = composer.diagnose()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _handle_clean_command(composer: ComposerManager) -> int:
     """Handle clean command."""
     result = composer.clean()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def _execute_cli_command(args, composer: ComposerManager) -> int:
     """
@@ -658,55 +474,32 @@ def _execute_cli_command(args, composer: ComposerManager) -> int:
     Returns:
         Exit code
     """
-    command_handlers = {
-        "info": lambda: _handle_info_command(composer),
-        "install": lambda: _handle_install_command(composer, args),
-        "test": lambda: _handle_test_command(composer, args),
-        "update": lambda: _handle_update_command(composer, args),
-        "require": lambda: _handle_require_command(composer, args),
-        "show": lambda: _handle_show_command(composer, args),
-        "validate": lambda: _handle_validate_command(composer),
-        "dump-autoload": lambda: _handle_dump_autoload_command(composer, args),
-        "diagnose": lambda: _handle_diagnose_command(composer),
-        "clean": lambda: _handle_clean_command(composer)
-    }
-
+    command_handlers = {'info': lambda: _handle_info_command(composer), 'install': lambda: _handle_install_command(composer, args), 'test': lambda: _handle_test_command(composer, args), 'update': lambda: _handle_update_command(composer, args), 'require': lambda: _handle_require_command(composer, args), 'show': lambda: _handle_show_command(composer, args), 'validate': lambda: _handle_validate_command(composer), 'dump-autoload': lambda: _handle_dump_autoload_command(composer, args), 'diagnose': lambda: _handle_diagnose_command(composer), 'clean': lambda: _handle_clean_command(composer)}
     handler = command_handlers.get(args.command)
     if handler:
         return handler()
-
-    print(f"Unknown command: {args.command}")
+    
+    logger.log(f'Unknown command: {args.command}', 'INFO')
     return 1
-
-
-# CLI interface
-if __name__ == "__main__":
+if __name__ == '__main__':
     import argparse
     import logging
     import sys
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-
-    parser = argparse.ArgumentParser(description="Composer Manager")
-    parser.add_argument("--project-dir", default=".", help="Project directory")
-    parser.add_argument("command", choices=["info", "install", "test", "update", "require", "show", "validate", "dump-autoload", "diagnose", "clean"],
-                       help="Command to execute")
-    parser.add_argument("--package", help="Package name")
-    parser.add_argument("--version", help="Package version")
-    parser.add_argument("--dev", action="store_true", help="Dev dependency")
-    parser.add_argument("--no-dev", action="store_true", help="Skip dev dependencies")
-    parser.add_argument("--optimize", action="store_true", help="Optimize autoloader")
-    parser.add_argument("--verbose", action="store_true", help="Verbose output")
-
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    parser = argparse.ArgumentParser(description='Composer Manager')
+    parser.add_argument('--project-dir', default='.', help='Project directory')
+    parser.add_argument('command', choices=['info', 'install', 'test', 'update', 'require', 'show', 'validate', 'dump-autoload', 'diagnose', 'clean'], help='Command to execute')
+    parser.add_argument('--package', help='Package name')
+    parser.add_argument('--version', help='Package version')
+    parser.add_argument('--dev', action='store_true', help='Dev dependency')
+    parser.add_argument('--no-dev', action='store_true', help='Skip dev dependencies')
+    parser.add_argument('--optimize', action='store_true', help='Optimize autoloader')
+    parser.add_argument('--verbose', action='store_true', help='Verbose output')
     args = parser.parse_args()
-
     try:
         composer = ComposerManager(project_dir=args.project_dir)
         exit_code = _execute_cli_command(args, composer)
         sys.exit(exit_code)
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f'Error: {e}')
         sys.exit(1)

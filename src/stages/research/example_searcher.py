@@ -1,17 +1,9 @@
-#!/usr/bin/env python3
-"""
-WHY: Orchestrate searching across multiple research sources
-RESPONSIBILITY: Search all sources and handle errors gracefully
-PATTERNS: Strategy (multiple sources), Fault Tolerance (continue on errors)
-
-Example searcher coordinates searches across GitHub, HuggingFace, and local
-sources, collecting examples while handling individual source failures.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('example_searcher')
+'\nWHY: Orchestrate searching across multiple research sources\nRESPONSIBILITY: Search all sources and handle errors gracefully\nPATTERNS: Strategy (multiple sources), Fault Tolerance (continue on errors)\n\nExample searcher coordinates searches across GitHub, HuggingFace, and local\nsources, collecting examples while handling individual source failures.\n'
 from typing import List
 from research_strategy import ResearchStrategy, ResearchExample
 from research_exceptions import ResearchSourceError
-
 
 class ExampleSearcher:
     """
@@ -23,7 +15,7 @@ class ExampleSearcher:
     PATTERNS: Fault tolerance (continue on errors), No nested loops.
     """
 
-    def __init__(self, max_examples_per_source: int = 5):
+    def __init__(self, max_examples_per_source: int=5):
         """
         Initialize example searcher.
 
@@ -32,12 +24,7 @@ class ExampleSearcher:
         """
         self.max_examples_per_source = max_examples_per_source
 
-    def search_all_sources(
-        self,
-        strategies: List[ResearchStrategy],
-        query: str,
-        technologies: List[str]
-    ) -> List[ResearchExample]:
+    def search_all_sources(self, strategies: List[ResearchStrategy], query: str, technologies: List[str]) -> List[ResearchExample]:
         """
         Search all sources for examples.
 
@@ -57,20 +44,12 @@ class ExampleSearcher:
             the entire search operation.
         """
         all_examples = []
-
-        # Search each strategy (no nested loop - sequential with error handling)
         for strategy in strategies:
             examples = self._search_single_source(strategy, query, technologies)
             all_examples.extend(examples)
-
         return all_examples
 
-    def _search_single_source(
-        self,
-        strategy: ResearchStrategy,
-        query: str,
-        technologies: List[str]
-    ) -> List[ResearchExample]:
+    def _search_single_source(self, strategy: ResearchStrategy, query: str, technologies: List[str]) -> List[ResearchExample]:
         """
         Search a single source with error handling.
 
@@ -85,22 +64,16 @@ class ExampleSearcher:
             List of examples from this source (empty list on error)
         """
         try:
-            examples = strategy.search(
-                query=query,
-                technologies=technologies,
-                max_results=self.max_examples_per_source
-            )
+            examples = strategy.search(query=query, technologies=technologies, max_results=self.max_examples_per_source)
             return examples
-
         except ResearchSourceError as e:
-            # Log error but continue with other sources
-            print(f"Warning: {e}")
+            
+            logger.log(f'Warning: {e}', 'INFO')
             return []
-
         except Exception as e:
-            # Log unexpected error but continue
             source_name = self._get_source_name(strategy)
-            print(f"Warning: Unexpected error in {source_name}: {e}")
+            
+            logger.log(f'Warning: Unexpected error in {source_name}: {e}', 'INFO')
             return []
 
     def _get_source_name(self, strategy: ResearchStrategy) -> str:
@@ -118,4 +91,4 @@ class ExampleSearcher:
         try:
             return strategy.get_source_name()
         except Exception:
-            return "unknown"
+            return 'unknown'

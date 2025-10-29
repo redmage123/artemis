@@ -92,7 +92,8 @@ class Supervisor:
         self.circuit_breaker = CircuitBreakerManager(
             verbose=verbose,
             messenger=messenger,
-            state_machine=None  # Will be set later
+            state_machine=None,  # Will be set later
+            logger=logger
         )
 
         # Run validation if enabled
@@ -107,8 +108,8 @@ class Supervisor:
         self._init_state_machine(card_id, verbose)
         self._init_statistics()
 
-        if self.verbose:
-            print(f"[Supervisor] Initialized modular supervisor with composition-based architecture")
+        if self.verbose and self.logger:
+            self.logger.log("[Supervisor] Initialized modular supervisor with composition-based architecture", "INFO")
 
     def _init_llm_config(self) -> None:
         """Initialize LLM configuration from Hydra config"""
@@ -130,13 +131,13 @@ class Supervisor:
             self.llm_temperature = getattr(self.hydra_config.llm, 'temperature', 0.7)
             self.llm_max_tokens = getattr(self.hydra_config.llm, 'max_tokens_per_request', 4000)
 
-        if self.verbose and self.llm_model:
-            print(f"[Supervisor] Using LLM model: {self.llm_model} (temp={self.llm_temperature})")
+        if self.verbose and self.llm_model and self.logger:
+            self.logger.log(f"[Supervisor] Using LLM model: {self.llm_model} (temp={self.llm_temperature})", "INFO")
 
     def _run_config_validation(self) -> None:
         """Run startup configuration validation"""
-        if self.verbose:
-            print(f"[Supervisor] Running startup configuration validation...")
+        if self.verbose and self.logger:
+            self.logger.log("[Supervisor] Running startup configuration validation...", "INFO")
 
         from config_validator import ConfigValidator
 
@@ -148,13 +149,13 @@ class Supervisor:
             raise RuntimeError(f"Configuration validation failed: {report.errors} errors")
 
         # Guard: warnings only
-        if report.overall_status == "warning" and self.verbose:
-            print(f"[Supervisor] ⚠️  Configuration warnings: {report.warnings} warnings")
+        if report.overall_status == "warning" and self.verbose and self.logger:
+            self.logger.log(f"[Supervisor] ⚠️  Configuration warnings: {report.warnings} warnings", "WARNING")
 
     def _run_preflight_validation(self) -> None:
         """Run preflight validation (syntax checks with auto-fix)"""
-        if self.verbose:
-            print(f"[Supervisor] Running preflight validation (syntax checks)...")
+        if self.verbose and self.logger:
+            self.logger.log("[Supervisor] Running preflight validation (syntax checks)...", "INFO")
 
         try:
             from preflight_validator import PreflightValidator
@@ -178,8 +179,8 @@ class Supervisor:
             self.auto_fix_engine.handle_preflight_results(preflight, preflight_results, auto_fix_enabled)
 
         except ImportError as e:
-            if self.verbose:
-                print(f"[Supervisor] ⚠️  Preflight validator not available - skipping syntax checks: {e}")
+            if self.verbose and self.logger:
+                self.logger.log(f"[Supervisor] ⚠️  Preflight validator not available - skipping syntax checks: {e}", "WARNING")
 
     def _init_cost_tracking(
         self,
@@ -214,8 +215,8 @@ class Supervisor:
             monthly_budget=monthly_budget
         )
 
-        if self.verbose:
-            print(f"[Supervisor] Cost tracking enabled: {storage_path}")
+        if self.verbose and self.logger:
+            self.logger.log(f"[Supervisor] Cost tracking enabled: {storage_path}", "INFO")
 
     def _init_security_sandbox(self, enable_sandboxing: bool) -> None:
         """Initialize security sandbox for code execution"""
@@ -231,8 +232,8 @@ class Supervisor:
             config=SandboxConfig()
         )
 
-        if self.verbose:
-            print(f"[Supervisor] Security sandbox enabled")
+        if self.verbose and self.logger:
+            self.logger.log("[Supervisor] Security sandbox enabled", "INFO")
 
     def _init_learning_engine(self) -> None:
         """Initialize learning engine for unexpected state handling"""
@@ -246,12 +247,12 @@ class Supervisor:
                 verbose=self.verbose
             )
 
-            if self.verbose:
-                print(f"[Supervisor] Learning engine initialized")
+            if self.verbose and self.logger:
+                self.logger.log("[Supervisor] Learning engine initialized", "INFO")
 
         except ImportError:
-            if self.verbose:
-                print(f"[Supervisor] Learning engine not available")
+            if self.verbose and self.logger:
+                self.logger.log("[Supervisor] Learning engine not available", "WARNING")
 
     def _init_state_machine(self, card_id: Optional[str], verbose: bool) -> None:
         """Initialize state machine for pipeline tracking"""
@@ -269,8 +270,8 @@ class Supervisor:
         self.heartbeat_manager.state_machine = self.state_machine
         self.circuit_breaker.state_machine = self.state_machine
 
-        if self.verbose:
-            print(f"[Supervisor] State machine initialized for card: {card_id}")
+        if self.verbose and self.logger:
+            self.logger.log(f"[Supervisor] State machine initialized for card: {card_id}", "INFO")
 
     def _init_statistics(self) -> None:
         """Initialize statistics tracking"""
@@ -367,6 +368,78 @@ class Supervisor:
             "registered_agents": len(self.heartbeat_manager.get_all_agents()),
             "registered_stages": len(self.circuit_breaker.get_all_stage_health()),
         }
+
+    def log_health_report(self) -> None:
+        """Log supervisor health report (renamed from print_health_report)"""
+        if not self.logger:
+            return
+
+        self.logger.log("="*70, "INFO")
+        self.logger.log("SUPERVISOR HEALTH REPORT", "INFO")
+        self.logger.log("="*70, "INFO")
+
+        # Health status
+        health_status = self.get_health_status()
+        status_emoji = {
+            HealthStatus.HEALTHY: "✅",
+            HealthStatus.DEGRADED: "⚠️",
+            HealthStatus.CRITICAL: "❌"
+        }
+        self.logger.log(f"Overall Health: {status_emoji.get(health_status, '?')} {health_status.value.upper()}", "INFO")
+
+        # Statistics
+        stats = self.get_statistics()
+        self.logger.log(f"Registered Agents: {stats['registered_agents']}", "INFO")
+        self.logger.log(f"Registered Stages: {stats['registered_stages']}", "INFO")
+
+        # Stage health
+        all_health = self.circuit_breaker.get_all_stage_health()
+        if all_health:
+            self.logger.log("Stage Health:", "INFO")
+            for stage_name, health in all_health.items():
+                circuit_status = "🚨 OPEN" if health.circuit_open else "✅ CLOSED"
+                self.logger.log(f"  - {stage_name}: {circuit_status} (failures: {health.failure_count}, executions: {health.execution_count})", "INFO")
+
+        self.logger.log("="*70, "INFO")
+
+    def print_health_report(self) -> None:
+        """Deprecated: Use log_health_report() instead. This method is kept for backward compatibility."""
+        self.log_health_report()
+
+    def cleanup_zombie_processes(self) -> int:
+        """
+        Clean up zombie processes
+
+        Returns:
+            Number of processes cleaned up
+        """
+        # Guard: no heartbeat manager
+        if not hasattr(self, 'heartbeat_manager'):
+            return 0
+
+        try:
+            import psutil
+            cleaned = 0
+
+            # Get all hanging processes from heartbeat manager
+            hanging_processes = self.heartbeat_manager.detect_hanging_processes()
+
+            for proc_health in hanging_processes:
+                try:
+                    process = psutil.Process(proc_health.pid)
+                    process.terminate()
+                    process.wait(timeout=3)
+                    cleaned += 1
+                    if self.verbose and self.logger:
+                        self.logger.log(f"[Supervisor] Terminated hanging process: {proc_health.name} (PID: {proc_health.pid})", "INFO")
+                except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                    pass
+
+            return cleaned
+        except Exception as e:
+            if self.verbose and self.logger:
+                self.logger.log(f"[Supervisor] Error cleaning up processes: {e}", "ERROR")
+            return 0
 
 
 __all__ = [

@@ -1,53 +1,15 @@
-#!/usr/bin/env python3
-"""
-Module: kanban/board.py
-
-WHY: Provides centralized board state management, enforces Agile best practices
-     (WIP limits, DoD tracking), and enables metrics collection for sprint planning
-     and retrospectives.
-
-RESPONSIBILITY:
-- Load and persist board state to JSON file
-- Card CRUD operations (create, read, update, delete, move)
-- Sprint management (create, start, complete sprints)
-- WIP limit enforcement with violations tracking
-- Metrics calculation (cycle time, velocity, throughput)
-- Card blocking/unblocking workflow
-- Definition of Done (DoD) validation
-- Test status tracking per card
-- Board visualization and reporting
-
-PATTERNS:
-- Repository Pattern: Combines data access (load/save JSON) with business logic
-- Active Record: Board object manages its own persistence
-- Guard Clauses: Early returns prevent nested conditionals
-
-INTEGRATION:
-- Used by ArtemisOrchestrator for card lifecycle management
-- Used by sprint planning stages to assign work
-- Used by developer agents to update progress
-- Provides data for retrospectives and planning poker
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('board_original')
+'\nModule: kanban/board.py\n\nWHY: Provides centralized board state management, enforces Agile best practices\n     (WIP limits, DoD tracking), and enables metrics collection for sprint planning\n     and retrospectives.\n\nRESPONSIBILITY:\n- Load and persist board state to JSON file\n- Card CRUD operations (create, read, update, delete, move)\n- Sprint management (create, start, complete sprints)\n- WIP limit enforcement with violations tracking\n- Metrics calculation (cycle time, velocity, throughput)\n- Card blocking/unblocking workflow\n- Definition of Done (DoD) validation\n- Test status tracking per card\n- Board visualization and reporting\n\nPATTERNS:\n- Repository Pattern: Combines data access (load/save JSON) with business logic\n- Active Record: Board object manages its own persistence\n- Guard Clauses: Early returns prevent nested conditionals\n\nINTEGRATION:\n- Used by ArtemisOrchestrator for card lifecycle management\n- Used by sprint planning stages to assign work\n- Used by developer agents to update progress\n- Provides data for retrospectives and planning poker\n'
 import json
 import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
-
-from artemis_exceptions import (
-    KanbanBoardError,
-    KanbanCardNotFoundError,
-    FileReadError,
-    FileWriteError,
-    wrap_exception
-)
+from artemis_exceptions import KanbanBoardError, KanbanCardNotFoundError, FileReadError, FileWriteError, wrap_exception
 from artemis_constants import KANBAN_BOARD_PATH
 from debug_mixin import DebugMixin
 from kanban.card_builder import CardBuilder
-
-# Board file path (now using constant from artemis_constants)
 BOARD_PATH = str(KANBAN_BOARD_PATH)
-
 
 class KanbanBoard(DebugMixin):
     """
@@ -86,7 +48,7 @@ class KanbanBoard(DebugMixin):
     - Provides data for retrospectives and planning poker
     """
 
-    def __init__(self, board_path: str = BOARD_PATH):
+    def __init__(self, board_path: str=BOARD_PATH):
         """
         Initialize KanbanBoard with JSON file backend
 
@@ -96,7 +58,7 @@ class KanbanBoard(DebugMixin):
         Args:
             board_path: Path to kanban_board.json file (defaults to constant)
         """
-        DebugMixin.__init__(self, component_name="kanban")
+        DebugMixin.__init__(self, component_name='kanban')
         self.board_path = board_path
         self.board = self._load_board()
 
@@ -124,80 +86,36 @@ class KanbanBoard(DebugMixin):
                      Artemis-specific context for better debugging.
         """
         if not os.path.exists(self.board_path):
-            raise KanbanBoardError(
-                f"Kanban board not found at {self.board_path}",
-                context={"board_path": self.board_path}
-            )
-
+            raise KanbanBoardError(f'Kanban board not found at {self.board_path}', context={'board_path': self.board_path})
         try:
             with open(self.board_path, 'r') as f:
                 board = json.load(f)
-
-                # Ensure metrics field exists (for backward compatibility)
                 if 'metrics' not in board:
-                    board['metrics'] = {
-                        'cycle_time_avg_hours': 0,
-                        'cycle_time_min_hours': 0,
-                        'cycle_time_max_hours': 0,
-                        'cards_completed': 0,
-                        'throughput_current_sprint': 0,
-                        'velocity_current_sprint': 0,
-                        'wip_violations_count': 0,
-                        'blocked_items_count': 0
-                    }
-
+                    board['metrics'] = {'cycle_time_avg_hours': 0, 'cycle_time_min_hours': 0, 'cycle_time_max_hours': 0, 'cards_completed': 0, 'throughput_current_sprint': 0, 'velocity_current_sprint': 0, 'wip_violations_count': 0, 'blocked_items_count': 0}
                 return board
         except Exception as e:
-            raise wrap_exception(
-                e,
-                FileReadError,
-                f"Failed to read Kanban board",
-                context={"board_path": self.board_path}
-            )
+            raise wrap_exception(e, FileReadError, f'Failed to read Kanban board', context={'board_path': self.board_path})
 
     def _save_board(self) -> None:
         """Save board to JSON file"""
         self.board['last_updated'] = datetime.utcnow().isoformat() + 'Z'
-
         with open(self.board_path, 'w') as f:
             json.dump(self.board, f, indent=2)
 
     def _find_card(self, card_id: str) -> tuple[Optional[Dict], Optional[str]]:
         """Find a card by ID, return (card, column_id)"""
         columns = self.board.get('columns', {})
-
-        # Handle dict format
         if isinstance(columns, dict):
-            # Use generator expression for early termination on first match
-            # Note: CardBuilder creates cards with 'task_id', not 'card_id'
-            result = next(
-                ((card, column_id)
-                 for column_id, column_data in columns.items()
-                 for card in column_data.get('cards', [])
-                 if card.get('task_id') == card_id or card.get('card_id') == card_id),
-                (None, None)
-            )
+            result = next(((card, column_id) for column_id, column_data in columns.items() for card in column_data.get('cards', []) if card.get('task_id') == card_id or card.get('card_id') == card_id), (None, None))
             return result
-
-        # Handle list format
-        result = next(
-            ((card, column.get('column_id'))
-             for column in columns
-             for card in column.get('cards', [])
-             if card.get('task_id') == card_id or card.get('card_id') == card_id),
-            (None, None)
-        )
+        result = next(((card, column.get('column_id')) for column in columns for card in column.get('cards', []) if card.get('task_id') == card_id or card.get('card_id') == card_id), (None, None))
         return result
 
     def _get_column(self, column_id: str) -> Optional[Dict]:
         """Get column by ID"""
-        # Handle both dict and list formats
         columns = self.board.get('columns', {})
         if isinstance(columns, dict):
-            # Dict format: {column_id: {name, wip_limit, cards}}
             return columns.get(column_id)
-
-        # List format: [{column_id, name, wip_limit, cards}]
         return next((column for column in columns if column.get('column_id') == column_id), None)
 
     def new_card(self, task_id: str, title: str) -> CardBuilder:
@@ -235,28 +153,16 @@ class KanbanBoard(DebugMixin):
         Raises:
             KanbanBoardError: If backlog column not found
         """
-        self.debug_log("Adding card to backlog", card_id=card.get('card_id', 'unknown'), task_id=card.get('task_id', 'unknown'))
-
-        backlog = self._get_column("backlog")
+        self.debug_log('Adding card to backlog', card_id=card.get('card_id', 'unknown'), task_id=card.get('task_id', 'unknown'))
+        backlog = self._get_column('backlog')
         if not backlog:
-            raise KanbanBoardError(
-                "Backlog column not found",
-                context={"board_path": self.board_path}
-            )
-
+            raise KanbanBoardError('Backlog column not found', context={'board_path': self.board_path})
         backlog['cards'].append(card)
         self._save_board()
-
-        self.debug_log("Card added successfully", card_id=card.get('card_id', 'unknown'))
+        self.debug_log('Card added successfully', card_id=card.get('card_id', 'unknown'))
         return card
 
-    def move_card(
-        self,
-        card_id: str,
-        to_column: str,
-        agent: str = "system",
-        comment: str = ""
-    ) -> bool:
+    def move_card(self, card_id: str, to_column: str, agent: str='system', comment: str='') -> bool:
         """
         Move a card between columns with WIP enforcement and metrics tracking
 
@@ -296,68 +202,43 @@ class KanbanBoard(DebugMixin):
             - History tracking for every move enables detailed retrospectives
             - Dual card_id lookup (task_id or card_id) for backward compatibility
         """
-        self.debug_log("Moving card", card_id=card_id, from_column="searching", to_column=to_column, agent=agent)
-
+        self.debug_log('Moving card', card_id=card_id, from_column='searching', to_column=to_column, agent=agent)
         card, from_column = self._find_card(card_id)
         if not card:
-            print(f"❌ Card {card_id} not found")
-            self.debug_log("Card not found", card_id=card_id)
+            
+            logger.log(f'❌ Card {card_id} not found', 'INFO')
+            self.debug_log('Card not found', card_id=card_id)
             return False
-
         to_col = self._get_column(to_column)
         if not to_col:
-            print(f"❌ Column {to_column} not found")
+            
+            logger.log(f'❌ Column {to_column} not found', 'INFO')
             return False
-
-        # Check WIP limit
         if to_col['wip_limit'] is not None:
             if len(to_col['cards']) >= to_col['wip_limit']:
-                print(f"⚠️  WIP limit exceeded for {to_column} ({len(to_col['cards'])}/{to_col['wip_limit']})")
+                
+                logger.log(f"⚠️  WIP limit exceeded for {to_column} ({len(to_col['cards'])}/{to_col['wip_limit']})", 'INFO')
                 self.board['metrics']['wip_violations_count'] += 1
-
-        # Remove from current column
         from_col = self._get_column(from_column)
         if from_col:
             from_col['cards'] = [c for c in from_col['cards'] if c['card_id'] != card_id]
-
-        # Add to new column
         card['current_column'] = to_column
         card['moved_to_current_column_at'] = datetime.utcnow().isoformat() + 'Z'
-
-        # Add history entry
-        card['history'].append({
-            "timestamp": datetime.utcnow().isoformat() + 'Z',
-            "action": "moved",
-            "from_column": from_column,
-            "to_column": to_column,
-            "agent": agent,
-            "comment": comment or f"Moved from {from_column} to {to_column}"
-        })
-
+        card['history'].append({'timestamp': datetime.utcnow().isoformat() + 'Z', 'action': 'moved', 'from_column': from_column, 'to_column': to_column, 'agent': agent, 'comment': comment or f'Moved from {from_column} to {to_column}'})
         to_col['cards'].append(card)
-
-        # Update metrics if moved to done
-        if to_column == "done":
+        if to_column == 'done':
             card['completed_at'] = datetime.utcnow().isoformat() + 'Z'
-
-            # Calculate cycle time
             created = datetime.fromisoformat(card['created_at'].replace('Z', '+00:00'))
             completed = datetime.now(timezone.utc)
             cycle_time_hours = (completed - created).total_seconds() / 3600
             card['cycle_time_hours'] = round(cycle_time_hours, 2)
-
-            # Update board metrics
             self._update_metrics()
-
         self._save_board()
-        print(f"✅ Moved card {card_id} from {from_column} to {to_column}")
+        
+        logger.log(f'✅ Moved card {card_id} from {from_column} to {to_column}', 'INFO')
         return True
 
-    def update_card(
-        self,
-        card_id: str,
-        updates: Dict[str, Any]
-    ) -> bool:
+    def update_card(self, card_id: str, updates: Dict[str, Any]) -> bool:
         """
         Update card fields
 
@@ -370,24 +251,18 @@ class KanbanBoard(DebugMixin):
         """
         card, column = self._find_card(card_id)
         if not card:
-            print(f"❌ Card {card_id} not found")
+            
+            logger.log(f'❌ Card {card_id} not found', 'INFO')
             return False
-
-        # Update fields
         for key, value in updates.items():
             if key in card:
                 card[key] = value
-
         self._save_board()
-        print(f"✅ Updated card {card_id}")
+        
+        logger.log(f'✅ Updated card {card_id}', 'INFO')
         return True
 
-    def block_card(
-        self,
-        card_id: str,
-        reason: str,
-        agent: str = "system"
-    ) -> bool:
+    def block_card(self, card_id: str, reason: str, agent: str='system') -> bool:
         """
         Mark a card as blocked and move to Blocked column
 
@@ -401,28 +276,19 @@ class KanbanBoard(DebugMixin):
         """
         card, from_column = self._find_card(card_id)
         if not card:
-            print(f"❌ Card {card_id} not found")
+            
+            logger.log(f'❌ Card {card_id} not found', 'INFO')
             return False
-
         card['blocked'] = True
         card['blocked_reason'] = reason
-
-        self.move_card(card_id, "blocked", agent, f"BLOCKED: {reason}")
-
-        # Update metrics
-        self.board['metrics']['blocked_items_count'] = len(self._get_column("blocked")['cards'])
+        self.move_card(card_id, 'blocked', agent, f'BLOCKED: {reason}')
+        self.board['metrics']['blocked_items_count'] = len(self._get_column('blocked')['cards'])
         self._save_board()
-
-        print(f"🚫 Blocked card {card_id}: {reason}")
+        
+        logger.log(f'🚫 Blocked card {card_id}: {reason}', 'INFO')
         return True
 
-    def unblock_card(
-        self,
-        card_id: str,
-        move_to_column: str,
-        agent: str = "system",
-        resolution: str = ""
-    ) -> bool:
+    def unblock_card(self, card_id: str, move_to_column: str, agent: str='system', resolution: str='') -> bool:
         """
         Unblock a card and move to specified column
 
@@ -436,28 +302,21 @@ class KanbanBoard(DebugMixin):
             True if successful
         """
         card, column = self._find_card(card_id)
-        if not card or column != "blocked":
-            print(f"❌ Card {card_id} not in blocked column")
+        if not card or column != 'blocked':
+            
+            logger.log(f'❌ Card {card_id} not in blocked column', 'INFO')
             return False
-
         card['blocked'] = False
         old_reason = card['blocked_reason']
         card['blocked_reason'] = None
-
-        self.move_card(card_id, move_to_column, agent, f"UNBLOCKED: {resolution}")
-
-        # Update metrics
-        self.board['metrics']['blocked_items_count'] = len(self._get_column("blocked")['cards'])
+        self.move_card(card_id, move_to_column, agent, f'UNBLOCKED: {resolution}')
+        self.board['metrics']['blocked_items_count'] = len(self._get_column('blocked')['cards'])
         self._save_board()
-
-        print(f"✅ Unblocked card {card_id} (was: {old_reason})")
+        
+        logger.log(f'✅ Unblocked card {card_id} (was: {old_reason})', 'INFO')
         return True
 
-    def update_test_status(
-        self,
-        card_id: str,
-        test_status: Dict[str, Any]
-    ) -> bool:
+    def update_test_status(self, card_id: str, test_status: Dict[str, Any]) -> bool:
         """
         Update test status for a card
 
@@ -470,21 +329,16 @@ class KanbanBoard(DebugMixin):
         """
         card, column = self._find_card(card_id)
         if not card:
-            print(f"❌ Card {card_id} not found")
+            
+            logger.log(f'❌ Card {card_id} not found', 'INFO')
             return False
-
         card['test_status'].update(test_status)
         self._save_board()
-
-        print(f"✅ Updated test status for card {card_id}")
+        
+        logger.log(f'✅ Updated test status for card {card_id}', 'INFO')
         return True
 
-    def verify_acceptance_criterion(
-        self,
-        card_id: str,
-        criterion_index: int,
-        verified_by: str
-    ) -> bool:
+    def verify_acceptance_criterion(self, card_id: str, criterion_index: int, verified_by: str) -> bool:
         """
         Mark an acceptance criterion as verified
 
@@ -498,123 +352,105 @@ class KanbanBoard(DebugMixin):
         """
         card, column = self._find_card(card_id)
         if not card:
-            print(f"❌ Card {card_id} not found")
+            
+            logger.log(f'❌ Card {card_id} not found', 'INFO')
             return False
-
         if criterion_index >= len(card['acceptance_criteria']):
-            print(f"❌ Criterion index {criterion_index} out of range")
+            
+            logger.log(f'❌ Criterion index {criterion_index} out of range', 'INFO')
             return False
-
         card['acceptance_criteria'][criterion_index]['status'] = 'verified'
         card['acceptance_criteria'][criterion_index]['verified_by'] = verified_by
-
         self._save_board()
-        print(f"✅ Verified acceptance criterion for card {card_id}")
+        
+        logger.log(f'✅ Verified acceptance criterion for card {card_id}', 'INFO')
         return True
 
     def _update_metrics(self) -> None:
         """Recalculate board metrics"""
-        done_column = self._get_column("done")
+        done_column = self._get_column('done')
         if not done_column:
             return
-
         done_cards = done_column['cards']
-
         if not done_cards:
             return
-
         cycle_times = [c.get('cycle_time_hours', 0) for c in done_cards if 'cycle_time_hours' in c]
         if cycle_times:
             self.board['metrics']['cycle_time_avg_hours'] = round(sum(cycle_times) / len(cycle_times), 2)
             self.board['metrics']['cycle_time_min_hours'] = round(min(cycle_times), 2)
             self.board['metrics']['cycle_time_max_hours'] = round(max(cycle_times), 2)
-
         self.board['metrics']['cards_completed'] = len(done_cards)
         self.board['metrics']['throughput_current_sprint'] = len(done_cards)
-
-        # Calculate velocity
-        velocity = sum(c.get('story_points', 0) for c in done_cards)
+        velocity = sum((c.get('story_points', 0) for c in done_cards))
         self.board['metrics']['velocity_current_sprint'] = velocity
-
         if self.board.get('current_sprint'):
             self.board['current_sprint']['completed_story_points'] = velocity
 
     def get_board_summary(self) -> Dict:
         """Get summary of board status"""
-        summary = {
-            "board_id": self.board['board_id'],
-            "last_updated": self.board['last_updated'],
-            "columns": []
-        }
-
+        summary = {'board_id': self.board['board_id'], 'last_updated': self.board['last_updated'], 'columns': []}
         for column in self.board['columns']:
-            summary['columns'].append({
-                "name": column['name'],
-                "column_id": column['column_id'],
-                "card_count": len(column['cards']),
-                "wip_limit": column['wip_limit'],
-                "cards": [
-                    {
-                        "card_id": c['card_id'],
-                        "title": c['title'],
-                        "priority": c['priority'],
-                        "blocked": c.get('blocked', False)
-                    }
-                    for c in column['cards']
-                ]
-            })
-
+            summary['columns'].append({'name': column['name'], 'column_id': column['column_id'], 'card_count': len(column['cards']), 'wip_limit': column['wip_limit'], 'cards': [{'card_id': c['card_id'], 'title': c['title'], 'priority': c['priority'], 'blocked': c.get('blocked', False)} for c in column['cards']]})
         summary['metrics'] = self.board['metrics']
         summary['current_sprint'] = self.board.get('current_sprint')
-
         return summary
 
     def print_board(self) -> None:
         """Print visual representation of board"""
-        print("\n" + "="*80)
-        print(f"  KANBAN BOARD: {self.board['board_id']}")
-        print(f"  Last Updated: {self.board['last_updated']}")
+        
+        logger.log('\n' + '=' * 80, 'INFO')
+        
+        logger.log(f"  KANBAN BOARD: {self.board['board_id']}", 'INFO')
+        
+        logger.log(f"  Last Updated: {self.board['last_updated']}", 'INFO')
         if self.board.get('current_sprint'):
             sprint = self.board['current_sprint']
-            print(f"  Sprint: {sprint['sprint_id']} ({sprint['completed_story_points']}/{sprint['committed_story_points']} points)")
-        print("="*80)
-
+            
+            logger.log(f"  Sprint: {sprint['sprint_id']} ({sprint['completed_story_points']}/{sprint['committed_story_points']} points)", 'INFO')
+        
+        logger.log('=' * 80, 'INFO')
         for column in self.board['columns']:
             wip_info = f"(WIP: {len(column['cards'])}/{column['wip_limit']})" if column['wip_limit'] else f"({len(column['cards'])})"
-            print(f"\n📋 {column['name']} {wip_info}")
-            print("-" * 80)
-
+            
+            logger.log(f"\n📋 {column['name']} {wip_info}", 'INFO')
+            
+            logger.log('-' * 80, 'INFO')
             if not column['cards']:
-                print("  (empty)")
+                
+                logger.log('  (empty)', 'INFO')
             else:
                 for card in column['cards']:
-                    blocked_indicator = "🚫 " if card.get('blocked', False) else ""
-                    priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(card['priority'], "⚪")
-                    print(f"  {blocked_indicator}{priority_emoji} {card['card_id']} - {card['title']}")
-                    print(f"     Priority: {card['priority']} | Points: {card.get('story_points', 'N/A')} | Agents: {', '.join(card['assigned_agents'][:2])}")
+                    blocked_indicator = '🚫 ' if card.get('blocked', False) else ''
+                    priority_emoji = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(card['priority'], '⚪')
+                    
+                    logger.log(f"  {blocked_indicator}{priority_emoji} {card['card_id']} - {card['title']}", 'INFO')
+                    
+                    logger.log(f"     Priority: {card['priority']} | Points: {card.get('story_points', 'N/A')} | Agents: {', '.join(card['assigned_agents'][:2])}", 'INFO')
                     if card.get('test_status'):
                         coverage = card['test_status'].get('test_coverage_percent', 0)
-                        print(f"     Tests: {coverage}% coverage")
-
-        print("\n" + "="*80)
-        print("METRICS")
-        print("="*80)
+                        
+                        logger.log(f'     Tests: {coverage}% coverage', 'INFO')
+        
+        logger.log('\n' + '=' * 80, 'INFO')
+        
+        logger.log('METRICS', 'INFO')
+        
+        logger.log('=' * 80, 'INFO')
         metrics = self.board['metrics']
-        print(f"  Cycle Time: {metrics.get('cycle_time_avg_hours', 0):.2f}h avg")
-        print(f"  Throughput: {metrics.get('throughput_current_sprint', 0)} cards this sprint")
-        print(f"  Velocity: {metrics.get('velocity_current_sprint', 0)} story points")
-        print(f"  Blocked: {metrics.get('blocked_items_count', 0)} items")
-        print(f"  WIP Violations: {metrics.get('wip_violations_count', 0)}")
-        print("="*80 + "\n")
+        
+        logger.log(f"  Cycle Time: {metrics.get('cycle_time_avg_hours', 0):.2f}h avg", 'INFO')
+        
+        logger.log(f"  Throughput: {metrics.get('throughput_current_sprint', 0)} cards this sprint", 'INFO')
+        
+        logger.log(f"  Velocity: {metrics.get('velocity_current_sprint', 0)} story points", 'INFO')
+        
+        logger.log(f"  Blocked: {metrics.get('blocked_items_count', 0)} items", 'INFO')
+        
+        logger.log(f"  WIP Violations: {metrics.get('wip_violations_count', 0)}", 'INFO')
+        
+        logger.log('=' * 80 + '\n', 'INFO')
 
-    def create_sprint(
-        self,
-        sprint_number: int,
-        start_date: str,
-        end_date: str,
-        committed_story_points: int,
-        features: List[Dict] = None
-    ) -> Dict:
+    def create_sprint(self, sprint_number: int, start_date: str, end_date: str, committed_story_points: int, features: List[Dict]=None) -> Dict:
         """
         Create a new sprint
 
@@ -628,29 +464,13 @@ class KanbanBoard(DebugMixin):
         Returns:
             Created sprint dict
         """
-        self.debug_log("Creating sprint", sprint_number=sprint_number, start_date=start_date, end_date=end_date, points=committed_story_points)
-
-        sprint = {
-            'sprint_id': f"sprint-{sprint_number}",
-            'sprint_number': sprint_number,
-            'start_date': start_date,
-            'end_date': end_date,
-            'committed_story_points': committed_story_points,
-            'completed_story_points': 0,
-            'status': 'planned',  # planned, active, completed
-            'features': features or [],
-            'created_at': datetime.utcnow().isoformat() + 'Z'
-        }
-
-        # Initialize sprints list if not exists
+        self.debug_log('Creating sprint', sprint_number=sprint_number, start_date=start_date, end_date=end_date, points=committed_story_points)
+        sprint = {'sprint_id': f'sprint-{sprint_number}', 'sprint_number': sprint_number, 'start_date': start_date, 'end_date': end_date, 'committed_story_points': committed_story_points, 'completed_story_points': 0, 'status': 'planned', 'features': features or [], 'created_at': datetime.utcnow().isoformat() + 'Z'}
         if 'sprints' not in self.board:
             self.board['sprints'] = []
-
-        # Add sprint to board
         self.board['sprints'].append(sprint)
         self._save_board()
-
-        self.debug_log("Sprint created", sprint_id=sprint['sprint_id'])
+        self.debug_log('Sprint created', sprint_id=sprint['sprint_id'])
         return sprint
 
     def start_sprint(self, sprint_number: int) -> Dict:
@@ -667,45 +487,20 @@ class KanbanBoard(DebugMixin):
             KanbanBoardError: If sprint not found or another sprint is active
         """
         if 'sprints' not in self.board:
-            raise KanbanBoardError(
-                "No sprints found on board",
-                context={"sprint_number": sprint_number}
-            )
-
-        # Check if another sprint is active
+            raise KanbanBoardError('No sprints found on board', context={'sprint_number': sprint_number})
         current_sprint = self.board.get('current_sprint')
         if current_sprint and current_sprint.get('status') == 'active':
-            raise KanbanBoardError(
-                f"Sprint {current_sprint.get('sprint_number')} is already active",
-                context={"active_sprint": current_sprint.get('sprint_number')}
-            )
-
-        # Find sprint using next() for early termination
-        sprint = next(
-            (s for s in self.board['sprints'] if s.get('sprint_number') == sprint_number),
-            None
-        )
-
+            raise KanbanBoardError(f"Sprint {current_sprint.get('sprint_number')} is already active", context={'active_sprint': current_sprint.get('sprint_number')})
+        sprint = next((s for s in self.board['sprints'] if s.get('sprint_number') == sprint_number), None)
         if not sprint:
-            raise KanbanBoardError(
-                f"Sprint {sprint_number} not found",
-                context={"sprint_number": sprint_number}
-            )
-
-        # Start sprint
+            raise KanbanBoardError(f'Sprint {sprint_number} not found', context={'sprint_number': sprint_number})
         sprint['status'] = 'active'
         sprint['started_at'] = datetime.utcnow().isoformat() + 'Z'
         self.board['current_sprint'] = sprint
-
         self._save_board()
         return sprint
 
-    def complete_sprint(
-        self,
-        sprint_number: int,
-        completed_story_points: int,
-        retrospective_notes: Optional[str] = None
-    ) -> Dict:
+    def complete_sprint(self, sprint_number: int, completed_story_points: int, retrospective_notes: Optional[str]=None) -> Dict:
         """
         Complete a sprint and run retrospective
 
@@ -721,36 +516,18 @@ class KanbanBoard(DebugMixin):
             KanbanBoardError: If sprint not found
         """
         if 'sprints' not in self.board:
-            raise KanbanBoardError(
-                "No sprints found on board",
-                context={"sprint_number": sprint_number}
-            )
-
-        # Find sprint using next() for early termination
-        sprint = next(
-            (s for s in self.board['sprints'] if s.get('sprint_number') == sprint_number),
-            None
-        )
-
+            raise KanbanBoardError('No sprints found on board', context={'sprint_number': sprint_number})
+        sprint = next((s for s in self.board['sprints'] if s.get('sprint_number') == sprint_number), None)
         if not sprint:
-            raise KanbanBoardError(
-                f"Sprint {sprint_number} not found",
-                context={"sprint_number": sprint_number}
-            )
-
-        # Complete sprint
+            raise KanbanBoardError(f'Sprint {sprint_number} not found', context={'sprint_number': sprint_number})
         sprint['status'] = 'completed'
         sprint['completed_at'] = datetime.utcnow().isoformat() + 'Z'
         sprint['completed_story_points'] = completed_story_points
-        sprint['velocity'] = (completed_story_points / max(sprint['committed_story_points'], 1)) * 100
-
+        sprint['velocity'] = completed_story_points / max(sprint['committed_story_points'], 1) * 100
         if retrospective_notes:
             sprint['retrospective_notes'] = retrospective_notes
-
-        # Clear current sprint if this was active
         if self.board.get('current_sprint', {}).get('sprint_number') == sprint_number:
             self.board['current_sprint'] = None
-
         self._save_board()
         return sprint
 
@@ -766,12 +543,7 @@ class KanbanBoard(DebugMixin):
         """
         if 'sprints' not in self.board:
             return None
-
-        # Use next() with generator expression for early termination
-        return next(
-            (sprint for sprint in self.board['sprints'] if sprint.get('sprint_number') == sprint_number),
-            None
-        )
+        return next((sprint for sprint in self.board['sprints'] if sprint.get('sprint_number') == sprint_number), None)
 
     def get_current_sprint(self) -> Optional[Dict]:
         """
@@ -791,11 +563,7 @@ class KanbanBoard(DebugMixin):
         """
         return self.board.get('sprints', [])
 
-    def update_sprint_metadata(
-        self,
-        sprint_number: int,
-        metadata: Dict[str, Any]
-    ) -> None:
+    def update_sprint_metadata(self, sprint_number: int, metadata: Dict[str, Any]) -> None:
         """
         Update sprint metadata
 
@@ -808,20 +576,11 @@ class KanbanBoard(DebugMixin):
         """
         sprint = self.get_sprint(sprint_number)
         if not sprint:
-            raise KanbanBoardError(
-                f"Sprint {sprint_number} not found",
-                context={"sprint_number": sprint_number}
-            )
-
-        # Merge metadata
+            raise KanbanBoardError(f'Sprint {sprint_number} not found', context={'sprint_number': sprint_number})
         sprint.update(metadata)
         self._save_board()
 
-    def assign_card_to_sprint(
-        self,
-        card_id: str,
-        sprint_number: int
-    ) -> None:
+    def assign_card_to_sprint(self, card_id: str, sprint_number: int) -> None:
         """
         Assign a card to a sprint
 
@@ -835,22 +594,12 @@ class KanbanBoard(DebugMixin):
         """
         card, _ = self._find_card(card_id)
         if not card:
-            raise KanbanCardNotFoundError(
-                card_id,
-                context={"card_id": card_id}
-            )
-
+            raise KanbanCardNotFoundError(card_id, context={'card_id': card_id})
         sprint = self.get_sprint(sprint_number)
         if not sprint:
-            raise KanbanBoardError(
-                f"Sprint {sprint_number} not found",
-                context={"sprint_number": sprint_number}
-            )
-
-        # Update card with sprint assignment
+            raise KanbanBoardError(f'Sprint {sprint_number} not found', context={'sprint_number': sprint_number})
         card['sprint_number'] = sprint_number
         card['assigned_to_sprint'] = sprint['sprint_id']
-
         self._save_board()
 
     def get_sprint_backlog(self, sprint_number: int) -> List[Dict]:
@@ -864,23 +613,10 @@ class KanbanBoard(DebugMixin):
             List of cards in sprint backlog
         """
         columns = self.board.get('columns', {})
-
-        # Handle both dict and list formats using list comprehension
         if isinstance(columns, dict):
-            cards = [
-                card
-                for column_data in columns.values()
-                for card in column_data.get('cards', [])
-                if card.get('sprint_number') == sprint_number
-            ]
+            cards = [card for column_data in columns.values() for card in column_data.get('cards', []) if card.get('sprint_number') == sprint_number]
         else:
-            cards = [
-                card
-                for column in columns
-                for card in column.get('cards', [])
-                if card.get('sprint_number') == sprint_number
-            ]
-
+            cards = [card for column in columns for card in column.get('cards', []) if card.get('sprint_number') == sprint_number]
         return cards
 
     def get_sprint_velocity(self, sprint_number: int) -> float:
@@ -896,14 +632,11 @@ class KanbanBoard(DebugMixin):
         sprint = self.get_sprint(sprint_number)
         if not sprint:
             return 0.0
-
         committed = sprint.get('committed_story_points', 0)
         completed = sprint.get('completed_story_points', 0)
-
         if committed == 0:
             return 0.0
-
-        return (completed / committed) * 100
+        return completed / committed * 100
 
     def get_cards_in_column(self, column_id: str) -> List[Dict]:
         """
@@ -918,7 +651,6 @@ class KanbanBoard(DebugMixin):
         column = self._get_column(column_id)
         if not column:
             return []
-
         return column.get('cards', [])
 
     def get_pending_cards(self) -> List[Dict]:
@@ -929,18 +661,12 @@ class KanbanBoard(DebugMixin):
             List of card dictionaries that need processing
         """
         pending_cards = []
-
-        # Get cards from backlog
         backlog_cards = self.get_cards_in_column('backlog')
         pending_cards.extend(backlog_cards)
-
-        # Get cards from development (in progress but may need routing)
-        # Note: We only include cards that are not blocked
         dev_cards = self.get_cards_in_column('development')
         for card in dev_cards:
             if not card.get('blocked', False):
                 pending_cards.append(card)
-
         return pending_cards
 
     def get_all_incomplete_cards(self) -> List[Dict]:
@@ -952,19 +678,16 @@ class KanbanBoard(DebugMixin):
         """
         incomplete_cards = []
         columns = self.board.get('columns', {})
-
         if isinstance(columns, dict):
             for column_id, column_data in columns.items():
-                if column_id != 'done':  # Skip done column
+                if column_id != 'done':
                     cards = column_data.get('cards', [])
                     incomplete_cards.extend(cards)
         else:
-            # List format
             for column in columns:
                 if column.get('column_id') != 'done':
                     cards = column.get('cards', [])
                     incomplete_cards.extend(cards)
-
         return incomplete_cards
 
     def has_incomplete_cards(self) -> bool:

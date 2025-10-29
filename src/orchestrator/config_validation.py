@@ -1,37 +1,9 @@
-#!/usr/bin/env python3
-"""
-Config Validation - Configuration validation and display utilities
-
-WHAT:
-Configuration validation utilities for checking required keys,
-displaying validation errors with helpful hints, and determining
-Hydra config paths.
-
-WHY:
-Separates config validation from entry points, enabling:
-- Focused testing of validation logic
-- Reusable validation utilities
-- Clear error messages with actionable hints
-- Clean separation of concerns
-
-RESPONSIBILITY:
-- Validate configuration and exit if invalid
-- Display validation errors with helpful hints
-- Provide hints for common configuration issues (API keys, etc.)
-- Determine Hydra config directory path
-
-PATTERNS:
-- Guard Clause: Early returns for valid config
-- Template Method: Consistent error display format
-- Facade Pattern: Simplifies validation logic
-
-EXTRACTED FROM: artemis_orchestrator.py lines 1287-1394
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('config_validation')
+'\nConfig Validation - Configuration validation and display utilities\n\nWHAT:\nConfiguration validation utilities for checking required keys,\ndisplaying validation errors with helpful hints, and determining\nHydra config paths.\n\nWHY:\nSeparates config validation from entry points, enabling:\n- Focused testing of validation logic\n- Reusable validation utilities\n- Clear error messages with actionable hints\n- Clean separation of concerns\n\nRESPONSIBILITY:\n- Validate configuration and exit if invalid\n- Display validation errors with helpful hints\n- Provide hints for common configuration issues (API keys, etc.)\n- Determine Hydra config directory path\n\nPATTERNS:\n- Guard Clause: Early returns for valid config\n- Template Method: Consistent error display format\n- Facade Pattern: Simplifies validation logic\n\nEXTRACTED FROM: artemis_orchestrator.py lines 1287-1394\n'
 import sys
 from typing import Any
 from pathlib import Path
-
 
 def display_validation_errors(config: Any, validation: Any) -> None:
     """
@@ -56,37 +28,40 @@ def display_validation_errors(config: Any, validation: Any) -> None:
         - Template Method: Consistent error display format
         - Guard Clause: Handles optional error types
     """
-    print("\n" + "="*80)
-    print("❌ CONFIGURATION ERROR")
-    print("="*80)
-    print("\nThe pipeline cannot run due to invalid configuration.\n")
-
-    # Display missing keys if any
+    
+    logger.log('\n' + '=' * 80, 'INFO')
+    
+    logger.log('❌ CONFIGURATION ERROR', 'INFO')
+    
+    logger.log('=' * 80, 'INFO')
+    
+    logger.log('\nThe pipeline cannot run due to invalid configuration.\n', 'INFO')
     if validation.missing_keys:
-        print("Missing Required Keys:")
-        # Display missing keys with descriptions
-        [print(f"  ❌ {key}\n     Description: {config.CONFIG_SCHEMA.get(key, {}).get('description', 'N/A')}")
-         for key in validation.missing_keys]
-
-        # Provide helpful hints for OpenAI
+        
+        logger.log('Missing Required Keys:', 'INFO')
+        [
+        logger.log(f"  ❌ {key}\n     Description: {config.CONFIG_SCHEMA.get(key, {}).get('description', 'N/A')}", 'INFO') for key in validation.missing_keys]
         if 'OPENAI_API_KEY' in validation.missing_keys:
-            print(f"\n💡 Set your OpenAI API key:")
-            print(f"   export OPENAI_API_KEY='your-key-here'")
-
-        # Provide helpful hints for Anthropic
+            
+            logger.log(f'\n💡 Set your OpenAI API key:', 'INFO')
+            
+            logger.log(f"   export OPENAI_API_KEY='your-key-here'", 'INFO')
         if 'ANTHROPIC_API_KEY' in validation.missing_keys:
-            print(f"\n💡 Set your Anthropic API key:")
-            print(f"   export ANTHROPIC_API_KEY='your-key-here'")
-
-    # Display invalid keys if any
+            
+            logger.log(f'\n💡 Set your Anthropic API key:', 'INFO')
+            
+            logger.log(f"   export ANTHROPIC_API_KEY='your-key-here'", 'INFO')
     if validation.invalid_keys:
-        print("\nInvalid Configuration Values:")
-        [print(f"  ❌ {key}") for key in validation.invalid_keys]
-
-    print("\n" + "="*80)
-    print("\n💡 Run with --config-report to see full configuration")
-    print("💡 Run with --skip-validation to bypass (NOT RECOMMENDED)\n")
-
+        
+        logger.log('\nInvalid Configuration Values:', 'INFO')
+        [
+        logger.log(f'  ❌ {key}', 'INFO') for key in validation.invalid_keys]
+    
+    logger.log('\n' + '=' * 80, 'INFO')
+    
+    logger.log('\n💡 Run with --config-report to see full configuration', 'INFO')
+    
+    logger.log('💡 Run with --skip-validation to bypass (NOT RECOMMENDED)\n', 'INFO')
 
 def validate_config_or_exit(config: Any, skip_validation: bool) -> None:
     """
@@ -109,20 +84,13 @@ def validate_config_or_exit(config: Any, skip_validation: bool) -> None:
         - Guard Clause: Early returns for skipped/valid config
         - Fail Fast: Exits immediately on invalid config
     """
-    # Guard: Validation skipped
     if skip_validation:
         return
-
     validation = config.validate_configuration(require_llm_key=True)
-
-    # Guard: Validation passed
     if validation.is_valid:
         return
-
-    # Validation failed - display errors and exit
     display_validation_errors(config, validation)
     sys.exit(1)
-
 
 def get_config_path() -> str:
     """
@@ -143,5 +111,5 @@ def get_config_path() -> str:
     PATTERNS:
         - Path Resolution: Uses __file__ for relative path
     """
-    script_dir = Path(__file__).parent.parent  # orchestrator/ -> src/
-    return str(script_dir / "conf")
+    script_dir = Path(__file__).parent.parent
+    return str(script_dir / 'conf')

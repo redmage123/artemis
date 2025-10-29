@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Module: artemis_services.py (DEPRECATED - Use services.core instead)
 
@@ -51,121 +50,18 @@ Patterns:
 - Adapter Pattern: Provides compatibility shim during migration
 - Proxy Pattern: Transparent forwarding to new implementations
 """
-
 import warnings
+from services.core import TestRunner, HTMLValidator, PipelineLogger, FileManager, create_test_runner, create_html_validator, create_logger, create_silent_logger, create_file_manager, ServiceRegistry, create_default_services, initialize_services
 
-# Import from new location and re-export
-from services.core import (
-    TestRunner,
-    HTMLValidator,
-    PipelineLogger,
-    FileManager,
-    create_test_runner,
-    create_html_validator,
-    create_logger,
-    create_silent_logger,
-    create_file_manager,
-    ServiceRegistry,
-    create_default_services,
-    initialize_services
-)
-
-
-# Issue deprecation warning on import
 def _issue_deprecation_warning():
     """Issue deprecation warning when this module is imported."""
-    warnings.warn(
-        "artemis_services.py is deprecated. "
-        "Please use 'from services.core import TestRunner, HTMLValidator, "
-        "PipelineLogger, FileManager' instead. "
-        "This module will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=3
-    )
-
-
-# Issue warning on module import
+    warnings.warn("artemis_services.py is deprecated. Please use 'from services.core import TestRunner, HTMLValidator, PipelineLogger, FileManager' instead. This module will be removed in a future version.", DeprecationWarning, stacklevel=3)
 _issue_deprecation_warning()
-
-
-# Export for backward compatibility
-__all__ = [
-    # Original service classes (100% compatible)
-    "TestRunner",
-    "HTMLValidator",
-    "PipelineLogger",
-    "FileManager",
-
-    # New factory functions (optional, for enhanced usage)
-    "create_test_runner",
-    "create_html_validator",
-    "create_logger",
-    "create_silent_logger",
-    "create_file_manager",
-
-    # New service management (optional, for advanced usage)
-    "ServiceRegistry",
-    "create_default_services",
-    "initialize_services",
-]
-
-
-# Migration guide for developers
-_MIGRATION_GUIDE = """
-MIGRATION GUIDE: artemis_services.py -> services.core
-
-OLD IMPORT (deprecated):
-    from artemis_services import TestRunner, PipelineLogger, FileManager
-
-NEW IMPORT (recommended):
-    from services.core import TestRunner, PipelineLogger, FileManager
-
-BENEFITS OF MIGRATION:
-1. Modular structure (easier to navigate and maintain)
-2. Enhanced features (strict validation, custom formatters, etc.)
-3. Better documentation (WHY/RESPONSIBILITY/PATTERNS headers)
-4. Improved testability (factory functions, service registry)
-5. Future-proof (new features will only be in services.core)
-
-STEP-BY-STEP MIGRATION:
-1. Replace import statement (see above)
-2. Code works unchanged (100% backward compatible)
-3. Optionally use new features:
-   - Factory functions for dependency injection
-   - ServiceRegistry for centralized service management
-   - Enhanced service capabilities (strict mode, etc.)
-
-EXAMPLE - BASIC MIGRATION:
-    # Before
-    from artemis_services import PipelineLogger
-    logger = PipelineLogger(verbose=True)
-
-    # After
-    from services.core import PipelineLogger
-    logger = PipelineLogger(verbose=True)
-
-EXAMPLE - USING NEW FEATURES:
-    # Use factory functions
-    from services.core import create_logger
-    logger = create_logger(verbose=True)
-
-    # Use service registry
-    from services.core import initialize_services, ServiceRegistry
-    initialize_services(verbose=True)
-    logger = ServiceRegistry.get('logger')
-    logger.info("Services initialized!")
-
-For questions or issues, consult:
-- services/core/__init__.py (package documentation)
-- Individual module files (detailed implementation docs)
-- REFACTORING_REPORT.md (this refactoring's metrics and patterns)
-"""
-
+__all__ = ['TestRunner', 'HTMLValidator', 'PipelineLogger', 'FileManager', 'create_test_runner', 'create_html_validator', 'create_logger', 'create_silent_logger', 'create_file_manager', 'ServiceRegistry', 'create_default_services', 'initialize_services']
+_MIGRATION_GUIDE = '\nMIGRATION GUIDE: artemis_services.py -> services.core\n\nOLD IMPORT (deprecated):\n    from artemis_services import TestRunner, PipelineLogger, FileManager\n\nNEW IMPORT (recommended):\n    from services.core import TestRunner, PipelineLogger, FileManager\n\nBENEFITS OF MIGRATION:\n1. Modular structure (easier to navigate and maintain)\n2. Enhanced features (strict validation, custom formatters, etc.)\n3. Better documentation (WHY/RESPONSIBILITY/PATTERNS headers)\n4. Improved testability (factory functions, service registry)\n5. Future-proof (new features will only be in services.core)\n\nSTEP-BY-STEP MIGRATION:\n1. Replace import statement (see above)\n2. Code works unchanged (100% backward compatible)\n3. Optionally use new features:\n   - Factory functions for dependency injection\n   - ServiceRegistry for centralized service management\n   - Enhanced service capabilities (strict mode, etc.)\n\nEXAMPLE - BASIC MIGRATION:\n    # Before\n    from artemis_services import PipelineLogger\n    logger = PipelineLogger(verbose=True)\n\n    # After\n    from services.core import PipelineLogger\n    logger = PipelineLogger(verbose=True)\n\nEXAMPLE - USING NEW FEATURES:\n    # Use factory functions\n    from services.core import create_logger\n    logger = create_logger(verbose=True)\n\n    # Use service registry\n    from services.core import initialize_services, ServiceRegistry\n    initialize_services(verbose=True)\n    logger = ServiceRegistry.get(\'logger\')\n    logger.info("Services initialized!")\n\nFor questions or issues, consult:\n- services/core/__init__.py (package documentation)\n- Individual module files (detailed implementation docs)\n- REFACTORING_REPORT.md (this refactoring\'s metrics and patterns)\n'
 
 def print_migration_guide():
     """Print migration guide to console."""
-    print(_MIGRATION_GUIDE)
-
-
-# Add migration guide to module docstring for help()
-__doc__ += "\n\n" + _MIGRATION_GUIDE
+    
+    logger.log(_MIGRATION_GUIDE, 'INFO')
+__doc__ += '\n\n' + _MIGRATION_GUIDE

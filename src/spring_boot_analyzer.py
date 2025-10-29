@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 WHY: Maintain backward compatibility with existing code
 RESPONSIBILITY: Provide legacy API that delegates to new modular implementation
@@ -29,34 +28,12 @@ Usage:
     print(f"Main Application: {analysis.main_application_class}")
     print(f"REST Endpoints: {len(analysis.rest_endpoints)}")
 """
-
 import json
 import logging
 from pathlib import Path
 from typing import Optional
-
-# Import from new modular package
-from spring_boot import (
-    SpringBootAnalyzer,
-    SpringBootAnalysis,
-    RestEndpoint,
-    DatabaseConfig,
-    SecurityConfig
-)
-
-# Re-export for backward compatibility
-__all__ = [
-    'SpringBootAnalyzer',
-    'SpringBootAnalysis',
-    'RestEndpoint',
-    'DatabaseConfig',
-    'SecurityConfig'
-]
-
-
-# ============================================================================
-# COMMAND-LINE INTERFACE (preserved from original)
-# ============================================================================
+from spring_boot import SpringBootAnalyzer, SpringBootAnalysis, RestEndpoint, DatabaseConfig, SecurityConfig
+__all__ = ['SpringBootAnalyzer', 'SpringBootAnalysis', 'RestEndpoint', 'DatabaseConfig', 'SecurityConfig']
 
 def _output_json_results(analysis: SpringBootAnalysis) -> None:
     """
@@ -65,22 +42,9 @@ def _output_json_results(analysis: SpringBootAnalysis) -> None:
     Args:
         analysis: SpringBootAnalysis instance with project analysis
     """
-    result = {
-        "main_class": analysis.main_application_class,
-        "base_package": analysis.base_package,
-        "spring_boot_version": analysis.spring_boot_version,
-        "controllers": len(analysis.controllers),
-        "services": len(analysis.services),
-        "repositories": len(analysis.repositories),
-        "entities": len(analysis.entities),
-        "rest_endpoints": len(analysis.rest_endpoints),
-        "database": analysis.database_config.datasource_type if analysis.database_config else None,
-        "security_enabled": analysis.security_config.enabled if analysis.security_config else False,
-        "actuator_enabled": analysis.actuator_enabled,
-        "test_classes": len(analysis.test_classes)
-    }
-    print(json.dumps(result, indent=2))
-
+    result = {'main_class': analysis.main_application_class, 'base_package': analysis.base_package, 'spring_boot_version': analysis.spring_boot_version, 'controllers': len(analysis.controllers), 'services': len(analysis.services), 'repositories': len(analysis.repositories), 'entities': len(analysis.entities), 'rest_endpoints': len(analysis.rest_endpoints), 'database': analysis.database_config.datasource_type if analysis.database_config else None, 'security_enabled': analysis.security_config.enabled if analysis.security_config else False, 'actuator_enabled': analysis.actuator_enabled, 'test_classes': len(analysis.test_classes)}
+    
+    logger.log(json.dumps(result, indent=2), 'INFO')
 
 def _output_text_results(analysis: SpringBootAnalysis) -> None:
     """
@@ -96,112 +60,101 @@ def _output_text_results(analysis: SpringBootAnalysis) -> None:
     _print_security_info(analysis)
     _print_actuator_info(analysis)
     _print_testing_info(analysis)
-    print(f"{'='*60}\n")
-
+    
+    logger.log(f"{'=' * 60}\n", 'INFO')
 
 def _print_header(analysis: SpringBootAnalysis) -> None:
     """Print application header information."""
-    print(f"\n{'='*60}")
-    print(f"Spring Boot Application Analysis")
-    print(f"{'='*60}")
-    print(f"Main Class:    {analysis.main_application_class}")
-    print(f"Base Package:  {analysis.base_package}")
-
+    
+    logger.log(f"\n{'=' * 60}", 'INFO')
+    
+    logger.log(f'Spring Boot Application Analysis', 'INFO')
+    
+    logger.log(f"{'=' * 60}", 'INFO')
+    
+    logger.log(f'Main Class:    {analysis.main_application_class}', 'INFO')
+    
+    logger.log(f'Base Package:  {analysis.base_package}', 'INFO')
     if not analysis.spring_boot_version:
         return
-
-    print(f"Spring Boot:   {analysis.spring_boot_version}")
-
+    
+    logger.log(f'Spring Boot:   {analysis.spring_boot_version}', 'INFO')
 
 def _print_layers(analysis: SpringBootAnalysis) -> None:
     """Print application layer information."""
-    print(f"\nLayers:")
-    print(f"  Controllers:  {len(analysis.controllers)}")
-    print(f"  Services:     {len(analysis.services)}")
-    print(f"  Repositories: {len(analysis.repositories)}")
-    print(f"  Entities:     {len(analysis.entities)}")
-
+    
+    logger.log(f'\nLayers:', 'INFO')
+    
+    logger.log(f'  Controllers:  {len(analysis.controllers)}', 'INFO')
+    
+    logger.log(f'  Services:     {len(analysis.services)}', 'INFO')
+    
+    logger.log(f'  Repositories: {len(analysis.repositories)}', 'INFO')
+    
+    logger.log(f'  Entities:     {len(analysis.entities)}', 'INFO')
 
 def _print_rest_api(analysis: SpringBootAnalysis) -> None:
     """Print REST API endpoint information."""
-    print(f"\nREST API:")
-    print(f"  Endpoints:    {len(analysis.rest_endpoints)}")
-
-    for endpoint in analysis.rest_endpoints[:5]:  # Show first 5
-        print(f"    {', '.join(endpoint.methods):6} {endpoint.path}")
-
+    
+    logger.log(f'\nREST API:', 'INFO')
+    
+    logger.log(f'  Endpoints:    {len(analysis.rest_endpoints)}', 'INFO')
+    for endpoint in analysis.rest_endpoints[:5]:
+        
+        logger.log(f"    {', '.join(endpoint.methods):6} {endpoint.path}", 'INFO')
 
 def _print_database_info(analysis: SpringBootAnalysis) -> None:
     """Print database configuration information."""
     if not analysis.database_config:
         return
-
     if not analysis.database_config.datasource_type:
         return
-
-    print(f"\nDatabase:")
-    print(f"  Type:         {analysis.database_config.datasource_type}")
-    print(f"  JPA:          {'Yes' if analysis.uses_jpa else 'No'}")
-
+    
+    logger.log(f'\nDatabase:', 'INFO')
+    
+    logger.log(f'  Type:         {analysis.database_config.datasource_type}', 'INFO')
+    
+    logger.log(f"  JPA:          {('Yes' if analysis.uses_jpa else 'No')}", 'INFO')
 
 def _print_security_info(analysis: SpringBootAnalysis) -> None:
     """Print security configuration information."""
     if not analysis.security_config:
         return
-
     if not analysis.security_config.enabled:
         return
-
-    print(f"\nSecurity:")
-    print(f"  OAuth:        {'Yes' if analysis.security_config.oauth_enabled else 'No'}")
-    print(f"  JWT:          {'Yes' if analysis.security_config.jwt_enabled else 'No'}")
-
+    
+    logger.log(f'\nSecurity:', 'INFO')
+    
+    logger.log(f"  OAuth:        {('Yes' if analysis.security_config.oauth_enabled else 'No')}", 'INFO')
+    
+    logger.log(f"  JWT:          {('Yes' if analysis.security_config.jwt_enabled else 'No')}", 'INFO')
 
 def _print_actuator_info(analysis: SpringBootAnalysis) -> None:
     """Print Spring Boot Actuator information."""
     if not analysis.actuator_enabled:
         return
-
-    print(f"\nActuator:")
-    print(f"  Endpoints:    {', '.join(analysis.actuator_endpoints)}")
-
+    
+    logger.log(f'\nActuator:', 'INFO')
+    
+    logger.log(f"  Endpoints:    {', '.join(analysis.actuator_endpoints)}", 'INFO')
 
 def _print_testing_info(analysis: SpringBootAnalysis) -> None:
     """Print testing configuration information."""
-    print(f"\nTesting:")
-    print(f"  Test Classes: {len(analysis.test_classes)}")
-    print(f"  Testcontainers: {'Yes' if analysis.uses_testcontainers else 'No'}")
-
-
-if __name__ == "__main__":
+    
+    logger.log(f'\nTesting:', 'INFO')
+    
+    logger.log(f'  Test Classes: {len(analysis.test_classes)}', 'INFO')
+    
+    logger.log(f"  Testcontainers: {('Yes' if analysis.uses_testcontainers else 'No')}", 'INFO')
+if __name__ == '__main__':
     import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Spring Boot Project Analyzer"
-    )
-    parser.add_argument(
-        "--project-dir",
-        default=".",
-        help="Spring Boot project directory"
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Output as JSON"
-    )
-
+    parser = argparse.ArgumentParser(description='Spring Boot Project Analyzer')
+    parser.add_argument('--project-dir', default='.', help='Spring Boot project directory')
+    parser.add_argument('--json', action='store_true', help='Output as JSON')
     args = parser.parse_args()
-
-    # Setup logging
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-
-    # Create analyzer
     analyzer = SpringBootAnalyzer(project_dir=args.project_dir)
-
-    # Analyze project
     analysis = analyzer.analyze()
-
-    # Output results
     if args.json:
         _output_json_results(analysis)
     else:

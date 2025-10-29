@@ -15,10 +15,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from artemis_logger import get_logger
 from environment_context import get_environment_context_short
 
 from project_analysis.interfaces import DimensionAnalyzer
 from project_analysis.models import AnalysisResult, Issue, Severity
+
+# Module-level logger
+logger = get_logger(__name__)
 
 # Import AIQueryService for centralized KG→RAG→LLM pipeline
 try:
@@ -381,6 +385,8 @@ class LLMPoweredAnalyzer(DimensionAnalyzer):
         """
         Parse LLM response JSON, handling markdown code blocks.
 
+        Retries with LLM if JSON parsing fails.
+
         Args:
             response: LLM response text
 
@@ -388,7 +394,7 @@ class LLMPoweredAnalyzer(DimensionAnalyzer):
             Parsed JSON dict
 
         Raises:
-            ValueError: If JSON parsing fails
+            ValueError: If JSON parsing fails after retry
         """
         # Strip markdown code blocks if present
         response = response.strip()
@@ -400,32 +406,188 @@ class LLMPoweredAnalyzer(DimensionAnalyzer):
             response = response[:-3]
         response = response.strip()
 
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError as e:
-            # Fallback: try to extract JSON from response
-            return self._extract_json_from_response(response, e)
+        # Try multiple parsing strategies with increasing aggressiveness
+        parsing_strategies = [
+            ("direct_parse", lambda r: json.loads(r)),
+            ("clean_whitespace", lambda r: json.loads(re.sub(r'^\s+', '', r, flags=re.MULTILINE))),
+            ("extract_json", lambda r: self._extract_json_from_response(r)),
+            ("fix_common_issues", lambda r: json.loads(self._fix_common_json_issues(r))),
+        ]
 
-    def _extract_json_from_response(self, response: str, error: json.JSONDecodeError) -> Dict:
+        last_error = None
+        for strategy_name, strategy_func in parsing_strategies:
+            try:
+                result = strategy_func(response)
+                # Clean dictionary keys (remove leading/trailing whitespace from keys)
+                result = self._clean_dict_keys(result)
+                # Validate the result has expected keys
+                if isinstance(result, dict) and ("issues" in result or "recommendations" in result):
+                    return result
+            except Exception as e:
+                last_error = e
+                continue
+
+        # All strategies failed - try LLM fix as last resort
+        try:
+            return self._retry_with_llm_json_fix(response, str(last_error))
+        except Exception as retry_error:
+            # Even retry failed - return safe fallback instead of crashing
+            logger.log(f"⚠️  JSON parsing failed with all strategies: {retry_error}", "WARNING")
+            logger.log(f"   Returning empty analysis to allow pipeline to continue", "WARNING")
+            return {
+                "issues": [],
+                "recommendations": ["LLM analysis unavailable - JSON parsing failed"],
+                "recommendation": "APPROVE_ALL",
+                "recommendation_reason": "Unable to parse LLM analysis, proceeding with caution"
+            }
+
+    def _fix_common_json_issues(self, response: str) -> str:
+        """
+        Fix common JSON formatting issues.
+
+        WHY: LLMs sometimes produce almost-valid JSON with minor issues
+        PATTERNS: Guard clauses, string manipulation
+
+        Args:
+            response: Response string with potential JSON issues
+
+        Returns:
+            Cleaned JSON string
+        """
+        # Remove leading/trailing whitespace from each line
+        cleaned = re.sub(r'^\s+', '', response, flags=re.MULTILINE)
+
+        # Fix trailing commas before closing braces/brackets
+        cleaned = re.sub(r',(\s*[}\]])', r'\1', cleaned)
+
+        # Fix missing commas between array/object elements
+        cleaned = re.sub(r'"\s*\n\s*"', '",\n"', cleaned)
+        cleaned = re.sub(r'}\s*\n\s*{', '},\n{', cleaned)
+
+        # Remove any non-printable characters
+        cleaned = ''.join(char for char in cleaned if char.isprintable() or char in '\n\r\t')
+
+        return cleaned
+
+    def _clean_dict_keys(self, data: Any) -> Any:
+        """
+        Recursively clean dictionary keys by removing leading/trailing whitespace.
+
+        WHY: LLMs sometimes put whitespace inside key names, causing KeyError
+        PATTERNS: Recursive traversal, type checking
+
+        Args:
+            data: Dictionary, list, or primitive value to clean
+
+        Returns:
+            Cleaned data structure with whitespace-free keys
+        """
+        # Guard: Not a dict or list, return as-is
+        if not isinstance(data, (dict, list)):
+            return data
+
+        # Handle dictionaries: clean keys and recurse on values
+        if isinstance(data, dict):
+            return {
+                key.strip() if isinstance(key, str) else key: self._clean_dict_keys(value)
+                for key, value in data.items()
+            }
+
+        # Handle lists: recurse on each element
+        return [self._clean_dict_keys(item) for item in data]
+
+    def _extract_json_from_response(self, response: str) -> Dict:
         """
         Extract JSON from response using regex fallback.
 
         Args:
             response: Response string to parse
-            error: Original JSONDecodeError
 
         Returns:
             Parsed JSON dict
 
         Raises:
             ValueError: If JSON extraction fails
+            json.JSONDecodeError: If extracted JSON is malformed
         """
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         # Guard clause: No JSON found
         if not json_match:
-            raise ValueError(f"Failed to parse LLM response as JSON: {error}")
+            raise ValueError(f"No JSON object found in response: {response[:200]}...")
 
         return json.loads(json_match.group(0))
+
+    def _retry_with_llm_json_fix(self, malformed_response: str, error_message: str) -> Dict:
+        """
+        Retry with LLM asking it to fix the malformed JSON.
+
+        Args:
+            malformed_response: The malformed JSON response from LLM
+            error_message: The error message from JSON parsing
+
+        Returns:
+            Parsed JSON dict from corrected response
+
+        Raises:
+            ValueError: If retry also fails
+        """
+        # Guard clause: No LLM available for retry
+        if not self.llm_client:
+            raise ValueError(f"JSON parsing failed and no LLM available for retry: {error_message}")
+
+        fix_prompt = f"""The previous response had a JSON formatting error:
+
+Error: {error_message}
+
+Malformed Response:
+{malformed_response[:500]}
+
+Please return ONLY the corrected JSON response with proper formatting.
+The JSON must match this schema:
+{{
+  "issues": [
+    {{
+      "category": "string",
+      "description": "string",
+      "suggestion": "string",
+      "severity": "CRITICAL" | "HIGH" | "MEDIUM"
+    }}
+  ],
+  "recommendations": ["string"],
+  "recommendation": "APPROVE_ALL" | "APPROVE_CRITICAL" | "REJECT",
+  "recommendation_reason": "string"
+}}
+
+Return ONLY valid JSON, no markdown, no explanations."""
+
+        try:
+            # Call LLM to fix the JSON
+            retry_response = self.llm_client.generate(
+                prompt=fix_prompt,
+                system_message="You are a JSON formatting expert. Fix the malformed JSON and return only valid JSON.",
+                max_tokens=2000
+            )
+
+            # Strip and parse the fixed response
+            fixed = retry_response.strip()
+            if fixed.startswith("```json"):
+                fixed = fixed[7:]
+            if fixed.startswith("```"):
+                fixed = fixed[3:]
+            if fixed.endswith("```"):
+                fixed = fixed[:-3]
+            fixed = fixed.strip()
+
+            return json.loads(fixed)
+
+        except Exception as e:
+            # Retry failed - raise error with full context
+            raise ValueError(
+                f"JSON parsing failed and retry attempt also failed.\n"
+                f"Original error: {error_message}\n"
+                f"Retry error: {str(e)}\n"
+                f"Malformed response preview: {malformed_response[:200]}..."
+            )
 
     def _extract_issues(self, analysis_data: Dict) -> List[Issue]:
         """

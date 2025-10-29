@@ -1,14 +1,7 @@
-#!/usr/bin/env python3
-"""
-Knowledge Graph Integration
-
-WHY: Separate KG query logic from main parser
-RESPONSIBILITY: Query KG for similar requirements and patterns
-PATTERNS: Repository pattern for KG data access
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('kg_integration')
+'\nKnowledge Graph Integration\n\nWHY: Separate KG query logic from main parser\nRESPONSIBILITY: Query KG for similar requirements and patterns\nPATTERNS: Repository pattern for KG data access\n'
 from typing import Optional, Dict, Any, List
-
 
 class KnowledgeGraphIntegration:
     """
@@ -19,7 +12,7 @@ class KnowledgeGraphIntegration:
     PATTERNS: Repository pattern
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool=False):
         """
         Initialize KG integration
 
@@ -28,10 +21,7 @@ class KnowledgeGraphIntegration:
         """
         self.verbose = verbose
 
-    def query_kg_for_similar_requirements(
-        self,
-        project_name: str
-    ) -> Optional[Dict[str, Any]]:
+    def query_kg_for_similar_requirements(self, project_name: str) -> Optional[Dict[str, Any]]:
         """
         Query Knowledge Graph for similar projects and common requirement patterns
 
@@ -47,18 +37,14 @@ class KnowledgeGraphIntegration:
         try:
             from knowledge_graph_factory import get_knowledge_graph
             kg = get_knowledge_graph()
-
             if not kg:
                 return None
-
             similar_requirements = self._query_kg_for_similar_reqs(kg)
             if not similar_requirements:
                 return None
-
             return self._build_kg_context_from_requirements(similar_requirements)
-
         except Exception as e:
-            self.log(f"Could not query KG for similar requirements: {e}")
+            self.log(f'Could not query KG for similar requirements: {e}')
             return None
 
     def _query_kg_for_similar_reqs(self, kg: Any) -> Optional[List[Dict[str, Any]]]:
@@ -68,19 +54,10 @@ class KnowledgeGraphIntegration:
         WHY: Separate query logic for testability
         RESPONSIBILITY: Execute KG query
         """
-        similar_requirements = kg.query("""
-            MATCH (req:Requirement)
-            WHERE req.status = 'active'
-            RETURN req.req_id, req.title, req.type, req.priority
-            ORDER BY req.priority DESC
-            LIMIT 20
-        """)
+        similar_requirements = kg.query("\n            MATCH (req:Requirement)\n            WHERE req.status = 'active'\n            RETURN req.req_id, req.title, req.type, req.priority\n            ORDER BY req.priority DESC\n            LIMIT 20\n        ")
         return similar_requirements if similar_requirements else None
 
-    def _build_kg_context_from_requirements(
-        self,
-        similar_requirements: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def _build_kg_context_from_requirements(self, similar_requirements: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Build KG context from similar requirements
 
@@ -93,35 +70,17 @@ class KnowledgeGraphIntegration:
         Returns:
             Structured context dict with patterns and savings estimate
         """
-        # Group by type to find common patterns
         type_counts = {}
         common_reqs = []
-
         for req in similar_requirements:
             req_type = req.get('req.type', 'unknown')
             type_counts[req_type] = type_counts.get(req_type, 0) + 1
-
-            common_reqs.append({
-                'req_id': req.get('req.req_id'),
-                'title': req.get('req.title'),
-                'type': req_type,
-                'priority': req.get('req.priority', 'medium')
-            })
-
-        # Estimate token savings:
-        # - Providing 5 common requirements as hints ~= 200 tokens
-        # - This helps LLM avoid re-generating similar patterns
-        # - Estimated savings: ~500-1000 tokens (LLM doesn't need to "invent" common NFRs)
-        estimated_savings = len(common_reqs) * 50  # Conservative estimate
-
-        return {
-            'similar_projects_count': len(set(req.get('req.req_id', '').split('-')[0] for req in similar_requirements)),
-            'common_requirements': common_reqs,
-            'requirement_types': type_counts,
-            'estimated_token_savings': estimated_savings
-        }
+            common_reqs.append({'req_id': req.get('req.req_id'), 'title': req.get('req.title'), 'type': req_type, 'priority': req.get('req.priority', 'medium')})
+        estimated_savings = len(common_reqs) * 50
+        return {'similar_projects_count': len(set((req.get('req.req_id', '').split('-')[0] for req in similar_requirements))), 'common_requirements': common_reqs, 'requirement_types': type_counts, 'estimated_token_savings': estimated_savings}
 
     def log(self, message: str):
         """Log message if verbose"""
         if self.verbose:
-            print(f"[KGIntegration] {message}")
+            
+            logger.log(f'[KGIntegration] {message}', 'INFO')

@@ -1,18 +1,12 @@
-#!/usr/bin/env python3
-"""
-WHY: Execute state transitions with validation, history tracking, and event logging
-RESPONSIBILITY: Manage state transitions with audit trail and statistics
-PATTERNS: Command pattern for transitions, observer pattern for history tracking
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('state_transition_engine')
+'\nWHY: Execute state transitions with validation, history tracking, and event logging\nRESPONSIBILITY: Manage state transitions with audit trail and statistics\nPATTERNS: Command pattern for transitions, observer pattern for history tracking\n'
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-
 from state_machine.pipeline_state import PipelineState
 from state_machine.event_type import EventType
 from state_machine.state_transition import StateTransition
 from state_machine.state_validator import StateValidator
-
 
 class StateTransitionEngine:
     """
@@ -25,7 +19,7 @@ class StateTransitionEngine:
     - Thread-safe state updates
     """
 
-    def __init__(self, verbose: bool = True) -> None:
+    def __init__(self, verbose: bool=True) -> None:
         """
         Initialize transition engine
 
@@ -36,19 +30,9 @@ class StateTransitionEngine:
         self.validator = StateValidator()
         self.current_state = PipelineState.IDLE
         self.state_history: List[StateTransition] = []
-        self.stats = {
-            "total_transitions": 0,
-            "successful_transitions": 0,
-            "rejected_transitions": 0
-        }
+        self.stats = {'total_transitions': 0, 'successful_transitions': 0, 'rejected_transitions': 0}
 
-    def transition(
-        self,
-        to_state: PipelineState,
-        event: EventType,
-        reason: Optional[str] = None,
-        **metadata
-    ) -> bool:
+    def transition(self, to_state: PipelineState, event: EventType, reason: Optional[str]=None, **metadata) -> bool:
         """
         Transition to a new state
 
@@ -62,67 +46,38 @@ class StateTransitionEngine:
             True if transition was valid and executed
         """
         from_state = self.current_state
-
-        # Guard: Check if transition is valid
         if not self.validator.is_valid_transition(from_state, to_state):
             self._log_invalid_transition(from_state, to_state)
-            self.stats["rejected_transitions"] += 1
+            self.stats['rejected_transitions'] += 1
             return False
-
-        # Execute transition
         self._execute_transition(from_state, to_state, event, reason, metadata)
         return True
 
-    def _execute_transition(
-        self,
-        from_state: PipelineState,
-        to_state: PipelineState,
-        event: EventType,
-        reason: Optional[str],
-        metadata: Dict[str, Any]
-    ) -> None:
+    def _execute_transition(self, from_state: PipelineState, to_state: PipelineState, event: EventType, reason: Optional[str], metadata: Dict[str, Any]) -> None:
         """Execute validated transition"""
-        transition = StateTransition(
-            from_state=from_state,
-            to_state=to_state,
-            event=event,
-            timestamp=datetime.now(),
-            metadata=metadata,
-            reason=reason
-        )
-
+        transition = StateTransition(from_state=from_state, to_state=to_state, event=event, timestamp=datetime.now(), metadata=metadata, reason=reason)
         self.state_history.append(transition)
         self.current_state = to_state
-        self.stats["total_transitions"] += 1
-        self.stats["successful_transitions"] += 1
-
+        self.stats['total_transitions'] += 1
+        self.stats['successful_transitions'] += 1
         self._log_transition(from_state, to_state, event, reason)
 
-    def _log_transition(
-        self,
-        from_state: PipelineState,
-        to_state: PipelineState,
-        event: EventType,
-        reason: Optional[str]
-    ) -> None:
+    def _log_transition(self, from_state: PipelineState, to_state: PipelineState, event: EventType, reason: Optional[str]) -> None:
         """Log successful transition"""
         if not self.verbose:
             return
-
-        print(f"[TransitionEngine] {from_state.value} → {to_state.value} (event: {event.value})")
+        
+        logger.log(f'[TransitionEngine] {from_state.value} → {to_state.value} (event: {event.value})', 'INFO')
         if reason:
-            print(f"[TransitionEngine]    Reason: {reason}")
+            
+            logger.log(f'[TransitionEngine]    Reason: {reason}', 'INFO')
 
-    def _log_invalid_transition(
-        self,
-        from_state: PipelineState,
-        to_state: PipelineState
-    ) -> None:
+    def _log_invalid_transition(self, from_state: PipelineState, to_state: PipelineState) -> None:
         """Log invalid transition attempt"""
         if not self.verbose:
             return
-
-        print(f"[TransitionEngine] ⚠️  Invalid transition: {from_state.value} → {to_state.value}")
+        
+        logger.log(f'[TransitionEngine] ⚠️  Invalid transition: {from_state.value} → {to_state.value}', 'INFO')
 
     def get_current_state(self) -> PipelineState:
         """Get current pipeline state"""

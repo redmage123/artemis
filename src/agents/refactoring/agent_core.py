@@ -1,30 +1,12 @@
-#!/usr/bin/env python3
-"""
-Module: Code Refactoring Agent Core - Main Orchestration
-
-WHY: Provides high-level API for code refactoring operations.
-     Coordinates analyzer, suggestion generator, and transformer components.
-
-RESPONSIBILITY:
-    - Orchestrate refactoring workflow
-    - Provide backward-compatible API
-    - Delegate to specialized components
-    - Handle logging configuration
-    - Expose factory function for agent creation
-
-PATTERNS:
-    - Facade Pattern: Simplifies complex subsystem interactions
-    - Dependency Injection: Logger injection for flexible logging
-    - Factory Pattern: create_refactoring_agent() factory function
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('agent_core')
+'\nModule: Code Refactoring Agent Core - Main Orchestration\n\nWHY: Provides high-level API for code refactoring operations.\n     Coordinates analyzer, suggestion generator, and transformer components.\n\nRESPONSIBILITY:\n    - Orchestrate refactoring workflow\n    - Provide backward-compatible API\n    - Delegate to specialized components\n    - Handle logging configuration\n    - Expose factory function for agent creation\n\nPATTERNS:\n    - Facade Pattern: Simplifies complex subsystem interactions\n    - Dependency Injection: Logger injection for flexible logging\n    - Factory Pattern: create_refactoring_agent() factory function\n'
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from .models import RefactoringAnalysis, RefactoringRule, PatternType, RefactoringPriority
 from .analyzer import CodeSmellAnalyzer
 from .suggestion_generator import RefactoringSuggestionGenerator
 from .transformer import CodeTransformer, TransformationResult
-
 
 class CodeRefactoringAgent:
     """
@@ -44,42 +26,9 @@ class CodeRefactoringAgent:
     Attributes:
         REFACTORING_RULES: Class-level metadata about supported refactoring rules
     """
+    REFACTORING_RULES = [RefactoringRule(name='loop_to_comprehension', pattern_type=PatternType.LOOP, description='Convert simple for loops to list/dict comprehensions', priority=RefactoringPriority.HIGH), RefactoringRule(name='if_elif_to_mapping', pattern_type=PatternType.IF_ELIF, description='Convert long if/elif chains to dictionary mapping', priority=RefactoringPriority.HIGH), RefactoringRule(name='extract_long_method', pattern_type=PatternType.LONG_METHOD, description='Extract methods longer than 50 lines', priority=RefactoringPriority.CRITICAL), RefactoringRule(name='use_next_for_first_match', pattern_type=PatternType.GENERATOR, description='Use next() with generator for first-match patterns', priority=RefactoringPriority.MEDIUM), RefactoringRule(name='use_collections_module', pattern_type=PatternType.COLLECTIONS, description='Use defaultdict, Counter, chain from collections', priority=RefactoringPriority.MEDIUM)]
 
-    # Class-level refactoring rules metadata
-    REFACTORING_RULES = [
-        RefactoringRule(
-            name="loop_to_comprehension",
-            pattern_type=PatternType.LOOP,
-            description="Convert simple for loops to list/dict comprehensions",
-            priority=RefactoringPriority.HIGH
-        ),
-        RefactoringRule(
-            name="if_elif_to_mapping",
-            pattern_type=PatternType.IF_ELIF,
-            description="Convert long if/elif chains to dictionary mapping",
-            priority=RefactoringPriority.HIGH
-        ),
-        RefactoringRule(
-            name="extract_long_method",
-            pattern_type=PatternType.LONG_METHOD,
-            description="Extract methods longer than 50 lines",
-            priority=RefactoringPriority.CRITICAL
-        ),
-        RefactoringRule(
-            name="use_next_for_first_match",
-            pattern_type=PatternType.GENERATOR,
-            description="Use next() with generator for first-match patterns",
-            priority=RefactoringPriority.MEDIUM
-        ),
-        RefactoringRule(
-            name="use_collections_module",
-            pattern_type=PatternType.COLLECTIONS,
-            description="Use defaultdict, Counter, chain from collections",
-            priority=RefactoringPriority.MEDIUM
-        ),
-    ]
-
-    def __init__(self, logger: Optional[Any] = None, verbose: bool = True):
+    def __init__(self, logger: Optional[Any]=None, verbose: bool=True):
         """
         Initialize refactoring agent with dependencies.
 
@@ -94,8 +43,6 @@ class CodeRefactoringAgent:
         """
         self.logger = logger
         self.verbose = verbose
-
-        # Initialize components with shared logging config
         self._analyzer = CodeSmellAnalyzer(logger=logger, verbose=verbose)
         self._suggestion_generator = RefactoringSuggestionGenerator()
         self._transformer = CodeTransformer(logger=logger, verbose=verbose)
@@ -123,11 +70,7 @@ class CodeRefactoringAgent:
         analysis = self._analyzer.analyze_file(file_path)
         return analysis.to_dict()
 
-    def generate_refactoring_instructions(
-        self,
-        analysis: Dict[str, Any],
-        code_review_issues: Optional[List[Dict[str, Any]]] = None
-    ) -> str:
+    def generate_refactoring_instructions(self, analysis: Dict[str, Any], code_review_issues: Optional[List[Dict[str, Any]]]=None) -> str:
         """
         Generate detailed, actionable refactoring instructions.
 
@@ -148,19 +91,10 @@ class CodeRefactoringAgent:
                 - Code review issues (if provided)
                 - Best practices summary
         """
-        # Convert dict back to RefactoringAnalysis for internal use
         refactoring_analysis = self._dict_to_analysis(analysis)
+        return self._suggestion_generator.generate_instructions(refactoring_analysis, code_review_issues)
 
-        return self._suggestion_generator.generate_instructions(
-            refactoring_analysis,
-            code_review_issues
-        )
-
-    def apply_automated_refactoring(
-        self,
-        file_path: Path,
-        analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def apply_automated_refactoring(self, file_path: Path, analysis: Dict[str, Any]) -> Dict[str, Any]:
         """
         Apply automated refactoring to a file (currently suggestions-only).
 
@@ -179,15 +113,11 @@ class CodeRefactoringAgent:
                 - 'suggestions': Copy of analysis for reference
                 - 'modified': bool indicating if file was changed
         """
-        # Convert dict to RefactoringAnalysis
         refactoring_analysis = self._dict_to_analysis(analysis)
-
-        # Apply transformation (currently no-op)
         result = self._transformer.apply_refactoring(file_path, refactoring_analysis)
-
         return result.to_dict()
 
-    def log(self, message: str, level: str = "INFO"):
+    def log(self, message: str, level: str='INFO'):
         """
         Log a message with optional severity level.
 
@@ -200,11 +130,11 @@ class CodeRefactoringAgent:
         """
         if not self.verbose:
             return
-
         if self.logger:
             self.logger.log(message, level)
         else:
-            print(f"[Refactoring] {message}")
+            
+            logger.log(f'[Refactoring] {message}', 'INFO')
 
     def _dict_to_analysis(self, analysis_dict: Dict[str, Any]) -> RefactoringAnalysis:
         """
@@ -220,64 +150,15 @@ class CodeRefactoringAgent:
             RefactoringAnalysis object
         """
         from .models import LongMethodSmell, SimpleLoopSmell, IfElifChainSmell
-
-        # Guard: Handle error case
         if 'error' in analysis_dict:
-            return RefactoringAnalysis(
-                file_path=analysis_dict.get('file', ''),
-                error=analysis_dict['error']
-            )
-
+            return RefactoringAnalysis(file_path=analysis_dict.get('file', ''), error=analysis_dict['error'])
         file_path = analysis_dict.get('file', '')
+        long_methods = [LongMethodSmell(file_path=file_path, line_number=method['line'], pattern_type=PatternType.LONG_METHOD, suggestion=method['suggestion'], priority=RefactoringPriority.CRITICAL, method_name=method['name'], method_length=method['length']) for method in analysis_dict.get('long_methods', [])]
+        simple_loops = [SimpleLoopSmell(file_path=file_path, line_number=loop['line'], pattern_type=PatternType.LOOP, suggestion=loop['suggestion'], priority=RefactoringPriority.HIGH) for loop in analysis_dict.get('simple_loops', [])]
+        if_elif_chains = [IfElifChainSmell(file_path=file_path, line_number=chain['line'], pattern_type=PatternType.IF_ELIF, suggestion=chain['suggestion'], priority=RefactoringPriority.HIGH, elif_count=chain['elif_count']) for chain in analysis_dict.get('if_elif_chains', [])]
+        return RefactoringAnalysis(file_path=file_path, long_methods=long_methods, simple_loops=simple_loops, if_elif_chains=if_elif_chains)
 
-        # Convert long methods
-        long_methods = [
-            LongMethodSmell(
-                file_path=file_path,
-                line_number=method['line'],
-                pattern_type=PatternType.LONG_METHOD,
-                suggestion=method['suggestion'],
-                priority=RefactoringPriority.CRITICAL,
-                method_name=method['name'],
-                method_length=method['length']
-            )
-            for method in analysis_dict.get('long_methods', [])
-        ]
-
-        # Convert simple loops
-        simple_loops = [
-            SimpleLoopSmell(
-                file_path=file_path,
-                line_number=loop['line'],
-                pattern_type=PatternType.LOOP,
-                suggestion=loop['suggestion'],
-                priority=RefactoringPriority.HIGH
-            )
-            for loop in analysis_dict.get('simple_loops', [])
-        ]
-
-        # Convert if/elif chains
-        if_elif_chains = [
-            IfElifChainSmell(
-                file_path=file_path,
-                line_number=chain['line'],
-                pattern_type=PatternType.IF_ELIF,
-                suggestion=chain['suggestion'],
-                priority=RefactoringPriority.HIGH,
-                elif_count=chain['elif_count']
-            )
-            for chain in analysis_dict.get('if_elif_chains', [])
-        ]
-
-        return RefactoringAnalysis(
-            file_path=file_path,
-            long_methods=long_methods,
-            simple_loops=simple_loops,
-            if_elif_chains=if_elif_chains
-        )
-
-
-def create_refactoring_agent(logger: Optional[Any] = None, verbose: bool = True) -> CodeRefactoringAgent:
+def create_refactoring_agent(logger: Optional[Any]=None, verbose: bool=True) -> CodeRefactoringAgent:
     """
     Factory function to create refactoring agent instance.
 

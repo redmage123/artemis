@@ -1,28 +1,11 @@
-#!/usr/bin/env python3
-"""
-Configuration Validator - Main Orchestrator
-
-WHY: Orchestrates all validation checks using validator strategies
-
-RESPONSIBILITY: Coordinate validation checks and generate comprehensive report
-
-PATTERNS: Strategy pattern for validation checks, Single Responsibility Principle
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('validator')
+'\nConfiguration Validator - Main Orchestrator\n\nWHY: Orchestrates all validation checks using validator strategies\n\nRESPONSIBILITY: Coordinate validation checks and generate comprehensive report\n\nPATTERNS: Strategy pattern for validation checks, Single Responsibility Principle\n'
 import sys
 from typing import List, Callable
 from .models import ValidationResult, ValidationReport
-from .validators import (
-    LLMProviderValidator,
-    PathValidator,
-    DatabaseValidator,
-    MessengerValidator,
-    RAGDatabaseValidator,
-    ResourceLimitValidator,
-    OptionalServiceValidator
-)
+from .validators import LLMProviderValidator, PathValidator, DatabaseValidator, MessengerValidator, RAGDatabaseValidator, ResourceLimitValidator, OptionalServiceValidator
 from .report_generator import generate_report, print_report, print_result
-
 
 class ConfigValidator:
     """
@@ -31,7 +14,7 @@ class ConfigValidator:
     Single Responsibility: Validate all prerequisites before pipeline runs
     """
 
-    def __init__(self, verbose: bool = True):
+    def __init__(self, verbose: bool=True):
         """
         Initialize validator
 
@@ -52,33 +35,18 @@ class ConfigValidator:
             ValidationReport with all results
         """
         if self.verbose:
-            print("\n" + "=" * 70)
-            print("ARTEMIS CONFIGURATION VALIDATION")
-            print("=" * 70 + "\n")
-
-        # Strategy pattern: Define all validation checks
-        # WHY: Makes it easy to add/remove checks without modifying orchestration logic
-        validation_checks: List[Callable[[], None]] = [
-            self._check_llm_provider,
-            self._check_llm_api_keys,
-            self._check_file_paths,
-            self._check_database_access,
-            self._check_messenger_backend,
-            self._check_rag_database,
-            self._check_resource_limits,
-            self._check_optional_services
-        ]
-
-        # Run all checks declaratively
+            
+            logger.log('\n' + '=' * 70, 'INFO')
+            
+            logger.log('ARTEMIS CONFIGURATION VALIDATION', 'INFO')
+            
+            logger.log('=' * 70 + '\n', 'INFO')
+        validation_checks: List[Callable[[], None]] = [self._check_llm_provider, self._check_llm_api_keys, self._check_file_paths, self._check_database_access, self._check_messenger_backend, self._check_rag_database, self._check_resource_limits, self._check_optional_services]
         for check in validation_checks:
             check()
-
-        # Generate report
         report = generate_report(self.results)
-
         if self.verbose:
             print_report(report)
-
         return report
 
     def _add_result(self, result: ValidationResult) -> None:
@@ -91,11 +59,8 @@ class ConfigValidator:
             result: ValidationResult to add
         """
         self.results.append(result)
-
-        # Guard clause: Early return if not verbose
         if not self.verbose:
             return
-
         print_result(result)
 
     def _check_llm_provider(self) -> None:
@@ -149,8 +114,7 @@ class ConfigValidator:
         for result in results:
             self._add_result(result)
 
-
-def validate_config_or_exit(verbose: bool = True) -> ValidationReport:
+def validate_config_or_exit(verbose: bool=True) -> ValidationReport:
     """
     Validate configuration or exit
 
@@ -168,10 +132,8 @@ def validate_config_or_exit(verbose: bool = True) -> ValidationReport:
     """
     validator = ConfigValidator(verbose=verbose)
     report = validator.validate_all()
-
-    # Guard clause: Exit on failure
-    if report.overall_status == "fail":
-        print("\nSTARTUP ABORTED: Fix configuration errors above")
+    if report.overall_status == 'fail':
+        
+        logger.log('\nSTARTUP ABORTED: Fix configuration errors above', 'INFO')
         sys.exit(1)
-
     return report

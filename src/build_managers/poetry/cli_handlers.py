@@ -1,18 +1,9 @@
-"""
-Poetry Build Manager - CLI Command Handlers
-
-WHY: Isolate CLI interface logic from core business logic
-RESPONSIBILITY: Handle command-line argument processing and command dispatch
-PATTERNS: Dispatch Table, Single Responsibility, Guard Clauses
-
-This module provides CLI command handlers for Poetry operations, enabling
-command-line usage of the Poetry manager.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('cli_handlers')
+'\nPoetry Build Manager - CLI Command Handlers\n\nWHY: Isolate CLI interface logic from core business logic\nRESPONSIBILITY: Handle command-line argument processing and command dispatch\nPATTERNS: Dispatch Table, Single Responsibility, Guard Clauses\n\nThis module provides CLI command handlers for Poetry operations, enabling\ncommand-line usage of the Poetry manager.\n'
 import sys
 import json
 from typing import Dict, Callable, Any
-
 
 def handle_info_command(poetry: Any, args: Any) -> None:
     """
@@ -26,8 +17,8 @@ def handle_info_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     info = poetry.get_project_info()
-    print(json.dumps(info, indent=2))
-
+    
+    logger.log(json.dumps(info, indent=2), 'INFO')
 
 def handle_build_command(poetry: Any, args: Any) -> None:
     """
@@ -41,9 +32,9 @@ def handle_build_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     result = poetry.build(format=args.format)
-    print(result)
+    
+    logger.log(result, 'INFO')
     sys.exit(0 if result.success else 1)
-
 
 def handle_test_command(poetry: Any, args: Any) -> None:
     """
@@ -57,9 +48,9 @@ def handle_test_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     result = poetry.test(verbose=args.verbose)
-    print(result)
+    
+    logger.log(result, 'INFO')
     sys.exit(0 if result.success else 1)
-
 
 def handle_install_command(poetry: Any, args: Any) -> None:
     """
@@ -73,9 +64,9 @@ def handle_install_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     result = poetry.install_dependencies()
-    print(result)
+    
+    logger.log(result, 'INFO')
     sys.exit(0 if result.success else 1)
-
 
 def handle_update_command(poetry: Any, args: Any) -> None:
     """
@@ -89,9 +80,9 @@ def handle_update_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     result = poetry.update_dependencies(package=args.package)
-    print(result)
+    
+    logger.log(result, 'INFO')
     sys.exit(0 if result.success else 1)
-
 
 def handle_add_command(poetry: Any, args: Any) -> None:
     """
@@ -105,16 +96,12 @@ def handle_add_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     if not args.package:
-        print("Error: --package required for add command")
+        
+        logger.log('Error: --package required for add command', 'INFO')
         sys.exit(1)
-
-    poetry.install_dependency(
-        args.package,
-        version=args.version,
-        group=args.group
-    )
-    print(f"Added {args.package}")
-
+    poetry.install_dependency(args.package, version=args.version, group=args.group)
+    
+    logger.log(f'Added {args.package}', 'INFO')
 
 def handle_show_command(poetry: Any, args: Any) -> None:
     """
@@ -128,12 +115,12 @@ def handle_show_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     if not args.package:
-        print("Error: --package required for show command")
+        
+        logger.log('Error: --package required for show command', 'INFO')
         sys.exit(1)
-
     result = poetry.show_package_info(args.package)
-    print(result.output)
-
+    
+    logger.log(result.output, 'INFO')
 
 def handle_run_command(poetry: Any, args: Any) -> None:
     """
@@ -147,13 +134,13 @@ def handle_run_command(poetry: Any, args: Any) -> None:
         args: Parsed command-line arguments
     """
     if not args.script:
-        print("Error: --script required for run command")
+        
+        logger.log('Error: --script required for run command', 'INFO')
         sys.exit(1)
-
     result = poetry.run_script(args.script)
-    print(result)
+    
+    logger.log(result, 'INFO')
     sys.exit(0 if result.success else 1)
-
 
 def get_command_handlers() -> Dict[str, Callable]:
     """
@@ -171,23 +158,9 @@ def get_command_handlers() -> Dict[str, Callable]:
         handler = handlers.get(command_name)
         handler(poetry, args)
     """
-    return {
-        "info": handle_info_command,
-        "build": handle_build_command,
-        "test": handle_test_command,
-        "install": handle_install_command,
-        "update": handle_update_command,
-        "add": handle_add_command,
-        "show": handle_show_command,
-        "run": handle_run_command
-    }
+    return {'info': handle_info_command, 'build': handle_build_command, 'test': handle_test_command, 'install': handle_install_command, 'update': handle_update_command, 'add': handle_add_command, 'show': handle_show_command, 'run': handle_run_command}
 
-
-def execute_cli_command(
-    command: str,
-    poetry: Any,
-    args: Any
-) -> None:
+def execute_cli_command(command: str, poetry: Any, args: Any) -> None:
     """
     Execute CLI command using dispatch table.
 
@@ -203,23 +176,8 @@ def execute_cli_command(
         KeyError: If command not found in dispatch table
     """
     handlers = get_command_handlers()
-
     if command not in handlers:
-        raise KeyError(f"Unknown command: {command}")
-
+        raise KeyError(f'Unknown command: {command}')
     handler = handlers[command]
     handler(poetry, args)
-
-
-__all__ = [
-    'handle_info_command',
-    'handle_build_command',
-    'handle_test_command',
-    'handle_install_command',
-    'handle_update_command',
-    'handle_add_command',
-    'handle_show_command',
-    'handle_run_command',
-    'get_command_handlers',
-    'execute_cli_command'
-]
+__all__ = ['handle_info_command', 'handle_build_command', 'handle_test_command', 'handle_install_command', 'handle_update_command', 'handle_add_command', 'handle_show_command', 'handle_run_command', 'get_command_handlers', 'execute_cli_command']

@@ -365,22 +365,83 @@ class ValidationStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         return validator(test_path, output_path, validation_level)
 
     def _validate_python(self, test_path: str, output_path: str, validation_level: str) -> Dict:
-        """Validate Python project using pytest."""
-        return self.test_runner.run_tests(test_path)
+        """
+        Validate Python project using pytest + static analysis.
+
+        Static Analysis Tools:
+        - basic: pytest only
+        - standard: pytest + mypy (type checking)
+        - comprehensive: pytest + mypy + pylint + bandit (security)
+        """
+        # Always run tests
+        test_results = self.test_runner.run_tests(test_path)
+
+        # Add static analysis based on validation level
+        if validation_level == 'basic':
+            return test_results
+
+        # Standard: Add mypy type checking
+        static_results = []
+        if validation_level in ['standard', 'comprehensive']:
+            mypy_result = self._run_static_analysis_tool('mypy', [output_path], output_path)
+            if mypy_result:
+                static_results.append(('mypy', mypy_result))
+
+        # Comprehensive: Add pylint and bandit
+        if validation_level == 'comprehensive':
+            pylint_result = self._run_static_analysis_tool('pylint', [output_path], output_path)
+            if pylint_result:
+                static_results.append(('pylint', pylint_result))
+
+            bandit_result = self._run_static_analysis_tool('bandit', ['-r', output_path], output_path)
+            if bandit_result:
+                static_results.append(('bandit', bandit_result))
+
+        # Combine test results with static analysis
+        return self._combine_results(test_results, static_results)
 
     def _validate_java(self, test_path: str, output_path: str, validation_level: str) -> Dict:
-        """Validate Java project using Maven/Gradle."""
-        # Check for Maven or Gradle
+        """
+        Validate Java project using Maven/Gradle + static analysis.
+
+        Static Analysis Tools:
+        - basic: Maven/Gradle test only
+        - standard: Maven/Gradle test + SpotBugs (bug detection)
+        - comprehensive: Maven/Gradle test + SpotBugs + PMD + Checkstyle
+        """
+        # Run tests
+        test_results = None
         if os.path.exists(os.path.join(output_path, 'pom.xml')):
             self.logger.log("   Running Maven validation", "INFO")
-            return self._run_command(['mvn', 'test'], output_path)
-        if os.path.exists(os.path.join(output_path, 'build.gradle')):
+            test_results = self._run_command(['mvn', 'test'], output_path)
+        elif os.path.exists(os.path.join(output_path, 'build.gradle')):
             self.logger.log("   Running Gradle validation", "INFO")
-            return self._run_command(['gradle', 'test'], output_path)
+            test_results = self._run_command(['gradle', 'test'], output_path)
+        else:
+            self.logger.log("   Running javac validation", "INFO")
+            test_results = self._validate_files_readable(output_path, "Java files validated")
 
-        # Fallback: just compile
-        self.logger.log("   Running javac validation", "INFO")
-        return self._validate_files_readable(output_path, "Java files validated")
+        if validation_level == 'basic':
+            return test_results
+
+        # Standard: Add SpotBugs
+        static_results = []
+        if validation_level in ['standard', 'comprehensive']:
+            spotbugs_result = self._run_static_analysis_tool('spotbugs', ['-textui', output_path], output_path)
+            if spotbugs_result:
+                static_results.append(('spotbugs', spotbugs_result))
+
+        # Comprehensive: Add PMD and Checkstyle
+        if validation_level == 'comprehensive':
+            pmd_result = self._run_static_analysis_tool('pmd', ['-d', output_path, '-R', 'rulesets/java/quickstart.xml'], output_path)
+            if pmd_result:
+                static_results.append(('pmd', pmd_result))
+
+            checkstyle_result = self._run_static_analysis_tool('checkstyle', ['-c', '/google_checks.xml', output_path], output_path)
+            if checkstyle_result:
+                static_results.append(('checkstyle', checkstyle_result))
+
+        return self._combine_results(test_results, static_results)
 
     def _validate_typescript(self, test_path: str, output_path: str, validation_level: str) -> Dict:
         """Validate TypeScript project using tsc."""

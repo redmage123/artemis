@@ -1,40 +1,12 @@
-#!/usr/bin/env python3
-"""
-Module: utilities/retry_utilities.py
-
-WHY: Provides fault-tolerant retry logic with exponential backoff for transient failures.
-     Eliminates duplicate retry loops found in 6+ files, providing consistent retry behavior
-     across LLM calls, file operations, and network requests.
-
-RESPONSIBILITY:
-- Execute operations with automatic retry on failure
-- Apply exponential backoff between retries (2x, 4x, 8x delays)
-- Cap maximum delay to prevent runaway retry times
-- Log retry attempts for debugging
-- Preserve original exception if all retries fail
-
-PATTERNS:
-- Strategy Pattern: Configurable retry behavior without modifying call sites
-- Decorator Pattern: @retry_with_backoff for declarative retry behavior
-- Template Method Pattern: execute() defines retry algorithm, subclasses can customize
-
-Integration: Used by LLM API calls, file I/O, database connections, external service calls.
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('retry_utilities')
+'\nModule: utilities/retry_utilities.py\n\nWHY: Provides fault-tolerant retry logic with exponential backoff for transient failures.\n     Eliminates duplicate retry loops found in 6+ files, providing consistent retry behavior\n     across LLM calls, file operations, and network requests.\n\nRESPONSIBILITY:\n- Execute operations with automatic retry on failure\n- Apply exponential backoff between retries (2x, 4x, 8x delays)\n- Cap maximum delay to prevent runaway retry times\n- Log retry attempts for debugging\n- Preserve original exception if all retries fail\n\nPATTERNS:\n- Strategy Pattern: Configurable retry behavior without modifying call sites\n- Decorator Pattern: @retry_with_backoff for declarative retry behavior\n- Template Method Pattern: execute() defines retry algorithm, subclasses can customize\n\nIntegration: Used by LLM API calls, file I/O, database connections, external service calls.\n'
 import time
 import functools
 from typing import Callable, Optional, Dict, Any, TypeVar
 from dataclasses import dataclass
-
-from artemis_constants import (
-    MAX_RETRY_ATTEMPTS,
-    DEFAULT_RETRY_INTERVAL_SECONDS,
-    RETRY_BACKOFF_FACTOR
-)
-
-
+from artemis_constants import MAX_RETRY_ATTEMPTS, DEFAULT_RETRY_INTERVAL_SECONDS, RETRY_BACKOFF_FACTOR
 T = TypeVar('T')
-
 
 @dataclass
 class RetryConfig:
@@ -52,10 +24,9 @@ class RetryConfig:
     """
     max_retries: int = MAX_RETRY_ATTEMPTS
     backoff_factor: int = RETRY_BACKOFF_FACTOR
-    initial_delay: float = DEFAULT_RETRY_INTERVAL_SECONDS - 3  # 2 seconds
+    initial_delay: float = DEFAULT_RETRY_INTERVAL_SECONDS - 3
     max_delay: float = 60.0
     verbose: bool = True
-
 
 class RetryStrategy:
     """
@@ -77,7 +48,7 @@ class RetryStrategy:
     - External service calls (temporary outages)
     """
 
-    def __init__(self, config: Optional[RetryConfig] = None):
+    def __init__(self, config: Optional[RetryConfig]=None):
         """
         Initialize retry strategy with configuration
 
@@ -87,12 +58,7 @@ class RetryStrategy:
         """
         self.config = config or RetryConfig()
 
-    def execute(
-        self,
-        operation: Callable[[], T],
-        operation_name: str = "operation",
-        context: Optional[Dict[str, Any]] = None
-    ) -> T:
+    def execute(self, operation: Callable[[], T], operation_name: str='operation', context: Optional[Dict[str, Any]]=None) -> T:
         """
         Execute operation with retry logic and exponential backoff
 
@@ -114,38 +80,28 @@ class RetryStrategy:
                    way to distinguish retryable vs non-retryable failures at this level.
         """
         last_exception = None
-
         for attempt in range(self.config.max_retries):
             try:
                 if self.config.verbose and attempt > 0:
-                    print(f"[Retry] Attempt {attempt + 1}/{self.config.max_retries} for {operation_name}")
-
+                    
+                    logger.log(f'[Retry] Attempt {attempt + 1}/{self.config.max_retries} for {operation_name}', 'INFO')
                 result = operation()
                 return result
-
             except Exception as e:
                 last_exception = e
-
                 if attempt == self.config.max_retries - 1:
                     if self.config.verbose:
-                        print(f"[Retry] All {self.config.max_retries} attempts failed for {operation_name}")
+                        
+                        logger.log(f'[Retry] All {self.config.max_retries} attempts failed for {operation_name}', 'INFO')
                     raise
-
                 delay = self._calculate_backoff_delay(attempt)
-
                 if self.config.verbose:
-                    print(f"[Retry] {operation_name} failed: {e}. Retrying in {delay:.1f}s...")
-
+                    
+                    logger.log(f'[Retry] {operation_name} failed: {e}. Retrying in {delay:.1f}s...', 'INFO')
                 time.sleep(delay)
+        raise last_exception or Exception(f'{operation_name} failed after {self.config.max_retries} retries')
 
-        # Should never reach here, but defensive programming
-        raise last_exception or Exception(f"{operation_name} failed after {self.config.max_retries} retries")
-
-    def execute_with_bool_result(
-        self,
-        operation: Callable[[], bool],
-        operation_name: str = "operation"
-    ) -> bool:
+    def execute_with_bool_result(self, operation: Callable[[], bool], operation_name: str='operation') -> bool:
         """
         Execute operation that returns bool, retry on False or Exception
 
@@ -162,36 +118,29 @@ class RetryStrategy:
         for attempt in range(self.config.max_retries):
             try:
                 if self.config.verbose and attempt > 0:
-                    print(f"[Retry] Attempt {attempt + 1}/{self.config.max_retries} for {operation_name}")
-
+                    
+                    logger.log(f'[Retry] Attempt {attempt + 1}/{self.config.max_retries} for {operation_name}', 'INFO')
                 result = operation()
-
                 if result:
                     return True
-
                 if attempt == self.config.max_retries - 1:
                     return False
-
                 delay = self._calculate_backoff_delay(attempt)
-
                 if self.config.verbose:
-                    print(f"[Retry] {operation_name} returned False. Retrying in {delay:.1f}s...")
-
+                    
+                    logger.log(f'[Retry] {operation_name} returned False. Retrying in {delay:.1f}s...', 'INFO')
                 time.sleep(delay)
-
             except Exception as e:
                 if attempt == self.config.max_retries - 1:
                     if self.config.verbose:
-                        print(f"[Retry] {operation_name} failed with exception: {e}")
+                        
+                        logger.log(f'[Retry] {operation_name} failed with exception: {e}', 'INFO')
                     return False
-
                 delay = self._calculate_backoff_delay(attempt)
-
                 if self.config.verbose:
-                    print(f"[Retry] {operation_name} raised: {e}. Retrying in {delay:.1f}s...")
-
+                    
+                    logger.log(f'[Retry] {operation_name} raised: {e}. Retrying in {delay:.1f}s...', 'INFO')
                 time.sleep(delay)
-
         return False
 
     def _calculate_backoff_delay(self, attempt: int) -> float:
@@ -207,15 +156,10 @@ class RetryStrategy:
         Returns:
             Delay in seconds, capped at max_delay
         """
-        delay = self.config.initial_delay * (self.config.backoff_factor ** attempt)
+        delay = self.config.initial_delay * self.config.backoff_factor ** attempt
         return min(delay, self.config.max_delay)
 
-
-def retry_with_backoff(
-    max_retries: int = MAX_RETRY_ATTEMPTS,
-    backoff_factor: int = RETRY_BACKOFF_FACTOR,
-    verbose: bool = True
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
+def retry_with_backoff(max_retries: int=MAX_RETRY_ATTEMPTS, backoff_factor: int=RETRY_BACKOFF_FACTOR, verbose: bool=True) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """
     Decorator for automatic retry with exponential backoff
 
@@ -233,28 +177,19 @@ def retry_with_backoff(
         backoff_factor: Multiplier for exponential backoff
         verbose: Whether to print retry messages
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> T:
-            config = RetryConfig(
-                max_retries=max_retries,
-                backoff_factor=backoff_factor,
-                verbose=verbose
-            )
+            config = RetryConfig(max_retries=max_retries, backoff_factor=backoff_factor, verbose=verbose)
             strategy = RetryStrategy(config)
-
             operation = lambda: func(*args, **kwargs)
             return strategy.execute(operation, operation_name=func.__name__)
-
         return wrapper
     return decorator
 
-
-def retry_operation(
-    operation: Callable[[], T],
-    operation_name: str = "operation",
-    max_retries: int = MAX_RETRY_ATTEMPTS
-) -> T:
+def retry_operation(operation: Callable[[], T], operation_name: str='operation', max_retries: int=MAX_RETRY_ATTEMPTS) -> T:
     """
     Convenience function for retrying operations
 

@@ -107,11 +107,11 @@ class RecoveryStrategy:
     PATTERN: Strategy Pattern
     USAGE: SupervisorAgent maintains per-stage recovery strategies
     """
-    action: RecoveryAction
-    max_retries: int
-    retry_delay_seconds: float
-    backoff_factor: float
-    timeout_seconds: float
+    action: RecoveryAction = RecoveryAction.RETRY
+    max_retries: int = 3
+    retry_delay_seconds: float = 5.0
+    backoff_factor: float = 2.0
+    timeout_seconds: float = 300.0
     fallback_value: Optional[Any] = None
 
 

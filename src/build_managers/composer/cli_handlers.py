@@ -1,18 +1,8 @@
-#!/usr/bin/env python3
-"""
-CLI Command Handlers for Composer Manager
-
-WHY: Isolated CLI interface logic
-RESPONSIBILITY: Handle command-line interface operations
-PATTERNS:
-- Command pattern: Each handler is a discrete command
-- Dispatch table: Map commands to handlers
-- Guard clauses: Validate inputs early
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('cli_handlers')
+'\nCLI Command Handlers for Composer Manager\n\nWHY: Isolated CLI interface logic\nRESPONSIBILITY: Handle command-line interface operations\nPATTERNS:\n- Command pattern: Each handler is a discrete command\n- Dispatch table: Map commands to handlers\n- Guard clauses: Validate inputs early\n'
 from typing import Any, Dict, Callable
 import json
-
 
 def handle_info_command(composer: 'ComposerManager') -> int:
     """
@@ -28,9 +18,9 @@ def handle_info_command(composer: 'ComposerManager') -> int:
         Exit code (0 for success)
     """
     info = composer.get_project_info()
-    print(json.dumps(info, indent=2))
+    
+    logger.log(json.dumps(info, indent=2), 'INFO')
     return 0
-
 
 def handle_install_command(composer: 'ComposerManager', args: Any) -> int:
     """
@@ -46,13 +36,10 @@ def handle_install_command(composer: 'ComposerManager', args: Any) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    result = composer.install(
-        no_dev=args.no_dev,
-        optimize_autoloader=args.optimize
-    )
-    print(result)
+    result = composer.install(no_dev=args.no_dev, optimize_autoloader=args.optimize)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def handle_test_command(composer: 'ComposerManager', args: Any) -> int:
     """
@@ -69,9 +56,9 @@ def handle_test_command(composer: 'ComposerManager', args: Any) -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.test(verbose=args.verbose)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def handle_update_command(composer: 'ComposerManager', args: Any) -> int:
     """
@@ -88,9 +75,9 @@ def handle_update_command(composer: 'ComposerManager', args: Any) -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.update(package=args.package)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def handle_require_command(composer: 'ComposerManager', args: Any) -> int:
     """
@@ -107,13 +94,13 @@ def handle_require_command(composer: 'ComposerManager', args: Any) -> int:
         Exit code (0 for success, 1 for failure)
     """
     if not args.package:
-        print("Error: --package required for require command")
+        
+        logger.log('Error: --package required for require command', 'INFO')
         return 1
-
     composer.install_dependency(args.package, version=args.version, dev=args.dev)
-    print(f"Added {args.package}")
+    
+    logger.log(f'Added {args.package}', 'INFO')
     return 0
-
 
 def handle_show_command(composer: 'ComposerManager', args: Any) -> int:
     """
@@ -130,9 +117,9 @@ def handle_show_command(composer: 'ComposerManager', args: Any) -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.show(package=args.package)
-    print(result.output)
+    
+    logger.log(result.output, 'INFO')
     return 0
-
 
 def handle_validate_command(composer: 'ComposerManager') -> int:
     """
@@ -148,9 +135,9 @@ def handle_validate_command(composer: 'ComposerManager') -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.validate()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def handle_dump_autoload_command(composer: 'ComposerManager', args: Any) -> int:
     """
@@ -167,9 +154,9 @@ def handle_dump_autoload_command(composer: 'ComposerManager', args: Any) -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.dump_autoload(optimize=args.optimize)
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def handle_diagnose_command(composer: 'ComposerManager') -> int:
     """
@@ -185,9 +172,9 @@ def handle_diagnose_command(composer: 'ComposerManager') -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.diagnose()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def handle_clean_command(composer: 'ComposerManager') -> int:
     """
@@ -203,9 +190,9 @@ def handle_clean_command(composer: 'ComposerManager') -> int:
         Exit code (0 for success, 1 for failure)
     """
     result = composer.clean()
-    print(result)
+    
+    logger.log(result, 'INFO')
     return 0 if result.success else 1
-
 
 def get_command_handlers() -> Dict[str, Callable]:
     """
@@ -218,19 +205,7 @@ def get_command_handlers() -> Dict[str, Callable]:
     Returns:
         Dictionary mapping command names to handler functions
     """
-    return {
-        "info": handle_info_command,
-        "install": handle_install_command,
-        "test": handle_test_command,
-        "update": handle_update_command,
-        "require": handle_require_command,
-        "show": handle_show_command,
-        "validate": handle_validate_command,
-        "dump-autoload": handle_dump_autoload_command,
-        "diagnose": handle_diagnose_command,
-        "clean": handle_clean_command
-    }
-
+    return {'info': handle_info_command, 'install': handle_install_command, 'test': handle_test_command, 'update': handle_update_command, 'require': handle_require_command, 'show': handle_show_command, 'validate': handle_validate_command, 'dump-autoload': handle_dump_autoload_command, 'diagnose': handle_diagnose_command, 'clean': handle_clean_command}
 
 def execute_cli_command(args: Any, composer: 'ComposerManager') -> int:
     """
@@ -250,12 +225,10 @@ def execute_cli_command(args: Any, composer: 'ComposerManager') -> int:
     """
     handlers = get_command_handlers()
     handler = handlers.get(args.command)
-
     if not handler:
-        print(f"Unknown command: {args.command}")
+        
+        logger.log(f'Unknown command: {args.command}', 'INFO')
         return 1
-
-    # Some handlers need args, some don't
     handler_params = handler.__code__.co_varnames
     if 'args' in handler_params:
         return handler(composer, args)

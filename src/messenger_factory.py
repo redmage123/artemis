@@ -1,22 +1,10 @@
-#!/usr/bin/env python3
-"""
-Messenger Factory (SOLID: Factory Pattern + Dependency Inversion)
-
-Creates messenger instances based on configuration.
-Allows easy switching between implementations without changing code.
-
-This demonstrates:
-- Factory Pattern: Centralized creation of messenger objects
-- Dependency Inversion: Depend on MessengerInterface, not concrete implementations
-- Open/Closed: Add new messengers without modifying factory (just registration)
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('messenger_factory')
+'\nMessenger Factory (SOLID: Factory Pattern + Dependency Inversion)\n\nCreates messenger instances based on configuration.\nAllows easy switching between implementations without changing code.\n\nThis demonstrates:\n- Factory Pattern: Centralized creation of messenger objects\n- Dependency Inversion: Depend on MessengerInterface, not concrete implementations\n- Open/Closed: Add new messengers without modifying factory (just registration)\n'
 import os
 from typing import Optional, Dict, Any
-
 from messenger_interface import MessengerInterface, MockMessenger
 from agent_messenger import AgentMessenger
-
 
 class MessengerFactory:
     """
@@ -42,12 +30,7 @@ class MessengerFactory:
             }
         )
     """
-
-    # Registry of messenger types
-    _registry: Dict[str, type] = {
-        "file": AgentMessenger,
-        "mock": MockMessenger,
-    }
+    _registry: Dict[str, type] = {'file': AgentMessenger, 'mock': MockMessenger}
 
     @classmethod
     def register_messenger(cls, messenger_type: str, messenger_class: type):
@@ -61,19 +44,11 @@ class MessengerFactory:
             messenger_class: Messenger class implementing MessengerInterface
         """
         if not issubclass(messenger_class, MessengerInterface):
-            raise TypeError(
-                f"{messenger_class} must implement MessengerInterface"
-            )
-
+            raise TypeError(f'{messenger_class} must implement MessengerInterface')
         cls._registry[messenger_type] = messenger_class
 
     @classmethod
-    def create(
-        cls,
-        messenger_type: str,
-        agent_name: str,
-        **kwargs
-    ) -> MessengerInterface:
+    def create(cls, messenger_type: str, agent_name: str, **kwargs) -> MessengerInterface:
         """
         Create messenger of specified type
 
@@ -89,24 +64,13 @@ class MessengerFactory:
             ValueError: If messenger_type is unknown
         """
         if messenger_type not in cls._registry:
-            available = ", ".join(cls._registry.keys())
-            raise ValueError(
-                f"Unknown messenger type: {messenger_type}. "
-                f"Available types: {available}"
-            )
-
+            available = ', '.join(cls._registry.keys())
+            raise ValueError(f'Unknown messenger type: {messenger_type}. Available types: {available}')
         messenger_class = cls._registry[messenger_type]
-
-        # Create messenger instance
         return messenger_class(agent_name=agent_name, **kwargs)
 
     @classmethod
-    def create_from_env(
-        cls,
-        agent_name: str,
-        env_var: str = "ARTEMIS_MESSENGER_TYPE",
-        default: str = "file"
-    ) -> MessengerInterface:
+    def create_from_env(cls, agent_name: str, env_var: str='ARTEMIS_MESSENGER_TYPE', default: str='file') -> MessengerInterface:
         """
         Create messenger from environment variable
 
@@ -119,22 +83,11 @@ class MessengerFactory:
             MessengerInterface implementation
         """
         messenger_type = os.getenv(env_var, default)
-
-        # Get type-specific config from environment
         config = cls._get_config_from_env(messenger_type)
-
-        return cls.create(
-            messenger_type=messenger_type,
-            agent_name=agent_name,
-            **config
-        )
+        return cls.create(messenger_type=messenger_type, agent_name=agent_name, **config)
 
     @classmethod
-    def create_from_config(
-        cls,
-        agent_name: str,
-        config: Dict[str, Any]
-    ) -> MessengerInterface:
+    def create_from_config(cls, agent_name: str, config: Dict[str, Any]) -> MessengerInterface:
         """
         Create messenger from configuration dictionary
 
@@ -152,14 +105,9 @@ class MessengerFactory:
                 "durable": True
             }
         """
-        messenger_type = config.get("type", "file")
-        messenger_config = {k: v for k, v in config.items() if k != "type"}
-
-        return cls.create(
-            messenger_type=messenger_type,
-            agent_name=agent_name,
-            **messenger_config
-        )
+        messenger_type = config.get('type', 'file')
+        messenger_config = {k: v for k, v in config.items() if k != 'type'}
+        return cls.create(messenger_type=messenger_type, agent_name=agent_name, **messenger_config)
 
     @classmethod
     def _get_config_from_env(cls, messenger_type: str) -> Dict[str, Any]:
@@ -175,17 +123,10 @@ class MessengerFactory:
         Returns:
             Configuration dictionary
         """
-        # Strategy pattern: Dictionary dispatch for config extraction (avoid if/elif)
-        config_extractors = {
-            "file": cls._extract_file_config,
-            "rabbitmq": cls._extract_rabbitmq_config,
-            "redis": cls._extract_redis_config,
-        }
-
+        config_extractors = {'file': cls._extract_file_config, 'rabbitmq': cls._extract_rabbitmq_config, 'redis': cls._extract_redis_config}
         extractor = config_extractors.get(messenger_type)
         if not extractor:
             return {}
-
         return extractor()
 
     @classmethod
@@ -200,9 +141,9 @@ class MessengerFactory:
             Configuration dictionary for file messenger
         """
         config = {}
-        message_dir = os.getenv("ARTEMIS_MESSAGE_DIR")
+        message_dir = os.getenv('ARTEMIS_MESSAGE_DIR')
         if message_dir:
-            config["message_dir"] = message_dir
+            config['message_dir'] = message_dir
         return config
 
     @classmethod
@@ -217,19 +158,15 @@ class MessengerFactory:
             Configuration dictionary for RabbitMQ messenger
         """
         config = {}
-
-        rabbitmq_url = os.getenv("ARTEMIS_RABBITMQ_URL")
+        rabbitmq_url = os.getenv('ARTEMIS_RABBITMQ_URL')
         if rabbitmq_url:
-            config["rabbitmq_url"] = rabbitmq_url
-
-        rabbitmq_durable = os.getenv("ARTEMIS_RABBITMQ_DURABLE")
+            config['rabbitmq_url'] = rabbitmq_url
+        rabbitmq_durable = os.getenv('ARTEMIS_RABBITMQ_DURABLE')
         if rabbitmq_durable:
-            config["durable"] = rabbitmq_durable.lower() == "true"
-
-        rabbitmq_prefetch = os.getenv("ARTEMIS_RABBITMQ_PREFETCH")
+            config['durable'] = rabbitmq_durable.lower() == 'true'
+        rabbitmq_prefetch = os.getenv('ARTEMIS_RABBITMQ_PREFETCH')
         if rabbitmq_prefetch:
-            config["prefetch_count"] = int(rabbitmq_prefetch)
-
+            config['prefetch_count'] = int(rabbitmq_prefetch)
         return config
 
     @classmethod
@@ -244,9 +181,9 @@ class MessengerFactory:
             Configuration dictionary for Redis messenger
         """
         config = {}
-        redis_url = os.getenv("ARTEMIS_REDIS_URL")
+        redis_url = os.getenv('ARTEMIS_REDIS_URL')
         if redis_url:
-            config["redis_url"] = redis_url
+            config['redis_url'] = redis_url
         return config
 
     @classmethod
@@ -258,23 +195,13 @@ class MessengerFactory:
             List of messenger type names
         """
         return list(cls._registry.keys())
-
-
-# Auto-register RabbitMQ messenger if available
 try:
     from rabbitmq_messenger import RabbitMQMessenger
-    MessengerFactory.register_messenger("rabbitmq", RabbitMQMessenger)
+    MessengerFactory.register_messenger('rabbitmq', RabbitMQMessenger)
 except ImportError:
-    # RabbitMQ messenger not available (pika not installed)
     pass
 
-
-# Convenience function for quick messenger creation
-def create_messenger(
-    agent_name: str,
-    messenger_type: Optional[str] = None,
-    **kwargs
-) -> MessengerInterface:
+def create_messenger(agent_name: str, messenger_type: Optional[str]=None, **kwargs) -> MessengerInterface:
     """
     Quick messenger creation
 
@@ -290,63 +217,54 @@ def create_messenger(
         return MessengerFactory.create_from_env(agent_name)
     else:
         return MessengerFactory.create(messenger_type, agent_name, **kwargs)
-
-
-if __name__ == "__main__":
-    """Example usage of MessengerFactory"""
-
-    print("Messenger Factory - Example Usage")
-    print("=" * 60)
-
-    # Show available types
-    print(f"Available messenger types: {MessengerFactory.get_available_types()}")
-    print()
-
-    # Example 1: Create file-based messenger
-    print("1. Creating file-based messenger:")
-    messenger1 = MessengerFactory.create(
-        messenger_type="file",
-        agent_name="example-agent-1"
-    )
-    print(f"   ✅ Created: {messenger1.get_messenger_type()}")
-    print()
-
-    # Example 2: Create mock messenger
-    print("2. Creating mock messenger:")
-    messenger2 = MessengerFactory.create(
-        messenger_type="mock",
-        agent_name="example-agent-2"
-    )
-    print(f"   ✅ Created: {messenger2.get_messenger_type()}")
-    print()
-
-    # Example 3: Create from environment
-    print("3. Creating from environment (ARTEMIS_MESSENGER_TYPE):")
-    os.environ["ARTEMIS_MESSENGER_TYPE"] = "file"
-    messenger3 = MessengerFactory.create_from_env(agent_name="example-agent-3")
-    print(f"   ✅ Created: {messenger3.get_messenger_type()}")
-    print()
-
-    # Example 4: Create from config
-    print("4. Creating from config dictionary:")
-    config = {
-        "type": "mock"
-    }
-    messenger4 = MessengerFactory.create_from_config(
-        agent_name="example-agent-4",
-        config=config
-    )
-    print(f"   ✅ Created: {messenger4.get_messenger_type()}")
-    print()
-
-    # Example 5: Convenience function
-    print("5. Using convenience function:")
-    messenger5 = create_messenger(
-        agent_name="example-agent-5",
-        messenger_type="file"
-    )
-    print(f"   ✅ Created: {messenger5.get_messenger_type()}")
-    print()
-
-    print("=" * 60)
-    print("✅ All examples completed!")
+if __name__ == '__main__':
+    'Example usage of MessengerFactory'
+    
+    logger.log('Messenger Factory - Example Usage', 'INFO')
+    
+    logger.log('=' * 60, 'INFO')
+    
+    logger.log(f'Available messenger types: {MessengerFactory.get_available_types()}', 'INFO')
+    
+    pass
+    
+    logger.log('1. Creating file-based messenger:', 'INFO')
+    messenger1 = MessengerFactory.create(messenger_type='file', agent_name='example-agent-1')
+    
+    logger.log(f'   ✅ Created: {messenger1.get_messenger_type()}', 'INFO')
+    
+    pass
+    
+    logger.log('2. Creating mock messenger:', 'INFO')
+    messenger2 = MessengerFactory.create(messenger_type='mock', agent_name='example-agent-2')
+    
+    logger.log(f'   ✅ Created: {messenger2.get_messenger_type()}', 'INFO')
+    
+    pass
+    
+    logger.log('3. Creating from environment (ARTEMIS_MESSENGER_TYPE):', 'INFO')
+    os.environ['ARTEMIS_MESSENGER_TYPE'] = 'file'
+    messenger3 = MessengerFactory.create_from_env(agent_name='example-agent-3')
+    
+    logger.log(f'   ✅ Created: {messenger3.get_messenger_type()}', 'INFO')
+    
+    pass
+    
+    logger.log('4. Creating from config dictionary:', 'INFO')
+    config = {'type': 'mock'}
+    messenger4 = MessengerFactory.create_from_config(agent_name='example-agent-4', config=config)
+    
+    logger.log(f'   ✅ Created: {messenger4.get_messenger_type()}', 'INFO')
+    
+    pass
+    
+    logger.log('5. Using convenience function:', 'INFO')
+    messenger5 = create_messenger(agent_name='example-agent-5', messenger_type='file')
+    
+    logger.log(f'   ✅ Created: {messenger5.get_messenger_type()}', 'INFO')
+    
+    pass
+    
+    logger.log('=' * 60, 'INFO')
+    
+    logger.log('✅ All examples completed!', 'INFO')

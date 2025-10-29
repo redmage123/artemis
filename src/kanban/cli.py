@@ -1,103 +1,79 @@
-#!/usr/bin/env python3
-"""
-Module: kanban/cli.py
-
-WHY: Provides command-line interface for Kanban board operations, enabling manual
-     board management and testing without running the full Artemis pipeline.
-
-RESPONSIBILITY:
-- Parse command-line arguments for board operations
-- Execute board commands (create, move, block, unblock, show, summary)
-- Display usage help and error messages
-- Provide interactive board management for debugging
-
-PATTERNS:
-- Command Pattern: Each CLI command maps to a board operation
-- Guard Clauses: Early validation prevents invalid operations
-
-USAGE:
-    python -m kanban.cli create TASK-001 "Add feature"
-    python -m kanban.cli move card-123 development
-    python -m kanban.cli block card-123 "Waiting on API"
-    python -m kanban.cli unblock card-123 development
-    python -m kanban.cli show
-    python -m kanban.cli summary
-"""
-
+from artemis_logger import get_logger
+logger = get_logger('cli')
+'\nModule: kanban/cli.py\n\nWHY: Provides command-line interface for Kanban board operations, enabling manual\n     board management and testing without running the full Artemis pipeline.\n\nRESPONSIBILITY:\n- Parse command-line arguments for board operations\n- Execute board commands (create, move, block, unblock, show, summary)\n- Display usage help and error messages\n- Provide interactive board management for debugging\n\nPATTERNS:\n- Command Pattern: Each CLI command maps to a board operation\n- Guard Clauses: Early validation prevents invalid operations\n\nUSAGE:\n    python -m kanban.cli create TASK-001 "Add feature"\n    python -m kanban.cli move card-123 development\n    python -m kanban.cli block card-123 "Waiting on API"\n    python -m kanban.cli unblock card-123 development\n    python -m kanban.cli show\n    python -m kanban.cli summary\n'
 import json
 import sys
-
 from kanban.board import KanbanBoard
-
 
 def main():
     """CLI interface for Kanban board"""
     if len(sys.argv) < 2:
-        print("Usage: kanban_manager.py <command> [args]")
-        print("\nCommands:")
-        print("  create <task_id> <title> - Create new card")
-        print("  move <card_id> <to_column> - Move card")
-        print("  block <card_id> <reason> - Block card")
-        print("  unblock <card_id> <to_column> - Unblock card")
-        print("  show - Display board")
-        print("  summary - Show board summary")
+        
+        logger.log('Usage: kanban_manager.py <command> [args]', 'INFO')
+        
+        logger.log('\nCommands:', 'INFO')
+        
+        logger.log('  create <task_id> <title> - Create new card', 'INFO')
+        
+        logger.log('  move <card_id> <to_column> - Move card', 'INFO')
+        
+        logger.log('  block <card_id> <reason> - Block card', 'INFO')
+        
+        logger.log('  unblock <card_id> <to_column> - Unblock card', 'INFO')
+        
+        logger.log('  show - Display board', 'INFO')
+        
+        logger.log('  summary - Show board summary', 'INFO')
         sys.exit(1)
-
     board = KanbanBoard()
     command = sys.argv[1]
-
-    if command == "create":
+    if command == 'create':
         if len(sys.argv) < 4:
-            print("Usage: create <task_id> <title>")
+            
+            logger.log('Usage: create <task_id> <title>', 'INFO')
             sys.exit(1)
         task_id = sys.argv[2]
         title = ' '.join(sys.argv[3:])
-        # Use Builder pattern instead of deprecated create_card
-        card = (board.new_card(task_id, title)
-                .with_description("Created via CLI")
-                .build())
+        card = board.new_card(task_id, title).with_description('Created via CLI').build()
         board.add_card(card)
         return
-
-    if command == "move":
+    if command == 'move':
         if len(sys.argv) < 4:
-            print("Usage: move <card_id> <to_column>")
+            
+            logger.log('Usage: move <card_id> <to_column>', 'INFO')
             sys.exit(1)
         card_id = sys.argv[2]
         to_column = sys.argv[3]
-        board.move_card(card_id, to_column, "cli")
+        board.move_card(card_id, to_column, 'cli')
         return
-
-    if command == "block":
+    if command == 'block':
         if len(sys.argv) < 4:
-            print("Usage: block <card_id> <reason>")
+            
+            logger.log('Usage: block <card_id> <reason>', 'INFO')
             sys.exit(1)
         card_id = sys.argv[2]
         reason = ' '.join(sys.argv[3:])
-        board.block_card(card_id, reason, "cli")
+        board.block_card(card_id, reason, 'cli')
         return
-
-    if command == "unblock":
+    if command == 'unblock':
         if len(sys.argv) < 4:
-            print("Usage: unblock <card_id> <to_column>")
+            
+            logger.log('Usage: unblock <card_id> <to_column>', 'INFO')
             sys.exit(1)
         card_id = sys.argv[2]
         to_column = sys.argv[3]
-        board.unblock_card(card_id, to_column, "cli", "Resolved via CLI")
+        board.unblock_card(card_id, to_column, 'cli', 'Resolved via CLI')
         return
-
-    if command == "show":
+    if command == 'show':
         board.print_board()
         return
-
-    if command == "summary":
+    if command == 'summary':
         summary = board.get_board_summary()
-        print(json.dumps(summary, indent=2))
+        
+        logger.log(json.dumps(summary, indent=2), 'INFO')
         return
-
-    print(f"Unknown command: {command}")
+    
+    logger.log(f'Unknown command: {command}', 'INFO')
     sys.exit(1)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

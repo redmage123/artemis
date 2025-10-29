@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 BACKWARD COMPATIBILITY WRAPPER
 
@@ -21,77 +20,49 @@ To migrate your code:
 
 No breaking changes - all imports remain identical.
 """
-
-# Re-export all public APIs from the modular package
-from build_managers.cmake import (
-    CMakeManager,
-    CMakeGenerator,
-    BuildType,
-    CMakeProjectInfo,
-)
-
-__all__ = [
-    'CMakeManager',
-    'CMakeGenerator',
-    'BuildType',
-    'CMakeProjectInfo',
-]
-
-# CLI interface
-if __name__ == "__main__":
+from build_managers.cmake import CMakeManager, CMakeGenerator, BuildType, CMakeProjectInfo
+__all__ = ['CMakeManager', 'CMakeGenerator', 'BuildType', 'CMakeProjectInfo']
+if __name__ == '__main__':
     import argparse
     import logging
     import sys
     import json
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-
-    parser = argparse.ArgumentParser(description="CMake Manager")
-    parser.add_argument("--project-dir", default=".", help="Project directory")
-    parser.add_argument("--build-dir", help="Build directory")
-    parser.add_argument("command", choices=["info", "configure", "build", "test", "clean"],
-                       help="Command to execute")
-    parser.add_argument("--build-type", default="Release", help="Build type")
-    parser.add_argument("--target", help="Build target")
-    parser.add_argument("--verbose", action="store_true", help="Verbose output")
-
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    parser = argparse.ArgumentParser(description='CMake Manager')
+    parser.add_argument('--project-dir', default='.', help='Project directory')
+    parser.add_argument('--build-dir', help='Build directory')
+    parser.add_argument('command', choices=['info', 'configure', 'build', 'test', 'clean'], help='Command to execute')
+    parser.add_argument('--build-type', default='Release', help='Build type')
+    parser.add_argument('--target', help='Build target')
+    parser.add_argument('--verbose', action='store_true', help='Verbose output')
     args = parser.parse_args()
-
     try:
-        cmake = CMakeManager(
-            project_dir=args.project_dir,
-            build_dir=args.build_dir
-        )
-
-        # Execute command using dispatch table (guard clauses)
-        if args.command == "info":
+        cmake = CMakeManager(project_dir=args.project_dir, build_dir=args.build_dir)
+        if args.command == 'info':
             info = cmake.get_project_info()
-            print(json.dumps(info, indent=2))
+            
+            logger.log(json.dumps(info, indent=2), 'INFO')
             sys.exit(0)
-
-        if args.command == "configure":
+        if args.command == 'configure':
             result = cmake.configure(build_type=args.build_type)
-            print(result)
+            
+            logger.log(result, 'INFO')
             sys.exit(0 if result.success else 1)
-
-        if args.command == "build":
+        if args.command == 'build':
             result = cmake.build(target=args.target)
-            print(result)
+            
+            logger.log(result, 'INFO')
             sys.exit(0 if result.success else 1)
-
-        if args.command == "test":
+        if args.command == 'test':
             result = cmake.test(verbose=args.verbose)
-            print(result)
+            
+            logger.log(result, 'INFO')
             sys.exit(0 if result.success else 1)
-
-        if args.command == "clean":
+        if args.command == 'clean':
             result = cmake.clean()
-            print(result)
+            
+            logger.log(result, 'INFO')
             sys.exit(0)
-
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f'Error: {e}')
         sys.exit(1)
