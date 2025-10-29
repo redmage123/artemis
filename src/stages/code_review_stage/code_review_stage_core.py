@@ -193,8 +193,17 @@ class CodeReviewStage(PipelineStage, SupervisedStageMixin, DebugMixin):
         task_title = card.get('title', 'Unknown Task')
         task_description = card.get('description', '')
 
+        # Get adaptive config and code review depth
+        adaptive_config = context.get('adaptive_config', None)
+        if adaptive_config:
+            code_review_depth = adaptive_config.code_review_depth
+            self.logger.log(f"🔧 Using adaptive code review depth: {code_review_depth}", "INFO")
+            self._apply_review_depth_to_coordinator(code_review_depth)
+        else:
+            code_review_depth = 'standard'
+
         # DEBUG: Log stage entry
-        self.debug_log("Starting code review", card_id=card_id, task_title=task_title)
+        self.debug_log("Starting code review", card_id=card_id, task_title=task_title, review_depth=code_review_depth)
 
         # Update progress: starting
         self.update_progress({"step": "starting", "progress_percent": 5})
@@ -344,6 +353,52 @@ class CodeReviewStage(PipelineStage, SupervisedStageMixin, DebugMixin):
             card_id=card_id,
             task_title=task_title
         )
+
+    def _apply_review_depth_to_coordinator(self, code_review_depth: str) -> None:
+        """
+        Apply code review depth setting to coordinator.
+
+        WHY: Adaptive review depth based on task complexity and resources
+        RESPONSIBILITY: Configure coordinator based on review depth
+
+        Args:
+            code_review_depth: "quick", "standard", or "thorough"
+
+        Mapping:
+            quick -> minimal checks, no advanced validation, skip property tests
+            standard -> normal checks, code standards + static analysis
+            thorough -> all checks, strict severity, all validations enabled
+        """
+        if code_review_depth == "quick":
+            # Quick review: minimal checks for fast feedback
+            self.coordinator.enable_code_standards = True
+            self.coordinator.code_standards_reviewer.severity_threshold = "critical"
+            self.coordinator.enable_advanced_validation = False
+            self.coordinator.advanced_validation_reviewer.enable_static_analysis = False
+            self.coordinator.advanced_validation_reviewer.enable_property_tests = False
+            self.logger.log("   Quick review: Critical issues only, skip advanced validation", "INFO")
+
+        elif code_review_depth == "thorough":
+            # Thorough review: all checks enabled, strict thresholds
+            self.coordinator.enable_code_standards = True
+            self.coordinator.code_standards_reviewer.severity_threshold = "info"
+            self.coordinator.enable_advanced_validation = True
+            self.coordinator.advanced_validation_reviewer.enable_static_analysis = True
+            self.coordinator.advanced_validation_reviewer.enable_property_tests = True
+            # Lower max complexity for stricter checks
+            reviewer = self.coordinator.advanced_validation_reviewer
+            if hasattr(reviewer, 'static_analysis_config') and reviewer.static_analysis_config:
+                reviewer.static_analysis_config['max_complexity'] = 8
+            self.logger.log("   Thorough review: All checks enabled, strict thresholds", "INFO")
+
+        else:  # standard
+            # Standard review: balanced approach (defaults)
+            self.coordinator.enable_code_standards = True
+            self.coordinator.code_standards_reviewer.severity_threshold = "warning"
+            self.coordinator.enable_advanced_validation = True
+            self.coordinator.advanced_validation_reviewer.enable_static_analysis = True
+            self.coordinator.advanced_validation_reviewer.enable_property_tests = False  # Skip property tests by default
+            self.logger.log("   Standard review: Balanced checks, warning+ severity", "INFO")
 
     def get_stage_name(self) -> str:
         """

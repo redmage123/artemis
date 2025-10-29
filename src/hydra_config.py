@@ -27,13 +27,15 @@ class LLMConfig:
         api_key: API key for authentication. If None, reads from environment variables
         max_tokens_per_request: Maximum tokens to request per API call (prevents runaway costs)
         temperature: Sampling temperature (0.0-1.0). Lower = more deterministic, higher = more creative
+        top_k: Number of top tokens to consider (RAG retrieval)
         cost_limit_usd: Optional daily cost limit to prevent overspending
     """
     provider: str = "openai"  # openai, anthropic, or mock
     model: Optional[str] = None  # Specific model (e.g., gpt-4o, claude-3-opus)
     api_key: Optional[str] = None  # API key (read from env typically)
-    max_tokens_per_request: int = 8000
-    temperature: float = 0.7
+    max_tokens_per_request: int = 2000
+    temperature: float = 0.3
+    top_k: int = 5  # RAG retrieval top-k
     cost_limit_usd: Optional[float] = None  # Daily cost limit
 
 
@@ -67,13 +69,120 @@ class StorageConfig:
 
 
 @dataclass
+class TimeoutConfig:
+    """Timeout Configuration - All values in seconds"""
+    build: int = 600  # Build operations
+    test: int = 300  # Test execution
+    redis_socket: int = 5  # Redis socket operations
+    redis_connect: int = 5  # Redis connection
+    dependency_check: int = 300  # Dependency validation
+    unreal_engine: int = 1800  # Unreal Engine builds
+    default: int = 120  # Default timeout
+
+
+@dataclass
+class RetryConfig:
+    """Retry Configuration"""
+    max_retries: int = 2  # Maximum retry attempts
+    initial_delay: float = 2.0  # Initial delay in seconds
+    max_delay: float = 60.0  # Maximum delay in seconds
+    backoff_multiplier: float = 2.0  # Exponential backoff multiplier
+
+
+@dataclass
+class ParallelismConfig:
+    """Parallelism Configuration"""
+    max_workers: int = 4  # Worker threads
+    max_parallel_developers: int = 2  # Parallel developer agents
+    max_parallel_stages: int = 2  # Parallel stages
+    max_parallel_tests: int = 4  # Parallel test execution
+    thread_pool_size: int = 8  # Thread pool size
+    prefetch_count: int = 1  # Message prefetch count
+
+
+@dataclass
+class BatchConfig:
+    """Batch Processing Configuration"""
+    default_size: int = 100  # Default batch size
+    rag_query_size: int = 50  # RAG query batch size
+    small_memory_size: int = 25  # Batch size for low memory systems
+
+
+@dataclass
+class ComplexityConfig:
+    """Complexity Thresholds"""
+    low_threshold: int = 50  # Simple task threshold
+    medium_threshold: int = 200  # Medium task threshold
+    high_threshold: int = 500  # Complex task threshold
+    max_cyclomatic: int = 10  # Maximum cyclomatic complexity
+
+
+@dataclass
+class ValidationConfig:
+    """Validation Configuration"""
+    pass_threshold: float = 0.8  # Minimum pass score (0.0-1.0)
+    confidence_threshold: float = 0.7  # Minimum confidence score
+    min_similarity: float = 0.3  # Minimum RAG similarity
+    enable_type_checking: bool = True
+    enable_linting: bool = True
+    enable_complexity_check: bool = True
+
+
+@dataclass
+class MemoryConfig:
+    """Memory Allocation Configuration - All values in MB/GB"""
+    per_agent_gb: float = 1.0  # Memory per agent in GB
+    sandbox_max_mb: int = 512  # Sandbox memory limit in MB
+    logger_max_mb: int = 100  # Log file size limit in MB
+
+
+@dataclass
+class CacheConfig:
+    """Cache Configuration"""
+    lru_maxsize: int = 256  # LRU cache size
+    plan_cache_size: int = 100  # Plan cache size
+    query_cache_size: int = 1000  # Query cache size
+    ttl_seconds: int = 3600  # Cache TTL
+
+
+@dataclass
+class FeatureFlagsConfig:
+    """Feature Flags"""
+    enable_llm_analysis: bool = True
+    enable_rag_validation: bool = True
+    enable_self_critique: bool = True
+    enable_dynamic_pipeline: bool = True
+    enable_two_pass: bool = False
+    enable_thermodynamic: bool = True
+    enable_property_tests: bool = True
+
+
+@dataclass
+class SkipFlagsConfig:
+    """Stage Skip Flags"""
+    skip_sprint_planning: bool = False
+    skip_project_analysis: bool = False
+    skip_arbitration: bool = False
+
+
+@dataclass
+class RateLimitConfig:
+    """Rate Limiting Configuration"""
+    default_limit: int = 100
+    window_seconds: int = 60
+    failure_threshold: int = 5
+    success_threshold: int = 2
+
+
+@dataclass
 class PipelineConfig:
     """
     Pipeline Execution Configuration
 
     Controls how the Artemis pipeline executes stages.
     """
-    max_parallel_developers: int = 3  # Number of parallel developer agents
+    # Original fields
+    max_parallel_developers: int = 2  # Number of parallel developer agents
     enable_code_review: bool = True  # Enable code review stage
     auto_approve_project_analysis: bool = False  # Auto-approve project analysis
     enable_supervision: bool = True  # Enable supervisor agent
@@ -88,6 +197,19 @@ class PipelineConfig:
         "integration",
         "testing"
     ])
+
+    # Comprehensive hyperparameters
+    timeouts: TimeoutConfig = field(default_factory=TimeoutConfig)
+    retry: RetryConfig = field(default_factory=RetryConfig)
+    parallelism: ParallelismConfig = field(default_factory=ParallelismConfig)
+    batch: BatchConfig = field(default_factory=BatchConfig)
+    complexity: ComplexityConfig = field(default_factory=ComplexityConfig)
+    validation: ValidationConfig = field(default_factory=ValidationConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
+    cache: CacheConfig = field(default_factory=CacheConfig)
+    features: FeatureFlagsConfig = field(default_factory=FeatureFlagsConfig)
+    skip_flags: SkipFlagsConfig = field(default_factory=SkipFlagsConfig)
+    rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
 
 
 @dataclass

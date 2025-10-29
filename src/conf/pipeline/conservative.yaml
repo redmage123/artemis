@@ -1,0 +1,92 @@
+# CONSERVATIVE Profile - Resource-constrained environments
+# For: Low-end hardware, CI/CD, cost-sensitive deployments
+# Duration: 45-75 minutes
+
+max_parallel_developers: 1
+enable_code_review: true
+enable_supervision: true
+max_retries: 2
+
+# Timeouts (conservative, allow for slower systems)
+timeouts:
+  build: 900
+  test: 450
+  redis_socket: 10
+  redis_connect: 10
+  dependency_check: 450
+  unreal_engine: 2700
+  default: 180
+
+# Retry (moderate retries)
+retry:
+  max_retries: 2
+  initial_delay: 2.5
+  max_delay: 90.0
+  backoff_multiplier: 2.0
+
+# Parallelism (sequential execution)
+parallelism:
+  max_workers: 2
+  max_parallel_developers: 1
+  max_parallel_stages: 1
+  max_parallel_tests: 2
+  thread_pool_size: 4
+  prefetch_count: 1
+
+# Batch (small batches for memory)
+batch:
+  default_size: 25
+  rag_query_size: 20
+  small_memory_size: 10
+
+# Complexity (permissive thresholds)
+complexity:
+  low_threshold: 20
+  medium_threshold: 80
+  high_threshold: 200
+  max_cyclomatic: 12
+
+# Validation (standard validation)
+validation:
+  pass_threshold: 0.7
+  confidence_threshold: 0.6
+  min_similarity: 0.3
+  enable_type_checking: true
+  enable_linting: true
+  enable_complexity_check: true
+
+# Memory (minimal allocation)
+memory:
+  per_agent_gb: 0.5
+  sandbox_max_mb: 256
+  logger_max_mb: 50
+
+# Cache (small caches to save memory)
+cache:
+  lru_maxsize: 128
+  plan_cache_size: 50
+  query_cache_size: 500
+  ttl_seconds: 3600
+
+# Features (essential features only)
+features:
+  enable_llm_analysis: true
+  enable_rag_validation: true
+  enable_self_critique: false
+  enable_dynamic_pipeline: false
+  enable_two_pass: false
+  enable_thermodynamic: false
+  enable_property_tests: false
+
+# Skip Flags (skip arbitration to save resources)
+skip_flags:
+  skip_sprint_planning: false
+  skip_project_analysis: false
+  skip_arbitration: true
+
+# Rate Limiting
+rate_limit:
+  default_limit: 50
+  window_seconds: 60
+  failure_threshold: 5
+  success_threshold: 2

@@ -1,0 +1,92 @@
+# BALANCED Profile - Good balance of speed and quality
+# For: Most production tasks, standard development
+# Duration: 30-60 minutes
+
+max_parallel_developers: 2
+enable_code_review: true
+enable_supervision: true
+max_retries: 2
+
+# Timeouts (balanced)
+timeouts:
+  build: 600
+  test: 300
+  redis_socket: 5
+  redis_connect: 5
+  dependency_check: 300
+  unreal_engine: 1800
+  default: 120
+
+# Retry (standard retries)
+retry:
+  max_retries: 2
+  initial_delay: 2.0
+  max_delay: 60.0
+  backoff_multiplier: 2.0
+
+# Parallelism (balanced)
+parallelism:
+  max_workers: 4
+  max_parallel_developers: 2
+  max_parallel_stages: 2
+  max_parallel_tests: 4
+  thread_pool_size: 8
+  prefetch_count: 1
+
+# Batch (balanced batches)
+batch:
+  default_size: 100
+  rag_query_size: 50
+  small_memory_size: 25
+
+# Complexity (balanced thresholds)
+complexity:
+  low_threshold: 50
+  medium_threshold: 200
+  high_threshold: 500
+  max_cyclomatic: 10
+
+# Validation (standard validation)
+validation:
+  pass_threshold: 0.7
+  confidence_threshold: 0.6
+  min_similarity: 0.3
+  enable_type_checking: true
+  enable_linting: true
+  enable_complexity_check: true
+
+# Memory (balanced allocation)
+memory:
+  per_agent_gb: 1.0
+  sandbox_max_mb: 512
+  logger_max_mb: 100
+
+# Cache (balanced caches)
+cache:
+  lru_maxsize: 256
+  plan_cache_size: 100
+  query_cache_size: 1000
+  ttl_seconds: 3600
+
+# Features (core features enabled)
+features:
+  enable_llm_analysis: true
+  enable_rag_validation: true
+  enable_self_critique: true
+  enable_dynamic_pipeline: true
+  enable_two_pass: false
+  enable_thermodynamic: true
+  enable_property_tests: false
+
+# Skip Flags (balanced skipping)
+skip_flags:
+  skip_sprint_planning: false
+  skip_project_analysis: false
+  skip_arbitration: false
+
+# Rate Limiting
+rate_limit:
+  default_limit: 100
+  window_seconds: 60
+  failure_threshold: 5
+  success_threshold: 2

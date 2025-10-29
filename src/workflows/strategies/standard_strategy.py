@@ -38,16 +38,21 @@ class StandardPipelineStrategy(PipelineStrategy):
     8. Testing
     """
 
-    def __init__(self, verbose: bool = True, observable: Optional[PipelineObservable] = None):
+    def __init__(self, verbose: bool = True, observable: Optional[PipelineObservable] = None, adaptive_config: Optional[Any] = None, summary_mode: bool = True):
         """
         Initialize standard strategy.
 
         Args:
             verbose: Enable verbose logging
             observable: Optional PipelineObservable for event broadcasting
+            adaptive_config: Optional adaptive configuration for resource optimization
+            summary_mode: Use summary display for cleaner output (default: True)
         """
         super().__init__(verbose, observable)
         self.context_manager = ExecutionContextManager()
+        self.adaptive_config = adaptive_config
+        self.summary_mode = summary_mode
+        self.summary_display = None  # Will be initialized when logger is available
 
     def execute(self, stages: List[PipelineStage], context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -65,7 +70,25 @@ class StandardPipelineStrategy(PipelineStrategy):
         """
         start_time = datetime.now()
 
-        self._log(f"🎯 Starting STANDARD pipeline execution ({len(stages)} stages)")
+        # Inject adaptive config into context if available
+        if self.adaptive_config:
+            context['adaptive_config'] = self.adaptive_config
+
+            # Log based on verbosity mode
+            if self.verbose:
+                # Verbose mode: Show all details
+                self._log(f"🔧 Using adaptive config: {self.adaptive_config.profile} profile")
+                self._log(f"   Parallel devs: {self.adaptive_config.max_parallel_developers}")
+                self._log(f"   Validation: {self.adaptive_config.validation_level}")
+                self._log(f"   Code review: {self.adaptive_config.code_review_depth}")
+            elif self.summary_mode:
+                # Summary mode: Show key decisions only
+                self._log(f"🔧 Using {self.adaptive_config.profile.upper()} profile")
+
+        if self.summary_mode and not self.verbose:
+            self._log(f"\n▶️  Starting pipeline ({len(stages)} stages)")
+        else:
+            self._log(f"🎯 Starting STANDARD pipeline execution ({len(stages)} stages)")
 
         results = {}
 
@@ -73,7 +96,10 @@ class StandardPipelineStrategy(PipelineStrategy):
             stage_name = stage.__class__.__name__
             card_id = self.context_manager.get_card_id(context)
 
-            self._log(f"▶️  Stage {i}/{len(stages)}: {stage_name}", "STAGE")
+            if self.summary_mode and not self.verbose:
+                self._log(f"▶️  Stage {i}/{len(stages)}: {stage_name}")
+            else:
+                self._log(f"▶️  Stage {i}/{len(stages)}: {stage_name}", "STAGE")
 
             # Notify stage started
             self._notify_stage_started(card_id, stage_name, stage_number=i, total_stages=len(stages))
@@ -224,7 +250,10 @@ class StandardPipelineStrategy(PipelineStrategy):
             context: Execution context
             start_time: Execution start time
         """
-        self._log(f"✅ Stage COMPLETE: {stage_name}", "SUCCESS")
+        if self.summary_mode and not self.verbose:
+            self._log(f"   ✅ Complete")
+        else:
+            self._log(f"✅ Stage COMPLETE: {stage_name}", "SUCCESS")
 
         # Notify stage completed
         self._notify_stage_completed(card_id, stage_name, stage_result=stage_result)
@@ -288,7 +317,10 @@ class StandardPipelineStrategy(PipelineStrategy):
         """
         duration = (datetime.now() - start_time).total_seconds()
 
-        self._log(f"🎉 Pipeline COMPLETE! ({duration:.1f}s)", "SUCCESS")
+        if self.summary_mode and not self.verbose:
+            self._log(f"\n✅ Pipeline complete ({duration/60:.1f} minutes)")
+        else:
+            self._log(f"🎉 Pipeline COMPLETE! ({duration:.1f}s)", "SUCCESS")
 
         return self.context_manager.build_success_result(
             stages_completed=total_stages,

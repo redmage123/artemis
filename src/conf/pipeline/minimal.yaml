@@ -1,0 +1,92 @@
+# MINIMAL Profile - Fast, minimal validation
+# For: Simple tasks, quick prototypes, development mode
+# Duration: 5-15 minutes
+
+max_parallel_developers: 1
+enable_code_review: false
+enable_supervision: false
+max_retries: 1
+
+# Timeouts (reduced for speed)
+timeouts:
+  build: 300
+  test: 120
+  redis_socket: 3
+  redis_connect: 3
+  dependency_check: 120
+  unreal_engine: 900
+  default: 60
+
+# Retry (minimal retries)
+retry:
+  max_retries: 1
+  initial_delay: 1.0
+  max_delay: 30.0
+  backoff_multiplier: 2.0
+
+# Parallelism (minimal)
+parallelism:
+  max_workers: 2
+  max_parallel_developers: 1
+  max_parallel_stages: 1
+  max_parallel_tests: 2
+  thread_pool_size: 4
+  prefetch_count: 1
+
+# Batch (small batches)
+batch:
+  default_size: 25
+  rag_query_size: 10
+  small_memory_size: 10
+
+# Complexity (permissive thresholds)
+complexity:
+  low_threshold: 100
+  medium_threshold: 300
+  high_threshold: 700
+  max_cyclomatic: 15
+
+# Validation (minimal checks)
+validation:
+  pass_threshold: 0.6
+  confidence_threshold: 0.5
+  min_similarity: 0.2
+  enable_type_checking: false
+  enable_linting: false
+  enable_complexity_check: false
+
+# Memory (minimal allocation)
+memory:
+  per_agent_gb: 0.5
+  sandbox_max_mb: 256
+  logger_max_mb: 50
+
+# Cache (small caches)
+cache:
+  lru_maxsize: 64
+  plan_cache_size: 50
+  query_cache_size: 100
+  ttl_seconds: 1800
+
+# Features (minimal features)
+features:
+  enable_llm_analysis: false
+  enable_rag_validation: false
+  enable_self_critique: false
+  enable_dynamic_pipeline: false
+  enable_two_pass: false
+  enable_thermodynamic: false
+  enable_property_tests: false
+
+# Skip Flags (skip expensive stages)
+skip_flags:
+  skip_sprint_planning: true
+  skip_project_analysis: true
+  skip_arbitration: true
+
+# Rate Limiting
+rate_limit:
+  default_limit: 50
+  window_seconds: 30
+  failure_threshold: 10
+  success_threshold: 2

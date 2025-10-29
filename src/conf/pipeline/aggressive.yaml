@@ -1,0 +1,92 @@
+# AGGRESSIVE Profile - Maximum quality, all features enabled
+# For: Critical production code, high-stakes projects
+# Duration: 90-120 minutes
+
+max_parallel_developers: 3
+enable_code_review: true
+enable_supervision: true
+max_retries: 3
+
+# Timeouts (generous for quality)
+timeouts:
+  build: 900
+  test: 600
+  redis_socket: 10
+  redis_connect: 10
+  dependency_check: 600
+  unreal_engine: 3600
+  default: 300
+
+# Retry (aggressive retries)
+retry:
+  max_retries: 3
+  initial_delay: 3.0
+  max_delay: 120.0
+  backoff_multiplier: 2.0
+
+# Parallelism (maximum parallelism)
+parallelism:
+  max_workers: 8
+  max_parallel_developers: 3
+  max_parallel_stages: 4
+  max_parallel_tests: 8
+  thread_pool_size: 16
+  prefetch_count: 2
+
+# Batch (large batches)
+batch:
+  default_size: 200
+  rag_query_size: 100
+  small_memory_size: 50
+
+# Complexity (strict thresholds)
+complexity:
+  low_threshold: 30
+  medium_threshold: 100
+  high_threshold: 300
+  max_cyclomatic: 8
+
+# Validation (strict validation)
+validation:
+  pass_threshold: 0.9
+  confidence_threshold: 0.8
+  min_similarity: 0.5
+  enable_type_checking: true
+  enable_linting: true
+  enable_complexity_check: true
+
+# Memory (generous allocation)
+memory:
+  per_agent_gb: 2.0
+  sandbox_max_mb: 1024
+  logger_max_mb: 200
+
+# Cache (large caches)
+cache:
+  lru_maxsize: 512
+  plan_cache_size: 200
+  query_cache_size: 2000
+  ttl_seconds: 7200
+
+# Features (all features enabled)
+features:
+  enable_llm_analysis: true
+  enable_rag_validation: true
+  enable_self_critique: true
+  enable_dynamic_pipeline: true
+  enable_two_pass: true
+  enable_thermodynamic: true
+  enable_property_tests: true
+
+# Skip Flags (skip nothing)
+skip_flags:
+  skip_sprint_planning: false
+  skip_project_analysis: false
+  skip_arbitration: false
+
+# Rate Limiting
+rate_limit:
+  default_limit: 200
+  window_seconds: 120
+  failure_threshold: 3
+  success_threshold: 3
